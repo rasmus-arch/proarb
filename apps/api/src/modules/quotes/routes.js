@@ -8,10 +8,6 @@ const REMINDER_DEFAULT_DAYS = 5;
 
 // Fas 2: offert-CRUD, PDF-generering, skicka, konvertera till order.
 // Publik länk (/q/:token) och accept/avböj ligger i public.js.
-// TODO (Fas 8): riktig inloggning — "createdBy" är hårdkodad till
-// seed-admin (id 1) tills auth finns.
-const DEFAULT_USER_ID = 1;
-
 const router = Router();
 
 router.get("/", async (req, res, next) => {
@@ -48,7 +44,7 @@ router.post("/", async (req, res, next) => {
     if (!req.body?.customerId || !Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
       return res.status(400).json({ error: "customerId och minst en rad krävs" });
     }
-    const quote = await quotes.createQuote(req.body, DEFAULT_USER_ID);
+    const quote = await quotes.createQuote(req.body, req.user.id);
     res.status(201).json(quote);
   } catch (err) {
     next(err);
@@ -91,7 +87,7 @@ router.post("/:id/send", async (req, res, next) => {
 
 router.post("/:id/convert-to-order", async (req, res, next) => {
   try {
-    const order = await convertQuoteToOrder(Number(req.params.id), DEFAULT_USER_ID);
+    const order = await convertQuoteToOrder(Number(req.params.id), req.user.id);
     res.status(201).json(order);
   } catch (err) {
     if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Offert saknas" });

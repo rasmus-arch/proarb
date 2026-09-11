@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Fas 8: server-side sessions behind an HttpOnly cookie (token). Revocable
+-- (delete the row = logout everywhere), unlike a stateless JWT — matches
+-- the "no ORM, raw SQL" stack without pulling in a JWT library.
+CREATE TABLE IF NOT EXISTS sessions (
+  token      VARCHAR(64) PRIMARY KEY,
+  user_id    INT NOT NULL,
+  expires_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id),
+  INDEX idx_sessions_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ---------------------------------------------------------------------------
 -- Settings (single row, id = 1)
 -- ---------------------------------------------------------------------------

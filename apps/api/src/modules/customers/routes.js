@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as customers from "./service.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
-
-const DEFAULT_USER_ID = 1; // TODO (Fas 8): real auth
+import { requireRole } from "../../lib/auth-middleware.js";
 
 const router = Router();
 const logoUpload = createLogoUpload("customer-logos");
@@ -55,7 +54,7 @@ router.patch("/:id", async (req, res, next) => {
   }
 });
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", requireRole("ADMIN"), async (req, res, next) => {
   try {
     await customers.deactivateCustomer(Number(req.params.id));
     res.status(204).end();
@@ -117,7 +116,7 @@ router.post("/:id/logos", (req, res, next) => {
       originalFilename: req.file.originalname,
       mimeType: req.file.mimetype,
       fileSize: req.file.size,
-      uploadedBy: DEFAULT_USER_ID,
+      uploadedBy: req.user.id,
     });
     res.status(201).json(logo);
   } catch (err) {

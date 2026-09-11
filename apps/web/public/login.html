@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Logga in</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="flex min-h-screen items-center justify-center bg-slate-50">
+    <form id="login-form" class="card w-full max-w-sm">
+      <h1 class="text-lg font-semibold text-slate-900">ProArb</h1>
+      <p class="mt-1 text-sm text-slate-600">Logga in för att fortsätta.</p>
+
+      <label class="mt-4 block text-sm">
+        <span class="text-slate-700">E-post</span>
+        <input id="email" type="email" required autocomplete="username" class="input mt-1" />
+      </label>
+      <label class="mt-3 block text-sm">
+        <span class="text-slate-700">Lösenord</span>
+        <input id="password" type="password" required autocomplete="current-password" class="input mt-1" />
+      </label>
+
+      <p id="login-error" class="mt-3 hidden text-sm text-red-600"></p>
+
+      <button type="submit" class="btn mt-4 w-full">Logga in</button>
+    </form>
+
+    <script type="module" src="/js/pages/login.js"></script>
+  </body>
+</html>

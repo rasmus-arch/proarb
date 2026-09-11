@@ -2,7 +2,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 
+import authRouter from "./modules/auth/routes.js";
+import usersRouter from "./modules/users/routes.js";
 import customersRouter from "./modules/customers/routes.js";
 import { renderPortalPage } from "./modules/customers/portal.js";
 import quotesRouter from "./modules/quotes/routes.js";
@@ -18,6 +21,7 @@ import inventoryRouter from "./modules/inventory/routes.js";
 import settingsRouter from "./modules/settings/routes.js";
 import statsRouter from "./modules/stats/routes.js";
 import { uploadsRoot } from "./lib/uploads.js";
+import { requireAuth, requireRole } from "./lib/auth-middleware.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
@@ -25,14 +29,26 @@ const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
 
+// Login/logout/me are the only /api routes reachable without a session.
+app.use("/api/auth", authRouter);
+// Public, no-login quote responses (accept/decline) — reached only via the
+// unguessable public_token, not by a logged-in session.
+app.use("/api/public/quotes", quotesPublicRouter);
+
+// Fas 8: every other /api route requires a logged-in session.
+// TODO (Fas 8+): once this app has more than a handful of staff accounts,
+// consider trimming session TTL / adding an idle-timeout on top of this.
+app.use("/api", requireAuth);
+
+app.use("/api/users", requireRole("ADMIN"), usersRouter);
 app.use("/api/customers", customersRouter);
 app.use("/api/quotes", quotesRouter);
-app.use("/api/public/quotes", quotesPublicRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/categories", categoriesRouter);
@@ -41,7 +57,7 @@ app.use("/api/suppliers", suppliersRouter);
 app.use("/api/print-methods", printMethodsRouter);
 app.use("/api/pos", posRouter);
 app.use("/api/inventory", inventoryRouter);
-app.use("/api/settings", settingsRouter);
+app.use("/api/settings", requireRole("ADMIN"), settingsRouter);
 app.use("/api/stats", statsRouter);
 
 // Public, no-login quote link shared with customers (see PLAN.md §3).

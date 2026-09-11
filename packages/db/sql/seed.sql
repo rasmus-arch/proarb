@@ -8,6 +8,7 @@ INSERT IGNORE INTO print_methods (id, name) VALUES
   (3, 'Transfer'),
   (4, 'DTF');
 
--- Default admin user. Password is "changeme" (bcrypt hash) – change on first login.
+-- Default admin user. Password is "changeme" (bcryptjs hash) – change it
+-- via Inställningar → Användare on first login.
 INSERT IGNORE INTO users (id, name, email, password_hash, role)
-VALUES (1, 'Admin', 'admin@example.com', '$2b$10$CwTycUXWue0Thq9StjUM0uJ8u1yvMZE.ep0lIVzYlgw72u2xVpS5W', 'ADMIN');
+VALUES (1, 'Admin', 'admin@example.com', '$2b$10$0rrZunXcEcKdRpeMYWwd/OC2xRNLrjuHKwuEkuFvns9f3QbWYx76e', 'ADMIN');

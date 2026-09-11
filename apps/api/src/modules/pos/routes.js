@@ -3,10 +3,6 @@ import * as pos from "./service.js";
 import { generateReceiptPdf } from "./pdf.js";
 
 // Fas 4: kassasessioner, försäljning (rader + delad betalning) och kvitto.
-// TODO (Fas 8): riktig inloggning — cashierId/openedBy hårdkodas till
-// seed-admin (id 1) tills auth finns.
-const DEFAULT_USER_ID = 1;
-
 const router = Router();
 
 router.get("/session", async (req, res, next) => {
@@ -19,7 +15,7 @@ router.get("/session", async (req, res, next) => {
 
 router.post("/session/open", async (req, res, next) => {
   try {
-    const session = await pos.openSession(req.body ?? {}, DEFAULT_USER_ID);
+    const session = await pos.openSession(req.body ?? {}, req.user.id);
     res.status(201).json(session);
   } catch (err) {
     next(err);
@@ -58,7 +54,7 @@ router.get("/sales", async (req, res, next) => {
 
 router.post("/sales", async (req, res, next) => {
   try {
-    const sale = await pos.createSale(req.body ?? {}, DEFAULT_USER_ID);
+    const sale = await pos.createSale(req.body ?? {}, req.user.id);
     res.status(201).json(sale);
   } catch (err) {
     if (err.message === "INVALID_SALE") {

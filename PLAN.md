@@ -194,7 +194,7 @@ proarb/
 | 5 | ✅ Klar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista inkl. ej skannat, justera eller behåll, spårbart via `StockMovement`), lågt-lager-varningar, **inköpsförslag** per leverantör |
 | 6 | ✅ Klar | Tryck/produktionsflöde kopplat till order-/offertrader |
 | 7 | ✅ Klar* | Kundportal (länk utan inloggning), påminnelser (skickas ej via e-post ännu — se nedan). *Fortnox-integrationen (skicka klar order → skapa kundfaktura, synka status/fakturanummer tillbaka) väntar fortfarande på en testmiljö, se `fortnox.js`. |
-| 8 | ⏳ Kvar | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
+| 8 | ✅ Klar* | Inloggning (e-post/lösenord, sessions-cookie) och rollbaserad behörighet (ADMIN/SALES/WAREHOUSE/POS) på alla API-rutter. *Auditlogg, GDPR-verktyg (export/radering) och prestandaoptimering för stora kataloger är inte byggt — se `README.md`. |
 
 **Tillkommande önskemål** (inte bundna till en specifik fas ovan):
 - ✅ Kundkort: flerfils-uppladdning av namngivna logga/tryckvarianter

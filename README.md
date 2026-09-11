@@ -37,7 +37,9 @@ pnpm dev
 
 Öppna sedan http://localhost:3001 — Express serverar både API:t
 (`/api/...`) och de statiska sidorna (`/kunder.html`, `/kassa.html`, osv.)
-från samma process.
+från samma process. Du landar på `/login.html`; logga in med
+`admin@example.com` / `changeme` (byt lösenord under Inställningar →
+Användare).
 
 ## Struktur
 
@@ -100,8 +102,19 @@ PLAN.md              Kravspec och fasindelad byggplan
   obesvarade offerter som en att-göra-lista på översiktssidan (ingen
   e-postleverantör kopplad, så "skicka påminnelse" innebär att ringa/
   maila manuellt och sen markera den som skickad).
+- **Fas 8** – klar: riktig inloggning (e-post/lösenord, bcrypt-hashat,
+  session i en `sessions`-tabell bakom en HttpOnly-cookie — inte JWT,
+  så en utloggning/inaktivering slår igenom direkt). Alla `/api`-rutter
+  utom `/api/auth/*` och de publika offert-svaren kräver en inloggad
+  session. Fyra roller (ADMIN/SALES/WAREHOUSE/POS): Inställningar och
+  användarhantering kräver ADMIN, att ändra lagersaldo (justera,
+  inventering, ta emot inköpsorder) kräver WAREHOUSE eller ADMIN.
+  Användare hanteras under Inställningar → Användare (endast ADMIN).
+  Standardkontot är `admin@example.com` / `changeme` — byt lösenord
+  där efter första inloggningen.
 - **Kvar**: riktig Fortnox-koppling (order → kundfaktura, synk tillbaka
-  — stub finns i `fortnox.js`, väntar på testmiljö), härdning (auth,
-  roller, GDPR — Fas 8). Mindre lucka: koppla produkt↔leverantör
-  (backend klart, API:et `POST /api/products/:id/suppliers` finns, men
-  saknar ännu en UI-formulär). Se `PLAN.md` för detaljer.
+  — stub finns i `fortnox.js`, väntar på testmiljö). Mindre luckor:
+  auditlogg och GDPR-verktyg (export/radering av persondata) är inte
+  byggt, koppla produkt↔leverantör saknar ännu ett UI-formulär (backend
+  klart, `POST /api/products/:id/suppliers` finns). Se `PLAN.md` för
+  detaljer.

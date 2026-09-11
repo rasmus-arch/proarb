@@ -3,10 +3,6 @@ import * as orders from "./service.js";
 
 // Fas 3: direktskapande av order, statusflöde och utlämning mot behörig
 // kontakt. "Offert -> order" ligger i quotes/routes.js (convert-to-order).
-// TODO (Fas 8): riktig inloggning — createdBy/verifiedBy hårdkodas till
-// seed-admin (id 1) tills auth finns.
-const DEFAULT_USER_ID = 1;
-
 const router = Router();
 
 router.get("/", async (req, res, next) => {
@@ -34,7 +30,7 @@ router.get("/print-queue", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const order = await orders.createOrder(req.body ?? {}, DEFAULT_USER_ID);
+    const order = await orders.createOrder(req.body ?? {}, req.user.id);
     res.status(201).json(order);
   } catch (err) {
     if (err.message === "INVALID_ORDER") {
@@ -73,7 +69,7 @@ router.post("/:id/pickup", async (req, res, next) => {
     const order = await orders.recordPickup(Number(req.params.id), {
       pickedUpByContactId: req.body?.pickedUpByContactId || null,
       pickedUpByName: req.body?.pickedUpByName || null,
-      verifiedByUserId: DEFAULT_USER_ID,
+      verifiedByUserId: req.user.id,
     });
     res.json(order);
   } catch (err) {

@@ -3,11 +3,13 @@ import * as inventory from "./service.js";
 import * as purchaseOrders from "./purchase-orders.js";
 import * as stockCounts from "./stock-counts.js";
 import { getPurchaseSuggestions } from "./purchase-suggestions.js";
+import { requireRole } from "../../lib/auth-middleware.js";
 
 // Fas 5: lagersaldo, inleverans (PO + streckkod), inventering (juridiskt
 // spårbar), lågt-lager-varningar, inköpsförslag. Se PLAN.md.
-// TODO (Fas 8): riktig inloggning — userId hårdkodas till seed-admin (id 1).
-const DEFAULT_USER_ID = 1;
+// Fas 8: alla som ändrar lagersaldo kräver rollen WAREHOUSE eller ADMIN —
+// att läsa saldo/inköpsförslag är fortfarande öppet för alla inloggade.
+const canAdjustStock = requireRole("ADMIN", "WAREHOUSE");
 
 const router = Router();
 
@@ -37,7 +39,7 @@ router.get("/stock-levels", async (req, res, next) => {
   }
 });
 
-router.patch("/stock-levels/:variantId/:warehouseId/reorder", async (req, res, next) => {
+router.patch("/stock-levels/:variantId/:warehouseId/reorder", canAdjustStock, async (req, res, next) => {
   try {
     await inventory.setReorderSettings(Number(req.params.variantId), Number(req.params.warehouseId), req.body ?? {});
     res.status(204).end();
@@ -46,7 +48,7 @@ router.patch("/stock-levels/:variantId/:warehouseId/reorder", async (req, res, n
   }
 });
 
-router.post("/stock-levels/:variantId/:warehouseId/adjust", async (req, res, next) => {
+router.post("/stock-levels/:variantId/:warehouseId/adjust", canAdjustStock, async (req, res, next) => {
   try {
     if (req.body?.newQuantity === undefined) return res.status(400).json({ error: "newQuantity krävs" });
     await inventory.adjustStockManually({
@@ -54,7 +56,7 @@ router.post("/stock-levels/:variantId/:warehouseId/adjust", async (req, res, nex
       warehouseId: Number(req.params.warehouseId),
       newQuantity: req.body.newQuantity,
       note: req.body.note ?? null,
-      userId: DEFAULT_USER_ID,
+      userId: req.user.id,
     });
     res.status(204).end();
   } catch (err) {
@@ -72,7 +74,7 @@ router.get("/purchase-orders", async (req, res, next) => {
   }
 });
 
-router.post("/purchase-orders", async (req, res, next) => {
+router.post("/purchase-orders", canAdjustStock, async (req, res, next) => {
   try {
     const po = await purchaseOrders.createPurchaseOrder(req.body ?? {});
     res.status(201).json(po);
@@ -94,14 +96,14 @@ router.get("/purchase-orders/:id", async (req, res, next) => {
   }
 });
 
-router.post("/purchase-orders/:id/receive", async (req, res, next) => {
+router.post("/purchase-orders/:id/receive", canAdjustStock, async (req, res, next) => {
   try {
     if (!req.body?.barcode) return res.status(400).json({ error: "barcode krävs" });
     const po = await purchaseOrders.receiveByBarcode(Number(req.params.id), {
       barcode: req.body.barcode,
       quantity: req.body.quantity ?? 1,
       warehouseId: req.body.warehouseId ?? inventory.DEFAULT_WAREHOUSE_ID,
-      userId: DEFAULT_USER_ID,
+      userId: req.user.id,
     });
     res.json(po);
   } catch (err) {
@@ -125,10 +127,10 @@ router.get("/stock-counts", async (req, res, next) => {
   }
 });
 
-router.post("/stock-counts", async (req, res, next) => {
+router.post("/stock-counts", canAdjustStock, async (req, res, next) => {
   try {
     if (!req.body?.warehouseId) return res.status(400).json({ error: "warehouseId krävs" });
-    const count = await stockCounts.startStockCount({ warehouseId: req.body.warehouseId, userId: DEFAULT_USER_ID });
+    const count = await stockCounts.startStockCount({ warehouseId: req.body.warehouseId, userId: req.user.id });
     res.status(201).json(count);
   } catch (err) {
     next(err);
@@ -145,7 +147,7 @@ router.get("/stock-counts/:id", async (req, res, next) => {
   }
 });
 
-router.post("/stock-counts/:id/scan", async (req, res, next) => {
+router.post("/stock-counts/:id/scan", canAdjustStock, async (req, res, next) => {
   try {
     if (!req.body?.barcode) return res.status(400).json({ error: "barcode krävs" });
     const count = await stockCounts.scanCountLine(Number(req.params.id), req.body);
@@ -158,7 +160,7 @@ router.post("/stock-counts/:id/scan", async (req, res, next) => {
   }
 });
 
-router.post("/stock-counts/:id/lines", async (req, res, next) => {
+router.post("/stock-counts/:id/lines", canAdjustStock, async (req, res, next) => {
   try {
     if (!req.body?.productVariantId) return res.status(400).json({ error: "productVariantId krävs" });
     const count = await stockCounts.addCountLineManual(Number(req.params.id), req.body);
@@ -170,14 +172,14 @@ router.post("/stock-counts/:id/lines", async (req, res, next) => {
   }
 });
 
-router.post("/stock-counts/:id/lines/:lineId/decide", async (req, res, next) => {
+router.post("/stock-counts/:id/lines/:lineId/decide", canAdjustStock, async (req, res, next) => {
   try {
     if (!["ADJUST", "KEEP"].includes(req.body?.decision)) {
       return res.status(400).json({ error: "decision måste vara ADJUST eller KEEP" });
     }
     const count = await stockCounts.decideLine(Number(req.params.id), Number(req.params.lineId), {
       decision: req.body.decision,
-      userId: DEFAULT_USER_ID,
+      userId: req.user.id,
     });
     res.json(count);
   } catch (err) {
@@ -188,7 +190,7 @@ router.post("/stock-counts/:id/lines/:lineId/decide", async (req, res, next) => 
   }
 });
 
-router.post("/stock-counts/:id/missing/:variantId/decide", async (req, res, next) => {
+router.post("/stock-counts/:id/missing/:variantId/decide", canAdjustStock, async (req, res, next) => {
   try {
     if (!["ADJUST", "KEEP"].includes(req.body?.decision)) {
       return res.status(400).json({ error: "decision måste vara ADJUST eller KEEP" });
@@ -196,7 +198,7 @@ router.post("/stock-counts/:id/missing/:variantId/decide", async (req, res, next
     const count = await stockCounts.decideMissing(Number(req.params.id), {
       productVariantId: Number(req.params.variantId),
       decision: req.body.decision,
-      userId: DEFAULT_USER_ID,
+      userId: req.user.id,
     });
     res.json(count);
   } catch (err) {
@@ -207,14 +209,14 @@ router.post("/stock-counts/:id/missing/:variantId/decide", async (req, res, next
   }
 });
 
-router.post("/stock-counts/:id/decide-all", async (req, res, next) => {
+router.post("/stock-counts/:id/decide-all", canAdjustStock, async (req, res, next) => {
   try {
     if (!["ADJUST", "KEEP"].includes(req.body?.decision)) {
       return res.status(400).json({ error: "decision måste vara ADJUST eller KEEP" });
     }
     const count = await stockCounts.decideAll(Number(req.params.id), {
       decision: req.body.decision,
-      userId: DEFAULT_USER_ID,
+      userId: req.user.id,
     });
     res.json(count);
   } catch (err) {
@@ -223,7 +225,7 @@ router.post("/stock-counts/:id/decide-all", async (req, res, next) => {
   }
 });
 
-router.post("/stock-counts/:id/complete", async (req, res, next) => {
+router.post("/stock-counts/:id/complete", canAdjustStock, async (req, res, next) => {
   try {
     const count = await stockCounts.completeStockCount(Number(req.params.id));
     res.json(count);
