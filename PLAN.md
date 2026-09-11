@@ -42,7 +42,17 @@ i butik och **lagerhantering** med streckkodsskanning, för en katalog på
    - Skanna in vid mottagning (PO/inleverans), automatiska lagerrörelser
      vid försäljning/orderplock.
    - Flera lagerplatser (t.ex. Butik + Centrallager) med överföringar.
-   - Lågt-lager-varningar och inköpsförslag.
+   - **Inköpsförslag**, egen flik, uppdelad på leverantör och per order:
+     - Rader på en order som saknar täckning i lagersaldot dyker upp här
+       automatiskt (kopplat till `ProductSupplier` för att veta rätt
+       leverantör).
+     - Per produkt går det att sätta ett minsta lagersaldo (`reorder_point`,
+       finns redan i `StockLevel`) och en beställningskvantitet — går
+       saldot under gränsen läggs ett förslag upp även utan en order bakom.
+     - På en enskild orderrad går det att bocka för "ta inte från lager"
+       (en `sourcing`-flagga per `OrderLine`, t.ex. `STOCK`/`PURCHASE`) så
+       att raden alltid hamnar i inköpsförslaget och beställs särskilt för
+       den ordern, oavsett aktuellt saldo.
    - **Inventering** (`StockCount`/`StockCountLine`), juridiskt hållbar:
      starta en inventering per lagerplats, skanna alla varor som finns
      fysiskt i butiken (eller lägg in antal manuellt för det som inte
@@ -187,11 +197,25 @@ proarb/
 | 8 | ⏳ Kvar | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
 
 **Tillkommande önskemål** (inte bundna till en specifik fas ovan):
-- Kundkort: flerfils-uppladdning av namngivna logga/tryckvarianter
-  (eps, jpg, png, svg, pdf) – kräver en kunddetaljsida som inte finns än.
-- Inställningar-flik: säljarinfo/logga/färger för offert-PDF och publik
-  offertsida, samt på/av + intervall för e-postpåminnelser (kräver en
-  SMTP-leverantör för själva utskicket).
+- ✅ Kundkort: flerfils-uppladdning av namngivna logga/tryckvarianter
+  (eps, jpg, png, svg, pdf) via en ny kunddetaljsida (`kund-editor.html`).
+- ✅ Inställningar-flik: säljarinfo/logga/accentfärg/fottext för offert-PDF
+  och publik offertsida, samt på/av + intervall för e-postpåminnelser
+  (själva utskicket kräver fortfarande en SMTP-leverantör, ej kopplad).
+- ✅ Statistik: bästsäljande produkter/kategorier/kunder + marginal,
+  slår ihop kassa- och orderförsäljning.
+- ✅ Marginal syns nu i kassan, offert-editorn och order-editorn (per
+  rad + totalsumma), baserat på produktens `cost_price`.
+- ✅ Kassans betalmetoder Faktura/Swish skapar automatiskt en
+  Fortnox-fakturarad (kundfaktura respektive kontantfaktura, se
+  `invoices`-tabellen). Faktura kräver att en kund är vald i kassan.
+  Det faktiska Fortnox-API-anropet är en stub (`fortnox.js`) tills en
+  testmiljö/inloggning finns – kopplas in i Fas 7 utan att övrig logik
+  behöver ändras.
+- ⏳ Inköpsförslag: en egen flik, uppdelad på leverantör och per order,
+  för orderrader som saknar lagertäckning samt produkter under sitt
+  minsta lagersaldo (se Fas 5-raden ovan). Kräver att lagersaldo faktiskt
+  räknas ut (Fas 5) innan den kan byggas.
 
 ## 7. Prisregel: allt hanteras exklusive moms
 

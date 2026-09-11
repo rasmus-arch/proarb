@@ -26,6 +26,7 @@ const el = {
   cartRows: document.getElementById("cart-rows"),
   emptyCart: document.getElementById("empty-cart"),
   cartTotal: document.getElementById("cart-total"),
+  cartMargin: document.getElementById("cart-margin"),
   payBtn: document.getElementById("pay-btn"),
   payDialog: document.getElementById("pay-dialog"),
   payTotal: document.getElementById("pay-total"),
@@ -68,6 +69,17 @@ function cartTotals() {
   return { subtotal, vat, total: subtotal + vat };
 }
 
+// null when the product has no cost price on file — margin is unknown,
+// not zero.
+function itemMargin(item) {
+  if (item.costPrice === null || item.costPrice === undefined) return null;
+  return (item.unitPrice - item.costPrice) * item.qty;
+}
+
+function marginLabel(margin) {
+  return margin === null ? "–" : formatMoney(margin);
+}
+
 function renderCart() {
   const items = [...cart.entries()];
   el.emptyCart.classList.toggle("hidden", items.length > 0);
@@ -81,13 +93,18 @@ function renderCart() {
         <td class="py-2 pr-4 text-right">${item.qty}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice)}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice * item.qty)}</td>
+        <td class="py-2 pr-4 text-right text-slate-500">${marginLabel(itemMargin(item))}</td>
         <td class="py-2 pr-2"><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${variantId}">✕</button></td>
       </tr>`
     )
     .join("");
 
   const { total } = cartTotals();
+  const margins = items.map(([, item]) => itemMargin(item)).filter((m) => m !== null);
+  const marginAmount = margins.reduce((sum, m) => sum + m, 0);
+
   el.cartTotal.textContent = formatMoney(total);
+  el.cartMargin.textContent = marginLabel(marginAmount) + (margins.length < items.length && items.length > 0 ? " *" : "");
   el.payBtn.disabled = items.length === 0;
 }
 
@@ -113,6 +130,7 @@ async function handleScan(barcode) {
         size: variant.size,
         unitPrice,
         taxRatePercent: Number(variant.tax_rate_percent),
+        costPrice: variant.cost_price === null || variant.cost_price === undefined ? null : Number(variant.cost_price),
         qty: 1,
       });
     }

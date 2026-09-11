@@ -36,8 +36,13 @@ export async function getCustomer(id) {
     `SELECT * FROM customer_contacts WHERE customer_id = ? AND active = 1 ORDER BY name ASC`,
     [id]
   );
+  const [logos] = await pool.query(
+    `SELECT id, name, file_path, original_filename, mime_type, file_size, created_at
+     FROM customer_logos WHERE customer_id = ? ORDER BY created_at DESC`,
+    [id]
+  );
 
-  return { ...customer, contacts };
+  return { ...customer, contacts, logos };
 }
 
 export async function createCustomer(data) {
@@ -149,4 +154,28 @@ export async function deactivateContact(customerId, contactId) {
     contactId,
     customerId,
   ]);
+}
+
+// Named logo/print-artwork variants (see PLAN.md §2 kundregister). The
+// actual file is handled by multer in routes.js; this just records it.
+export async function addLogo(customerId, { name, filePath, originalFilename, mimeType, fileSize, uploadedBy }) {
+  const [result] = await pool.query(
+    `INSERT INTO customer_logos (customer_id, name, file_path, original_filename, mime_type, file_size, uploaded_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [customerId, name, filePath, originalFilename, mimeType, fileSize, uploadedBy ?? null]
+  );
+  const [[logo]] = await pool.query(`SELECT * FROM customer_logos WHERE id = ?`, [result.insertId]);
+  return logo;
+}
+
+export async function getLogo(customerId, logoId) {
+  const [[logo]] = await pool.query(`SELECT * FROM customer_logos WHERE id = ? AND customer_id = ?`, [
+    logoId,
+    customerId,
+  ]);
+  return logo ?? null;
+}
+
+export async function deleteLogo(customerId, logoId) {
+  await pool.query(`DELETE FROM customer_logos WHERE id = ? AND customer_id = ?`, [logoId, customerId]);
 }

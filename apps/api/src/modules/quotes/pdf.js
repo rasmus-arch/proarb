@@ -1,8 +1,7 @@
 import PDFDocument from "pdfkit";
 
-// TODO: move to a configurable "company profile" once Fas 8 (hardening/
-// settings) exists. Hardcoded for now since there's only one seller.
-const SELLER_NAME = "Profil & Arbetskläder i Eskilstuna AB";
+const FALLBACK_SELLER_NAME = "Mitt företag";
+const FALLBACK_BRAND_COLOR = "#0f172a";
 
 function money(n) {
   return `${Number(n).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
@@ -16,8 +15,8 @@ const COLS = [
   { key: "lineTotal", label: "Summa ex moms", x: 440, width: 95, align: "right" },
 ];
 
-function drawTableHeader(doc, y) {
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#334155");
+function drawTableHeader(doc, y, brandColor) {
+  doc.font("Helvetica-Bold").fontSize(9).fillColor(brandColor);
   for (const col of COLS) {
     doc.text(col.label, col.x, y, { width: col.width, align: col.align ?? "left" });
   }
@@ -33,7 +32,13 @@ function drawTableHeader(doc, y) {
 // customer-facing accept/decline link) is printed on the document when
 // given — the PDF itself is static, so it can't have a clickable button,
 // but the link text lets a customer act on a printed/emailed copy too.
-export function generateQuotePdf(quote, { publicUrl } = {}) {
+// `settings` (from GET /api/settings, see Inställningar) controls the
+// seller info, accent color and footer note — falls back sensibly if
+// omitted.
+export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
+  const sellerName = settings?.seller_name || FALLBACK_SELLER_NAME;
+  const brandColor = settings?.brand_color || FALLBACK_BRAND_COLOR;
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
     const chunks = [];
@@ -41,9 +46,14 @@ export function generateQuotePdf(quote, { publicUrl } = {}) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.font("Helvetica-Bold").fontSize(18).text("OFFERT", 40, 40);
+    doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text("OFFERT", 40, 40);
     doc.font("Helvetica").fontSize(10).fillColor("#475569");
-    doc.text(SELLER_NAME, 40, 65);
+    doc.text(sellerName, 40, 65);
+    if (settings?.seller_org_number) doc.text(`Org.nr: ${settings.seller_org_number}`, 40, 78);
+    const sellerAddressLine = [settings?.seller_postal_code, settings?.seller_city].filter(Boolean).join(" ");
+    if (settings?.seller_address || sellerAddressLine) {
+      doc.text([settings?.seller_address, sellerAddressLine].filter(Boolean).join(", "), 40, 91);
+    }
 
     doc.fontSize(10).fillColor("#0f172a");
     doc.text(`Offertnr: ${quote.quote_number}`, 400, 40, { width: 135, align: "right" });
@@ -58,8 +68,9 @@ export function generateQuotePdf(quote, { publicUrl } = {}) {
       });
     }
 
-    let y = 110;
-    doc.font("Helvetica-Bold").fontSize(11).text("Kund", 40, y);
+    let y = 130;
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(brandColor).text("Kund", 40, y);
+    doc.fillColor("#0f172a");
     y += 16;
     doc.font("Helvetica").fontSize(10);
     doc.text(quote.customer_name, 40, y);
@@ -82,7 +93,7 @@ export function generateQuotePdf(quote, { publicUrl } = {}) {
     }
 
     y += 15;
-    drawTableHeader(doc, y);
+    drawTableHeader(doc, y, brandColor);
     y += 22;
 
     doc.fontSize(9);
@@ -122,10 +133,10 @@ export function generateQuotePdf(quote, { publicUrl } = {}) {
     doc.text("Moms", 320, y, { width: 135 });
     doc.text(money(quote.totals.vat_amount), 440, y, { width: 95, align: "right" });
     y += 15;
-    doc.font("Helvetica-Bold");
+    doc.font("Helvetica-Bold").fillColor(brandColor);
     doc.text("Totalt", 320, y, { width: 135 });
     doc.text(money(quote.totals.total_inc_vat), 440, y, { width: 95, align: "right" });
-    doc.font("Helvetica");
+    doc.font("Helvetica").fillColor("#0f172a");
 
     y += 30;
     if (quote.notes) {
@@ -138,6 +149,11 @@ export function generateQuotePdf(quote, { publicUrl } = {}) {
         .fontSize(9)
         .fillColor("#1d4ed8")
         .text(`Godkänn eller avböj offerten online: ${publicUrl}`, 40, y, { width: 495 });
+      y += 20;
+    }
+
+    if (settings?.quote_footer_note) {
+      doc.fontSize(8).fillColor("#94a3b8").text(settings.quote_footer_note, 40, y, { width: 495 });
     }
 
     doc.end();

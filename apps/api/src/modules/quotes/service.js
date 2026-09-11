@@ -14,6 +14,13 @@ function lineTotal(line) {
   return Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
 }
 
+// null when the product has no cost_price set — margin for that line is
+// simply unknown, not zero.
+function lineMargin(line) {
+  if (line.cost_price === null || line.cost_price === undefined) return null;
+  return line.line_total - Number(line.quantity) * Number(line.cost_price);
+}
+
 export async function listQuotes({ search = "", status = "", page = 1, pageSize = 25 }) {
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
@@ -46,7 +53,7 @@ export async function listQuotes({ search = "", status = "", page = 1, pageSize 
 
 async function loadQuoteLines(quoteId) {
   const [lines] = await pool.query(
-    `SELECT ql.*, p.name AS product_name, p.tax_rate_percent, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
+    `SELECT ql.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
      FROM quote_lines ql
      JOIN product_variants v ON v.id = ql.product_variant_id
      JOIN products p ON p.id = v.product_id
@@ -56,16 +63,25 @@ async function loadQuoteLines(quoteId) {
     [quoteId]
   );
 
-  return lines.map((line) => ({ ...line, line_total: lineTotal(line) }));
+  return lines.map((line) => {
+    const withTotal = { ...line, line_total: lineTotal(line) };
+    return { ...withTotal, line_margin: lineMargin(withTotal) };
+  });
 }
 
 function summarizeTotals(lines) {
   const subtotal = lines.reduce((sum, l) => sum + l.line_total, 0);
   const vat = lines.reduce((sum, l) => sum + l.line_total * (Number(l.tax_rate_percent) / 100), 0);
+  const marginLines = lines.filter((l) => l.line_margin !== null && l.line_margin !== undefined);
+  const marginAmount = marginLines.reduce((sum, l) => sum + l.line_margin, 0);
+
   return {
     subtotal_ex_vat: round2(subtotal),
     vat_amount: round2(vat),
     total_inc_vat: round2(subtotal + vat),
+    margin_amount: round2(marginAmount),
+    margin_percent: subtotal > 0 ? round2((marginAmount / subtotal) * 100) : 0,
+    margin_incomplete: marginLines.length < lines.length,
   };
 }
 

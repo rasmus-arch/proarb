@@ -1,4 +1,5 @@
 import { pool } from "@proarb/db";
+import { createCustomerInvoice, createCashInvoice } from "../integrations/fortnox.js";
 
 function nextSaleNumber() {
   return `KV-${Math.floor(Date.now() / 1000)}`;
@@ -12,10 +13,27 @@ function lineTotal(line) {
   return Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
 }
 
+// null when the product has no cost_price set — margin for that line is
+// simply unknown, not zero.
+function lineMargin(line, total) {
+  if (line.cost_price === null || line.cost_price === undefined) return null;
+  return total - Number(line.quantity) * Number(line.cost_price);
+}
+
 function summarizeTotals(lines) {
   const subtotal = lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const vat = lines.reduce((sum, l) => sum + lineTotal(l) * (Number(l.tax_rate_percent) / 100), 0);
-  return { subtotal_ex_vat: round2(subtotal), vat_amount: round2(vat), total_inc_vat: round2(subtotal + vat) };
+  const margins = lines.map((l) => lineMargin(l, lineTotal(l))).filter((m) => m !== null);
+  const marginAmount = margins.reduce((sum, m) => sum + m, 0);
+
+  return {
+    subtotal_ex_vat: round2(subtotal),
+    vat_amount: round2(vat),
+    total_inc_vat: round2(subtotal + vat),
+    margin_amount: round2(marginAmount),
+    margin_percent: subtotal > 0 ? round2((marginAmount / subtotal) * 100) : 0,
+    margin_incomplete: margins.length < lines.length,
+  };
 }
 
 // --- Kassasessioner --------------------------------------------------------
@@ -77,7 +95,7 @@ export async function closeSession(id, { closingFloat }) {
 
 async function loadSaleLines(saleId) {
   const [lines] = await pool.query(
-    `SELECT sl.*, p.name AS product_name, p.tax_rate_percent, v.sku, v.color, v.size
+    `SELECT sl.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size
      FROM sale_lines sl
      JOIN product_variants v ON v.id = sl.product_variant_id
      JOIN products p ON p.id = v.product_id
@@ -85,7 +103,10 @@ async function loadSaleLines(saleId) {
      ORDER BY sl.id ASC`,
     [saleId]
   );
-  return lines;
+  return lines.map((line) => {
+    const total = lineTotal(line);
+    return { ...line, line_total: total, line_margin: lineMargin(line, total) };
+  });
 }
 
 export async function getSale(id) {
@@ -101,8 +122,13 @@ export async function getSale(id) {
 
   const lines = await loadSaleLines(id);
   const [payments] = await pool.query(`SELECT * FROM payments WHERE sale_id = ? ORDER BY id ASC`, [id]);
+  const [invoices] = await pool.query(
+    `SELECT id, type, status, status_note, external_ref, invoice_number, amount, created_at
+     FROM invoices WHERE sale_id = ? ORDER BY id ASC`,
+    [id]
+  );
 
-  return { ...sale, lines, payments, totals: summarizeTotals(lines) };
+  return { ...sale, lines, payments, invoices, totals: summarizeTotals(lines) };
 }
 
 export async function listSales({ sessionId, page = 1, pageSize = 25 }) {
@@ -132,6 +158,10 @@ export async function createSale(data, userId) {
   }
   if (!Array.isArray(data.payments) || data.payments.length === 0) {
     throw new Error("PAYMENT_REQUIRED");
+  }
+  if (data.payments.some((p) => p.method === "INVOICE") && !data.customerId) {
+    // A Fortnox customer invoice needs a customer to invoice.
+    throw new Error("INVOICE_REQUIRES_CUSTOMER");
   }
 
   const variantIds = data.lines.map((l) => l.productVariantId);
@@ -177,6 +207,7 @@ export async function createSale(data, userId) {
       );
     }
 
+    const invoicesToSync = [];
     for (const payment of data.payments) {
       await connection.query(`INSERT INTO payments (sale_id, method, amount, reference) VALUES (?, ?, ?, ?)`, [
         saleId,
@@ -184,9 +215,54 @@ export async function createSale(data, userId) {
         payment.amount,
         payment.reference ?? null,
       ]);
+
+      // Faktura -> kundfaktura i Fortnox (kräver en vald kund, validerat
+      // ovan). Swish -> kontantfaktura i Fortnox. Both just get a PENDING
+      // invoices row here; the actual Fortnox call happens after commit
+      // (see below) so a slow/unavailable Fortnox never blocks the sale.
+      if (payment.method === "INVOICE" || payment.method === "SWISH") {
+        const [invoiceResult] = await connection.query(
+          `INSERT INTO invoices (order_id, sale_id, type, amount, status)
+           VALUES (NULL, ?, ?, ?, 'PENDING')`,
+          [saleId, payment.method === "INVOICE" ? "CUSTOMER_INVOICE" : "CASH_INVOICE", payment.amount]
+        );
+        invoicesToSync.push({
+          id: invoiceResult.insertId,
+          type: payment.method === "INVOICE" ? "CUSTOMER_INVOICE" : "CASH_INVOICE",
+          amount: payment.amount,
+        });
+      }
     }
 
     await connection.commit();
+
+    // Best-effort: Fortnox isn't configured yet (see fortnox.js), so this
+    // just marks each invoice PENDING-with-a-note today. Never lets a
+    // Fortnox failure undo an already-completed sale.
+    for (const invoice of invoicesToSync) {
+      try {
+        const result =
+          invoice.type === "CUSTOMER_INVOICE"
+            ? await createCustomerInvoice({ customerId: data.customerId, amount: invoice.amount, saleId })
+            : await createCashInvoice({ amount: invoice.amount, saleId });
+
+        if (result.ok) {
+          await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [
+            result.externalRef ?? null,
+            result.invoiceNumber ?? null,
+            invoice.id,
+          ]);
+        } else {
+          await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoice.id]);
+        }
+      } catch (err) {
+        await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [
+          err.message,
+          invoice.id,
+        ]);
+      }
+    }
+
     return getSale(saleId);
   } catch (err) {
     await connection.rollback();

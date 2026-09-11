@@ -11,7 +11,7 @@ function renderRows(customers) {
   rowsEl.innerHTML = customers
     .map(
       (c) => `
-      <tr>
+      <tr class="cursor-pointer hover:bg-slate-50" onclick="location.href='/kund-editor.html?id=${c.id}'">
         <td class="py-2 pr-4 text-slate-500">${c.customer_number}</td>
         <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(c.name)}</td>
         <td class="py-2 pr-4">${c.org_number ?? ""}</td>

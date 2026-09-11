@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Inställningar</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="installningar">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-3xl px-4 py-8">
+      <h1 class="text-xl font-semibold text-slate-900">Inställningar</h1>
+      <p class="mt-1 text-sm text-slate-600">
+        Styr hur offert-PDF:en och den publika offertsidan ser ut, samt om/hur påminnelser skickas.
+      </p>
+
+      <!-- Seller info -->
+      <section class="mt-6 card">
+        <h2 class="text-sm font-medium text-slate-900">Säljarinfo</h2>
+        <p class="mt-1 text-sm text-slate-600">Visas på offert-PDF:er och den publika offertsidan.</p>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Företagsnamn</span>
+            <input id="s-name" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Org.nr</span>
+            <input id="s-org" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post</span>
+            <input id="s-email" type="email" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Telefon</span>
+            <input id="s-phone" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Adress</span>
+            <input id="s-address" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Postnr &amp; ort</span>
+            <div class="mt-1 flex gap-2">
+              <input id="s-postal" class="input w-28" />
+              <input id="s-city" class="input" />
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <!-- Logo -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Logga</h2>
+        <div class="mt-3 flex items-center gap-4">
+          <img id="s-logo-preview" class="hidden h-12 rounded border border-slate-200 bg-white p-1" />
+          <form id="logo-form" class="flex items-end gap-2">
+            <input id="s-logo-file" type="file" accept=".eps,.jpg,.jpeg,.png,.svg,.pdf" class="input" />
+            <button type="submit" class="btn-secondary">Ladda upp</button>
+          </form>
+        </div>
+        <p id="logo-error" class="mt-2 hidden text-sm text-red-600"></p>
+      </section>
+
+      <!-- Appearance -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Utseende på offert</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Accentfärg</span>
+          <input id="s-color" type="color" class="mt-1 h-10 w-20 rounded border border-slate-300" />
+        </label>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Fottext på offert-PDF (t.ex. villkor eller tack-text)</span>
+          <textarea id="s-footer" rows="2" class="input mt-1"></textarea>
+        </label>
+      </section>
+
+      <!-- Reminders -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Påminnelser</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Skickar en påminnelse om obesvarade offerter. Kräver att en e-postleverantör kopplas in
+          (inte gjort ännu) — det här styr bara om/när det ska ske en gång det finns på plats.
+        </p>
+        <label class="mt-3 flex items-center gap-2 text-sm">
+          <input id="s-reminder-enabled" type="checkbox" class="rounded border-slate-300" />
+          <span class="text-slate-700">Skicka påminnelser om obesvarade offerter</span>
+        </label>
+        <label class="mt-3 block max-w-xs text-sm">
+          <span class="text-slate-700">Dagar utan svar innan påminnelse skickas</span>
+          <input id="s-reminder-days" type="number" min="1" class="input mt-1" />
+        </label>
+      </section>
+
+      <p id="save-error" class="mt-3 hidden text-sm text-red-600"></p>
+      <p id="save-success" class="mt-3 hidden text-sm text-green-700"></p>
+      <div class="mt-4 flex justify-end">
+        <button type="button" id="save-btn" class="btn">Spara</button>
+      </div>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/installningar.js"></script>
+  </body>
+</html>

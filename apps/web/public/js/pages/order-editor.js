@@ -31,6 +31,7 @@ const el = {
   totalsSubtotal: document.getElementById("totals-subtotal"),
   totalsVat: document.getElementById("totals-vat"),
   totalsTotal: document.getElementById("totals-total"),
+  totalsMargin: document.getElementById("totals-margin"),
   formError: document.getElementById("form-error"),
   saveRow: document.getElementById("save-row"),
   saveBtn: document.getElementById("save-btn"),
@@ -57,12 +58,30 @@ function lineTotal(line) {
   return Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
 }
 
+// null when the product has no cost price on file — margin is unknown,
+// not zero.
+function lineMargin(line) {
+  if (line.costPrice === null || line.costPrice === undefined) return null;
+  return lineTotal(line) - Number(line.quantity) * Number(line.costPrice);
+}
+
+function marginLabel(margin) {
+  return margin === null ? "–" : money(margin);
+}
+
 function renderTotals() {
   const subtotal = state.lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const vat = state.lines.reduce((sum, l) => sum + lineTotal(l) * (Number(l.taxRatePercent) / 100), 0);
+  const margins = state.lines.map(lineMargin).filter((m) => m !== null);
+  const marginAmount = margins.reduce((sum, m) => sum + m, 0);
+
   el.totalsSubtotal.textContent = money(subtotal);
   el.totalsVat.textContent = money(vat);
   el.totalsTotal.textContent = money(subtotal + vat);
+
+  const percent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
+  const incomplete = margins.length < state.lines.length && state.lines.length > 0;
+  el.totalsMargin.textContent = `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
 }
 
 const isNewOrder = () => !orderId;
@@ -82,6 +101,7 @@ function renderLines() {
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
             <td class="py-2 pr-3">${line.discountPercent} %</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
+            <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
             <td></td>
           </tr>`;
       }
@@ -93,6 +113,7 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" step="0.01" class="input" data-field="unitPrice" data-index="${index}" value="${line.unitPrice}" /></td>
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
+          <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
     })
@@ -104,10 +125,12 @@ function renderLines() {
 el.lineRows.addEventListener("input", (event) => {
   const { field, index } = event.target.dataset;
   if (field === undefined) return;
-  state.lines[Number(index)][field] = Number(event.target.value);
+  const line = state.lines[Number(index)];
+  line[field] = Number(event.target.value);
   renderTotals();
   const row = event.target.closest("tr");
-  row.querySelector("td:nth-last-child(2)").textContent = money(lineTotal(state.lines[Number(index)]));
+  row.querySelector("td:nth-last-child(3)").textContent = money(lineTotal(line));
+  row.querySelector("td:nth-last-child(2)").textContent = marginLabel(lineMargin(line));
 });
 
 el.lineRows.addEventListener("click", (event) => {
@@ -151,6 +174,7 @@ el.lineResults.addEventListener("click", (event) => {
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: 0,
     taxRatePercent: Number(v.tax_rate_percent),
+    costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
   });
   el.lineSearch.value = "";
   el.lineResults.innerHTML = "";
@@ -303,6 +327,7 @@ async function init() {
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),
       taxRatePercent: Number(l.tax_rate_percent),
+      costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
     }));
 
     el.title.textContent = `Order ${order.order_number}`;

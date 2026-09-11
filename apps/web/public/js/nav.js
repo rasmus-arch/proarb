@@ -10,6 +10,8 @@ const LINKS = [
   { href: "/kassa.html", label: "Kassa", key: "kassa" },
   { href: "/lager.html", label: "Lager", key: "lager" },
   { href: "/produkter.html", label: "Produkter", key: "produkter" },
+  { href: "/statistik.html", label: "Statistik", key: "statistik" },
+  { href: "/installningar.html", label: "Inställningar", key: "installningar" },
 ];
 
 function renderNav() {

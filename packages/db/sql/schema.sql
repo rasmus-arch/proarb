@@ -21,6 +21,34 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
+-- Settings (single row, id = 1)
+-- ---------------------------------------------------------------------------
+
+-- Controls how the seller appears on offert-PDF:er and the public offert-
+-- sida, plus whether/how unanswered-quote reminder emails go out. Sending
+-- itself needs an SMTP provider wired in later — this table only stores
+-- the on/off + interval choice, see PLAN.md.
+CREATE TABLE IF NOT EXISTS app_settings (
+  id                    INT PRIMARY KEY DEFAULT 1,
+  seller_name           VARCHAR(255) NOT NULL DEFAULT 'Mitt företag',
+  seller_org_number     VARCHAR(50) NULL,
+  seller_address        VARCHAR(255) NULL,
+  seller_postal_code    VARCHAR(20) NULL,
+  seller_city           VARCHAR(120) NULL,
+  seller_email          VARCHAR(255) NULL,
+  seller_phone          VARCHAR(50) NULL,
+  seller_logo_path      VARCHAR(500) NULL,
+  brand_color           VARCHAR(7) NOT NULL DEFAULT '#0f172a',
+  quote_footer_note     VARCHAR(1000) NULL,
+  reminder_enabled      TINYINT(1) NOT NULL DEFAULT 0,
+  reminder_days_after   INT NOT NULL DEFAULT 5,
+  updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO app_settings (id) VALUES (1);
+
+-- ---------------------------------------------------------------------------
 -- Customers
 -- ---------------------------------------------------------------------------
 
@@ -69,6 +97,24 @@ CREATE TABLE IF NOT EXISTS customer_contacts (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_contacts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
   INDEX idx_contacts_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Named logo/print-artwork variants for a customer (e.g. "Vit logga",
+-- "Broderifil"). Several files per customer, each with its own name so
+-- staff can pick the right one when building a quote/order print line.
+CREATE TABLE IF NOT EXISTS customer_logos (
+  id                INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id       INT NOT NULL,
+  name              VARCHAR(255) NOT NULL,
+  file_path         VARCHAR(500) NOT NULL,
+  original_filename VARCHAR(255) NOT NULL,
+  mime_type         VARCHAR(100) NOT NULL,
+  file_size         INT NOT NULL,
+  uploaded_by       INT NULL,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_customer_logos_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_customer_logos_user FOREIGN KEY (uploaded_by) REFERENCES users(id),
+  INDEX idx_customer_logos_customer (customer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -276,18 +322,29 @@ CREATE TABLE IF NOT EXISTS order_pickups (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Deliberately thin: real invoicing/bookkeeping is expected to happen in an
--- external system (e.g. Fortnox/Visma); this just tracks status + link.
+-- external system (Fortnox); this just tracks what needs to be pushed there
+-- and the resulting status. Linked to either an order (fakturerad order) or
+-- a POS sale paid by invoice/Swish (customer invoice / "kontantfaktura") —
+-- not unique per order/sale since a split-payment sale can need more than
+-- one (e.g. part Swish, part invoice).
+-- status here is the Fortnox sync status: PENDING / SYNCED / FAILED.
 CREATE TABLE IF NOT EXISTS invoices (
   id             INT PRIMARY KEY AUTO_INCREMENT,
-  order_id       INT NOT NULL UNIQUE,
+  order_id       INT NULL,
+  sale_id        INT NULL,
+  type           ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE',
   invoice_number VARCHAR(50) NULL,
   external_ref   VARCHAR(100) NULL,
   status         VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  status_note    VARCHAR(255) NULL,
   amount         DECIMAL(10,2) NOT NULL,
   due_date       DATE NULL,
   sent_at        DATETIME NULL,
   created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id)
+  CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  CONSTRAINT fk_invoices_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
+  INDEX idx_invoices_order (order_id),
+  INDEX idx_invoices_sale (sale_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------

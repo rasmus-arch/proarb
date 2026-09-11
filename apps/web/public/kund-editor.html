@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Kund</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="kunder">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-3xl px-4 py-8">
+      <h1 id="page-title" class="text-xl font-semibold text-slate-900">Kund</h1>
+
+      <!-- Basic info -->
+      <section class="mt-6 card">
+        <h2 class="text-sm font-medium text-slate-900">Kunduppgifter</h2>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Namn</span>
+            <input id="f-name" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Org.nr</span>
+            <input id="f-org" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post</span>
+            <input id="f-email" type="email" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Telefon</span>
+            <input id="f-phone" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Adress</span>
+            <input id="f-address" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Postnr &amp; ort</span>
+            <div class="mt-1 flex gap-2">
+              <input id="f-postal" class="input w-28" />
+              <input id="f-city" class="input" />
+            </div>
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Betalvillkor (dagar)</span>
+            <input id="f-terms" type="number" min="0" class="input mt-1" />
+          </label>
+        </div>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Anteckningar</span>
+          <textarea id="f-notes" rows="2" class="input mt-1"></textarea>
+        </label>
+        <p id="save-error" class="mt-3 hidden text-sm text-red-600"></p>
+        <div class="mt-4 flex justify-end">
+          <button type="button" id="save-btn" class="btn">Spara</button>
+        </div>
+      </section>
+
+      <!-- Contacts -->
+      <section class="mt-4 card">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-medium text-slate-900">Anställda / hämtbehörighet</h2>
+          <button type="button" id="new-contact-btn" class="btn-secondary">Lägg till</button>
+        </div>
+        <p class="mt-1 text-sm text-slate-600">
+          Vem hos kunden som får hämta ut kläder i butik.
+        </p>
+        <div class="mt-3 overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2 pr-3 font-medium">Namn</th>
+                <th class="py-2 pr-3 font-medium">Roll</th>
+                <th class="py-2 pr-3 font-medium">Kontakt</th>
+                <th class="py-2 pr-3 font-medium">Hämtbehörig</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="contact-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="contacts-empty" class="py-4 text-center text-sm text-slate-500">Inga kontakter ännu.</p>
+        </div>
+      </section>
+
+      <!-- Logos -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Loggor &amp; tryckunderlag</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Ladda upp flera namngivna varianter (t.ex. "Vit logga", "Broderifil"). Tillåtna format:
+          eps, jpg, png, svg, pdf.
+        </p>
+
+        <form id="logo-form" class="mt-3 flex flex-wrap items-end gap-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Namn</span>
+            <input id="logo-name" required class="input mt-1" placeholder="t.ex. Vit logga" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Fil</span>
+            <input id="logo-file" type="file" required accept=".eps,.jpg,.jpeg,.png,.svg,.pdf" class="input mt-1" />
+          </label>
+          <button type="submit" class="btn">Ladda upp</button>
+        </form>
+        <p id="logo-error" class="mt-2 hidden text-sm text-red-600"></p>
+
+        <ul id="logo-list" class="mt-3 divide-y divide-slate-100"></ul>
+        <p id="logos-empty" class="py-4 text-center text-sm text-slate-500">Inga filer uppladdade ännu.</p>
+      </section>
+    </main>
+
+    <!-- New contact dialog -->
+    <dialog id="new-contact-dialog" class="w-full max-w-md rounded-lg p-0 backdrop:bg-slate-900/40">
+      <form id="new-contact-form" method="dialog" class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Ny kontakt</h2>
+        <div class="mt-3 grid grid-cols-1 gap-3">
+          <label class="block text-sm">
+            <span class="text-slate-700">Namn *</span>
+            <input name="name" required class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Roll</span>
+            <input name="role" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post</span>
+            <input name="email" type="email" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Telefon</span>
+            <input name="phone" class="input mt-1" />
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input name="canPickup" type="checkbox" class="rounded border-slate-300" />
+            <span class="text-slate-700">Hämtbehörig (får hämta ut kläder i butik)</span>
+          </label>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-contact-btn" class="btn-secondary">Avbryt</button>
+          <button type="submit" class="btn">Spara</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/kund-editor.js"></script>
+  </body>
+</html>

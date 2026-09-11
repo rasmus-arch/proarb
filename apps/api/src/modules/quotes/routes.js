@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as quotes from "./service.js";
 import { generateQuotePdf } from "./pdf.js";
 import { convertQuoteToOrder } from "../orders/service.js";
+import { getSettings } from "../settings/service.js";
 
 // Fas 2: offert-CRUD, PDF-generering, skicka, konvertera till order.
 // Publik länk (/q/:token) och accept/avböj ligger i public.js.
@@ -93,7 +94,8 @@ router.get("/:id/pdf", async (req, res, next) => {
     const quote = await quotes.getQuote(Number(req.params.id));
     if (!quote) return res.status(404).json({ error: "Not found" });
     const publicUrl = `${req.protocol}://${req.get("host")}/q/${quote.public_token}`;
-    const pdf = await generateQuotePdf(quote, { publicUrl });
+    const settings = await getSettings();
+    const pdf = await generateQuotePdf(quote, { publicUrl, settings });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${quote.quote_number}.pdf"`);
     res.send(pdf);

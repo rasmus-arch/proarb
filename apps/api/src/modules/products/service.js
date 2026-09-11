@@ -32,7 +32,7 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
 export async function findVariantByBarcode(barcode) {
   const [[variant]] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.tax_rate_percent
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.barcode = ? AND v.active = 1`,
@@ -42,11 +42,12 @@ export async function findVariantByBarcode(barcode) {
 }
 
 // Small autocomplete result set used by the quote/order line builder.
+// Includes cost_price so the UI can show margin as lines are added.
 export async function searchVariants(search = "", limit = 15) {
   const like = `%${search}%`;
   const [rows] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.tax_rate_percent, p.printable
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.active = 1 AND p.active = 1

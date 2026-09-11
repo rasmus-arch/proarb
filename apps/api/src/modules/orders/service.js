@@ -9,6 +9,13 @@ function lineTotal(line) {
   return Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
 }
 
+// null when the product has no cost_price set — margin for that line is
+// simply unknown, not zero.
+function lineMargin(line, total) {
+  if (line.cost_price === null || line.cost_price === undefined) return null;
+  return total - Number(line.quantity) * Number(line.cost_price);
+}
+
 function round2(n) {
   return Math.round(n * 100) / 100;
 }
@@ -16,7 +23,17 @@ function round2(n) {
 function summarizeTotals(lines) {
   const subtotal = lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const vat = lines.reduce((sum, l) => sum + lineTotal(l) * (Number(l.tax_rate_percent) / 100), 0);
-  return { subtotal_ex_vat: round2(subtotal), vat_amount: round2(vat), total_inc_vat: round2(subtotal + vat) };
+  const margins = lines.map((l) => lineMargin(l, lineTotal(l))).filter((m) => m !== null);
+  const marginAmount = margins.reduce((sum, m) => sum + m, 0);
+
+  return {
+    subtotal_ex_vat: round2(subtotal),
+    vat_amount: round2(vat),
+    total_inc_vat: round2(subtotal + vat),
+    margin_amount: round2(marginAmount),
+    margin_percent: subtotal > 0 ? round2((marginAmount / subtotal) * 100) : 0,
+    margin_incomplete: margins.length < lines.length,
+  };
 }
 
 // Fas 3 allowed status transitions. DELIVERED is reached only through
@@ -70,7 +87,7 @@ export async function listOrders({ search = "", status = "", page = 1, pageSize 
 
 async function loadOrderLines(orderId) {
   const [lines] = await pool.query(
-    `SELECT ol.*, p.name AS product_name, p.tax_rate_percent, v.sku, v.color, v.size, pm.name AS print_method_name
+    `SELECT ol.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size, pm.name AS print_method_name
      FROM order_lines ol
      JOIN product_variants v ON v.id = ol.product_variant_id
      JOIN products p ON p.id = v.product_id
@@ -79,7 +96,10 @@ async function loadOrderLines(orderId) {
      ORDER BY ol.sort_order ASC, ol.id ASC`,
     [orderId]
   );
-  return lines;
+  return lines.map((line) => {
+    const total = lineTotal(line);
+    return { ...line, line_total: total, line_margin: lineMargin(line, total) };
+  });
 }
 
 export async function getOrder(id) {

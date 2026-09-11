@@ -1,6 +1,9 @@
 import { Router } from "express";
 import * as quotes from "./service.js";
 import { generateQuotePdf } from "./pdf.js";
+import { getSettings } from "../settings/service.js";
+
+const FALLBACK_BRAND_COLOR = "#0f172a";
 
 // The customer-facing side of a quote: no login, reached only by knowing
 // the unguessable public_token. Mounted at /api/public/quotes in index.js;
@@ -43,6 +46,8 @@ export async function renderPublicQuotePage(req, res) {
     quote.status = "VIEWED";
   }
 
+  const settings = await getSettings();
+  const brandColor = settings?.brand_color || FALLBACK_BRAND_COLOR;
   const canRespond = ["SENT", "VIEWED"].includes(quote.status);
 
   const rowsHtml = quote.lines
@@ -73,16 +78,18 @@ export async function renderPublicQuotePage(req, res) {
     table { width:100%; border-collapse:collapse; margin-top:16px; font-size:14px; }
     th { text-align:left; font-size:12px; color:#64748b; padding:8px 12px; border-bottom:1px solid #cbd5e1; }
     .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:6px; padding:10px 18px; font-size:14px; font-weight:500; border:none; cursor:pointer; }
-    .btn-accept { background:#0f172a; color:#fff; }
+    .btn-accept { background:${brandColor}; color:#fff; }
     .btn-decline { background:#fff; color:#0f172a; border:1px solid #cbd5e1; }
     .status { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; background:#e2e8f0; color:#334155; }
   </style>
 </head>
 <body>
   <div class="card">
+    ${settings?.seller_logo_path ? `<img src="/uploads/${settings.seller_logo_path}" alt="${escapeHtml(settings.seller_name)}" style="max-height:40px;margin-bottom:12px;" />` : ""}
     <div style="display:flex;justify-content:space-between;align-items:start;">
       <div>
-        <h1 style="margin:0;font-size:20px;">Offert ${escapeHtml(quote.quote_number)}</h1>
+        <p style="color:${brandColor};margin:0;font-size:13px;font-weight:600;">${escapeHtml(settings?.seller_name || "")}</p>
+        <h1 style="margin:2px 0 0;font-size:20px;">Offert ${escapeHtml(quote.quote_number)}</h1>
         <p style="color:#64748b;margin:4px 0 0;">Till ${escapeHtml(quote.customer_name)}</p>
       </div>
       <span class="status">${STATUS_LABELS[quote.status] ?? quote.status}</span>
@@ -141,7 +148,8 @@ export async function renderPublicQuotePdf(req, res, next) {
     const quote = await quotes.getQuoteByToken(req.params.token);
     if (!quote) return res.status(404).send("Not found");
     const publicUrl = `${req.protocol}://${req.get("host")}/q/${quote.public_token}`;
-    const pdf = await generateQuotePdf(quote, { publicUrl });
+    const settings = await getSettings();
+    const pdf = await generateQuotePdf(quote, { publicUrl, settings });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${quote.quote_number}.pdf"`);
     res.send(pdf);

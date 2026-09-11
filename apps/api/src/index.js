@@ -13,6 +13,9 @@ import brandsRouter from "./modules/catalog/brands.routes.js";
 import printMethodsRouter from "./modules/catalog/print-methods.routes.js";
 import posRouter from "./modules/pos/routes.js";
 import inventoryRouter from "./modules/inventory/routes.js";
+import settingsRouter from "./modules/settings/routes.js";
+import statsRouter from "./modules/stats/routes.js";
+import { uploadsRoot } from "./lib/uploads.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
@@ -35,10 +38,15 @@ app.use("/api/brands", brandsRouter);
 app.use("/api/print-methods", printMethodsRouter);
 app.use("/api/pos", posRouter);
 app.use("/api/inventory", inventoryRouter);
+app.use("/api/settings", settingsRouter);
+app.use("/api/stats", statsRouter);
 
 // Public, no-login quote link shared with customers (see PLAN.md §3).
 app.get("/q/:token", renderPublicQuotePage);
 app.get("/q/:token/pdf", renderPublicQuotePdf);
+
+// Uploaded logo/print-artwork files (customer logos, seller logo).
+app.use("/uploads", express.static(uploadsRoot));
 
 // Serve the vanilla JS + Tailwind frontend.
 app.use(express.static(webPublicDir));

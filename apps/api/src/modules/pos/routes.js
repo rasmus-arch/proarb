@@ -67,6 +67,9 @@ router.post("/sales", async (req, res, next) => {
     if (err.message === "PAYMENT_REQUIRED") {
       return res.status(400).json({ error: "Minst en betalning krävs" });
     }
+    if (err.message === "INVOICE_REQUIRES_CUSTOMER") {
+      return res.status(400).json({ error: "Fakturaköp kräver att en kund väljs" });
+    }
     if (err.message === "AMOUNT_MISMATCH") {
       return res.status(409).json({
         error: `Betalt belopp (${err.received} kr) matchar inte totalsumman (${err.expected} kr)`,

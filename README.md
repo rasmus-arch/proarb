@@ -66,9 +66,23 @@ PLAN.md              Kravspec och fasindelad byggplan
   manuellt namn), med full utlämningshistorik.
 - **Fas 4** – klar: kassasessioner (öppna/stänga med kassaavstämning),
   försäljning med streckkodsskanning, delad betalning (flera
-  betalmetoder per köp) och PDF-kvitto.
-- **Kvar**: lagersaldo/inventering (Fas 5), tryckordersspårning (Fas 6),
-  Fortnox-integration/rapporter/kundportal (Fas 7), härdning (auth,
-  roller, GDPR — Fas 8), samt uppföljande önskemål: kundkort med
-  fleruppladdning av namngivna logga/tryckfiler, och en inställningar-flik
-  för offertutseende/e-postpåminnelser. Se `PLAN.md` för detaljer.
+  betalmetoder per köp) och PDF-kvitto. Betalmetod Faktura/Swish skapar
+  automatiskt en Fortnox-fakturarad (kundfaktura respektive
+  kontantfaktura) — själva Fortnox-anropet är en tydligt markerad stub
+  tills en testmiljö finns, se `fortnox.js`.
+- **Kundkort** – klar: kunddetaljsida med redigerbar info, hämtbehöriga
+  kontakter, och fleruppladdning av namngivna logga-/tryckfiler
+  (eps/jpg/png/svg/pdf).
+- **Inställningar** – klar: säljarinfo/logga/accentfärg/fottext för
+  offert-PDF och publik offertsida, samt på/av + intervall för
+  e-postpåminnelser (själva utskicket kräver en SMTP-leverantör, ej
+  kopplad).
+- **Statistik** – klar: bästsäljande produkter/kategorier/kunder och
+  marginal (kr + %) över valfri period, slår ihop kassa- och
+  orderförsäljning.
+- **Marginal** – visas nu i kassan, offert-editorn och order-editorn
+  (per rad och som totalsumma), baserat på produktens inköpspris.
+- **Kvar**: lagersaldo/inventering inkl. juridiskt spårbar inventering
+  och inköpsförslag (Fas 5), tryckordersspårning (Fas 6), riktig
+  Fortnox-koppling/rapporter/kundportal (Fas 7), härdning (auth, roller,
+  GDPR — Fas 8). Se `PLAN.md` för detaljer.
