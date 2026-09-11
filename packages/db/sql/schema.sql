@@ -303,6 +303,8 @@ CREATE TABLE IF NOT EXISTS order_lines (
   -- always order this in specifically for this order, even if there's
   -- stock on hand — always shows up in inköpsförslag (Fas 5).
   sourcing           ENUM('STOCK', 'PURCHASE') NOT NULL DEFAULT 'STOCK',
+  -- Only meaningful when print_method_id is set (Fas 6 production queue).
+  print_status       ENUM('WAITING', 'IN_PRODUCTION', 'READY') NOT NULL DEFAULT 'WAITING',
   CONSTRAINT fk_ol_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_ol_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
   CONSTRAINT fk_ol_print_method FOREIGN KEY (print_method_id) REFERENCES print_methods(id),

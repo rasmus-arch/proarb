@@ -192,7 +192,7 @@ proarb/
 | 3 | ✅ Klar | Order: direktskapande, statusflöde, utlämning mot behörig kontakt |
 | 4 | ✅ Klar | Kassa: streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning |
 | 5 | ✅ Klar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista inkl. ej skannat, justera eller behåll, spårbart via `StockMovement`), lågt-lager-varningar, **inköpsförslag** per leverantör |
-| 6 | ⏳ Kvar | Tryck/produktionsflöde kopplat till order-/offertrader |
+| 6 | ✅ Klar | Tryck/produktionsflöde kopplat till order-/offertrader |
 | 7 | ⏳ Kvar | Rapporter/dashboard, **Fortnox-integration** (skicka klar order → skapa kundfaktura i Fortnox, synka status/fakturanummer tillbaka), kundportal, påminnelser |
 | 8 | ⏳ Kvar | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
 

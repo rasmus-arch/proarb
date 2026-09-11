@@ -1,6 +1,18 @@
 import { api } from "../api.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
 
+const PRINT_STATUS_LABELS = {
+  WAITING: "Väntar",
+  IN_PRODUCTION: "I produktion",
+  READY: "Klar",
+};
+
+const PRINT_STATUS_COLORS = {
+  WAITING: "bg-slate-100 text-slate-700",
+  IN_PRODUCTION: "bg-amber-100 text-amber-800",
+  READY: "bg-green-100 text-green-800",
+};
+
 const params = new URLSearchParams(location.search);
 const orderId = params.get("id");
 
@@ -93,6 +105,10 @@ function renderLines() {
     .map((line, index) => {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
+      const printCell = line.printMethodName
+        ? `<div class="text-slate-700">${escapeHtml(line.printMethodName)}</div>${line.printDescription ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div>` : ""}<span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${PRINT_STATUS_COLORS[line.printStatus] ?? ""}">${PRINT_STATUS_LABELS[line.printStatus] ?? ""}</span>`
+        : `<span class="text-slate-400">–</span>`;
+
       if (!isNewOrder()) {
         return `
           <tr>
@@ -102,6 +118,7 @@ function renderLines() {
             <td class="py-2 pr-3">${line.discountPercent} %</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
             <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+            <td class="py-2 pr-3">${printCell}</td>
             <td class="py-2 pr-3 text-center">${line.sourcing === "PURCHASE" ? "✓" : ""}</td>
             <td></td>
           </tr>`;
@@ -115,6 +132,7 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
           <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+          <td class="py-2 pr-3 text-slate-400">–</td>
           <td class="py-2 pr-3 text-center"><input type="checkbox" class="rounded border-slate-300" data-field="sourcingPurchase" data-index="${index}" ${line.sourcing === "PURCHASE" ? "checked" : ""} /></td>
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
@@ -339,6 +357,9 @@ async function init() {
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
       sourcing: l.sourcing,
+      printMethodName: l.print_method_name,
+      printDescription: l.print_description,
+      printStatus: l.print_status,
     }));
 
     el.title.textContent = `Order ${order.order_number}`;

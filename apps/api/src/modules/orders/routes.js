@@ -24,6 +24,14 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/print-queue", async (req, res, next) => {
+  try {
+    res.json({ rows: await orders.getPrintQueue({ status: req.query.status ?? "" }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/", async (req, res, next) => {
   try {
     const order = await orders.createOrder(req.body ?? {}, DEFAULT_USER_ID);
@@ -75,6 +83,23 @@ router.post("/:id/pickup", async (req, res, next) => {
     }
     if (err.message === "PICKUP_IDENTITY_REQUIRED") {
       return res.status(400).json({ error: "Välj en hämtberättigad kontakt eller ange namn" });
+    }
+    next(err);
+  }
+});
+
+router.patch("/lines/:lineId/print-status", async (req, res, next) => {
+  try {
+    if (!req.body?.status) return res.status(400).json({ error: "status krävs" });
+    const order = await orders.updatePrintStatus(Number(req.params.lineId), req.body.status);
+    res.json(order);
+  } catch (err) {
+    if (err.message === "LINE_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "LINE_NOT_PRINTED") {
+      return res.status(400).json({ error: "Raden har ingen tryckmetod" });
+    }
+    if (err.message === "INVALID_TRANSITION") {
+      return res.status(409).json({ error: "Ogiltig statusövergång" });
     }
     next(err);
   }

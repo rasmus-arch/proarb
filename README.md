@@ -89,8 +89,13 @@ PLAN.md              Kravspec och fasindelad byggplan
   `StockMovement`), samt inköpsförslag uppdelat per leverantör: dels
   orderrader utan lagertäckning eller markerade "beställ ändå", dels
   produkter under sitt min-saldo.
-- **Kvar**: tryckordersspårning (Fas 6), riktig Fortnox-koppling/
-  rapporter/kundportal (Fas 7), härdning (auth, roller, GDPR — Fas 8).
-  Mindre lucka: koppla produkt↔leverantör (backend klart, API:et
+- **Fas 6** – klar: tryckkö (`/tryck.html`) som visar alla orderrader med
+  tryckmetod oavsett order, filtrerbar på status (väntar/i produktion/
+  klar), med statusövergångar (`WAITING → IN_PRODUCTION → READY`, samt
+  en "backa"-möjlighet), och tryckinfo/status visas nu även i
+  order-editorn.
+- **Kvar**: riktig Fortnox-koppling/rapporter/kundportal (Fas 7),
+  härdning (auth, roller, GDPR — Fas 8). Mindre lucka: koppla
+  produkt↔leverantör (backend klart, API:et
   `POST /api/products/:id/suppliers` finns, men saknar ännu en
   UI-formulär). Se `PLAN.md` för detaljer.

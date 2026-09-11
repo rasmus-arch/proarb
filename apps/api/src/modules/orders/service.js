@@ -280,3 +280,53 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     connection.release();
   }
 }
+
+// ---------------------------------------------------------------------
+// Tryck/produktionsflöde (Fas 6) — only order lines with a print_method_id
+// carry a meaningful print_status; a plain (untryckt) line is irrelevant
+// to the production queue.
+// ---------------------------------------------------------------------
+
+const PRINT_STATUS_TRANSITIONS = {
+  WAITING: ["IN_PRODUCTION"],
+  IN_PRODUCTION: ["READY", "WAITING"],
+  READY: ["IN_PRODUCTION"],
+};
+
+export async function getPrintQueue({ status = "" } = {}) {
+  const statusClause = status ? "AND ol.print_status = ?" : "";
+  const params = status ? [status] : [];
+  const [rows] = await pool.query(
+    `SELECT ol.id AS order_line_id, ol.order_id, o.order_number, o.status AS order_status,
+            ol.print_status, ol.quantity, ol.print_description,
+            pm.name AS print_method_name, c.name AS customer_name,
+            v.sku, v.color, v.size, p.name AS product_name
+     FROM order_lines ol
+     JOIN orders o ON o.id = ol.order_id
+     JOIN customers c ON c.id = o.customer_id
+     JOIN product_variants v ON v.id = ol.product_variant_id
+     JOIN products p ON p.id = v.product_id
+     JOIN print_methods pm ON pm.id = ol.print_method_id
+     WHERE ol.print_method_id IS NOT NULL
+       AND o.status NOT IN ('CANCELLED', 'DELIVERED', 'INVOICED')
+       ${statusClause}
+     ORDER BY o.created_at ASC`,
+    params
+  );
+  return rows;
+}
+
+export async function updatePrintStatus(orderLineId, newStatus) {
+  const [[line]] = await pool.query(
+    `SELECT ol.*, o.id AS order_id FROM order_lines ol JOIN orders o ON o.id = ol.order_id WHERE ol.id = ?`,
+    [orderLineId]
+  );
+  if (!line) throw new Error("LINE_NOT_FOUND");
+  if (!line.print_method_id) throw new Error("LINE_NOT_PRINTED");
+
+  const allowed = PRINT_STATUS_TRANSITIONS[line.print_status] ?? [];
+  if (!allowed.includes(newStatus)) throw new Error("INVALID_TRANSITION");
+
+  await pool.query(`UPDATE order_lines SET print_status = ? WHERE id = ?`, [newStatus, orderLineId]);
+  return getOrder(line.order_id);
+}
