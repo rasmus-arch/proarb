@@ -10,47 +10,136 @@
     <div id="nav"></div>
 
     <main class="mx-auto max-w-3xl px-4 py-8">
-      <h1 class="text-xl font-semibold text-slate-900">Kassa</h1>
-      <p class="mt-1 text-sm text-slate-600">
-        Skanna en streckkod (eller skriv den och tryck Enter) för att lägga till en rad.
-        Handskannrar fungerar som tangentbord, så inget extra drivrutinsstöd behövs.
-        Betalning/kvitto är inte kopplat mot backend ännu (Fas 4), se PLAN.md.
-      </p>
-
-      <div class="mt-4">
-        <input
-          id="scan-input"
-          type="text"
-          autofocus
-          placeholder="Skanna streckkod…"
-          class="input max-w-sm"
-        />
-        <p id="scan-error" class="mt-2 hidden text-sm text-red-600"></p>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-xl font-semibold text-slate-900">Kassa</h1>
+        <div id="session-bar" class="hidden items-center gap-3 text-sm text-slate-600">
+          <span id="session-info"></span>
+          <button type="button" id="close-session-btn" class="btn-secondary">Stäng kassa</button>
+        </div>
       </div>
 
-      <div class="mt-4 overflow-x-auto card">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-          <thead>
-            <tr class="text-left text-slate-500">
-              <th class="py-2 pr-4 font-medium">Produkt</th>
-              <th class="py-2 pr-4 font-medium">Färg/Storlek</th>
-              <th class="py-2 pr-4 font-medium text-right">Antal</th>
-              <th class="py-2 pr-4 font-medium text-right">à-pris (ex moms)</th>
-              <th class="py-2 pr-4 font-medium text-right">Summa (ex moms)</th>
-            </tr>
-          </thead>
-          <tbody id="cart-rows" class="divide-y divide-slate-100"></tbody>
-        </table>
-        <p id="empty-cart" class="py-6 text-center text-sm text-slate-500">
-          Kundvagnen är tom — skanna en produkt för att börja.
+      <!-- Open-session gate -->
+      <section id="open-session-card" class="mt-4 hidden card max-w-sm">
+        <h2 class="text-sm font-medium text-slate-900">Öppna kassa</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Namn</span>
+          <input id="open-session-name" type="text" class="input mt-1" value="Kassa 1" />
+        </label>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Startkassa (kr)</span>
+          <input id="open-session-float" type="number" step="0.01" min="0" class="input mt-1" value="0" />
+        </label>
+        <button type="button" id="open-session-btn" class="btn mt-4">Öppna kassa</button>
+      </section>
+
+      <!-- Main POS UI -->
+      <div id="pos-main" class="hidden">
+        <p class="mt-1 text-sm text-slate-600">
+          Skanna en streckkod (eller skriv den och tryck Enter) för att lägga till en rad.
         </p>
-      </div>
 
-      <div class="mt-4 flex items-center justify-between">
-        <span class="text-sm text-slate-600">Totalt (ex moms)</span>
-        <span id="cart-total" class="text-lg font-semibold text-slate-900">0,00 kr</span>
+        <div class="mt-4">
+          <input id="scan-input" type="text" autofocus placeholder="Skanna streckkod…" class="input max-w-sm" />
+          <p id="scan-error" class="mt-2 hidden text-sm text-red-600"></p>
+        </div>
+
+        <div class="mt-4 max-w-sm">
+          <label class="block text-sm">
+            <span class="text-slate-700">Kund (valfri, för fakturaköp)</span>
+            <input id="customer-search" type="text" placeholder="Sök kund…" class="input mt-1" />
+            <div id="customer-results" class="mt-1 divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm empty:hidden empty:border-0"></div>
+          </label>
+          <div id="customer-selected" class="mt-1 hidden items-center gap-2 text-sm">
+            <span class="font-medium text-slate-900" id="customer-selected-name"></span>
+            <button type="button" id="customer-change-btn" class="text-blue-700 underline">Byt</button>
+          </div>
+        </div>
+
+        <div class="mt-4 overflow-x-auto card">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2 pr-4 font-medium">Produkt</th>
+                <th class="py-2 pr-4 font-medium">Färg/Storlek</th>
+                <th class="py-2 pr-4 font-medium text-right">Antal</th>
+                <th class="py-2 pr-4 font-medium text-right">à-pris (ex moms)</th>
+                <th class="py-2 pr-4 font-medium text-right">Summa (ex moms)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="cart-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="empty-cart" class="py-6 text-center text-sm text-slate-500">
+            Kundvagnen är tom — skanna en produkt för att börja.
+          </p>
+        </div>
+
+        <div class="mt-4 flex items-center justify-between">
+          <span class="text-sm text-slate-600">Totalt (inkl. moms)</span>
+          <span id="cart-total" class="text-lg font-semibold text-slate-900">0,00 kr</span>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <button type="button" id="pay-btn" class="btn" disabled>Betala</button>
+        </div>
       </div>
     </main>
+
+    <!-- Payment dialog -->
+    <dialog id="pay-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Betalning</h2>
+        <p class="mt-1 text-sm text-slate-600">Att betala: <span id="pay-total" class="font-semibold"></span></p>
+
+        <div id="payment-rows" class="mt-3 space-y-2"></div>
+        <button type="button" id="add-payment-row-btn" class="btn-secondary mt-2">Lägg till betalrad</button>
+
+        <p class="mt-3 text-sm">
+          Kvar att betala: <span id="pay-remaining" class="font-medium"></span>
+        </p>
+        <p id="pay-error" class="mt-2 hidden text-sm text-red-600"></p>
+
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-pay-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="complete-sale-btn" class="btn">Slutför köp</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Receipt / success dialog -->
+    <dialog id="receipt-dialog" class="w-full max-w-sm rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0 text-center">
+        <h2 class="text-lg font-medium text-slate-900">Köp genomfört</h2>
+        <p class="mt-1 text-sm text-slate-600" id="receipt-sale-number"></p>
+        <div class="mt-4 flex flex-col gap-2">
+          <a id="receipt-link" href="#" target="_blank" class="btn">Visa kvitto (PDF)</a>
+          <button type="button" id="new-sale-btn" class="btn-secondary">Ny försäljning</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Close-session dialog -->
+    <dialog id="close-session-dialog" class="w-full max-w-md rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Stäng kassa</h2>
+        <div id="close-session-form">
+          <label class="mt-3 block text-sm">
+            <span class="text-slate-700">Räknat kontantbelopp i kassan (kr)</span>
+            <input id="closing-float-input" type="number" step="0.01" min="0" class="input mt-1" />
+          </label>
+          <div class="mt-5 flex justify-end gap-2">
+            <button type="button" id="cancel-close-btn" class="btn-secondary">Avbryt</button>
+            <button type="button" id="confirm-close-btn" class="btn">Stäng kassa</button>
+          </div>
+        </div>
+        <div id="close-session-result" class="hidden">
+          <dl class="mt-3 space-y-1 text-sm" id="close-session-summary"></dl>
+          <div class="mt-5 flex justify-end">
+            <button type="button" id="close-session-done-btn" class="btn">Klart</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
 
     <script type="module" src="/js/nav.js"></script>
     <script type="module" src="/js/pages/kassa.js"></script>

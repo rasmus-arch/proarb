@@ -39,10 +39,20 @@ i butik och **lagerhantering** med streckkodsskanning, för en katalog på
      teknisk lösning nedan) – ingen speciell hårdvaruintegration krävs.
    - Kvitto (PDF/utskrift), växelkassa (kassalåda-avstämning).
 5. **Lagerhantering**
-   - Skanna in vid mottagning (PO/inleverans), skanna vid inventering,
-     automatiska lagerrörelser vid försäljning/orderplock.
+   - Skanna in vid mottagning (PO/inleverans), automatiska lagerrörelser
+     vid försäljning/orderplock.
    - Flera lagerplatser (t.ex. Butik + Centrallager) med överföringar.
    - Lågt-lager-varningar och inköpsförslag.
+   - **Inventering** (`StockCount`/`StockCountLine`), juridiskt hållbar:
+     starta en inventering per lagerplats, skanna alla varor som finns
+     fysiskt i butiken (eller lägg in antal manuellt för det som inte
+     scannas). Systemet visar sedan en avvikelselista — artiklar som
+     *borde* finnas enligt saldo men som inte blev skannade (och
+     ev. skannade artiklar utöver förväntat saldo) — där man radvis eller
+     för hela listan väljer att antingen justera bort dem ur lagersaldot
+     eller lämna dem kvar. Varje beslut loggas som en `StockMovement`
+     (typ `ADJUSTMENT`) med vem som gjorde justeringen och när, så
+     inventeringen blir spårbar i efterhand.
 6. **Produktkatalog (100 000+ rader, varianter)**
    - Produkt = grundmodell (artikel), Variant = färg × storlek med eget
      SKU + EAN/streckkod.
@@ -62,6 +72,11 @@ i butik och **lagerhantering** med streckkodsskanning, för en katalog på
   fakturor och kan beställa påfyllnad av samma profilkläder igen.
 - **Påminnelser**: automatiskt e-postpåminnelse om obesvarad offert efter
   X dagar; offerten spårar öppnad/visad-status (`QuoteEvent`-logg).
+- **Inställningar-flik**: admin-vy för att styra säljarinfo/logga/färger på
+  offert-PDF:en och den publika offertsidan, samt på/av + intervall för
+  e-postpåminnelser om obesvarade offerter. Själva utskicket kräver en
+  SMTP-/e-postleverantör att koppla mot (t.ex. Postmark/SendGrid) – det
+  konfigureras separat, inställningsfliken styr bara *om/hur*.
 - **E-signering vid accept**: namn + tidsstämpel + IP sparas som enkelt
   juridiskt spår vid digital accept av offert.
 - **Etikettutskrift**: skriv ut egna EAN/SKU-etiketter för produkter utan
@@ -159,17 +174,24 @@ proarb/
 
 ## 6. Fasindelad utbyggnadsplan
 
-| Fas | Innehåll |
-|---|---|
-| 0 | Repo-scaffold (klart i denna commit), inloggning, grundroller, CI |
-| 1 | Kundregister (kort, logga, kontakter/hämtbehörighet), produktkatalog + varianter, bulkimport |
-| 2 | Offerter: skapa/skicka, PDF, publik länk, acceptera → konvertera till order |
-| 3 | Order: direktskapande, statusflöde, utlämning mot behörig kontakt |
-| 4 | Kassa: streckkodsskanning, betalning, kvitto, kassaavstämning |
-| 5 | Lager: saldo per lagerplats, inleverans-skanning, inventering, lågt-lager-varningar |
-| 6 | Tryck/produktionsflöde kopplat till order-/offertrader |
-| 7 | Rapporter/dashboard, **Fortnox-integration** (skicka klar order → skapa kundfaktura i Fortnox, synka status/fakturanummer tillbaka), kundportal, påminnelser |
-| 8 | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
+| Fas | Status | Innehåll |
+|---|---|---|
+| 0 | ✅ Klar | Repo-scaffold, grundmoduler, kassa-skanning (uppslag) |
+| 1 | ✅ Klar | Produktkatalog: CRUD, varianter, kategorier/varumärken, CSV-bulkimport |
+| 2 | ✅ Klar | Offerter: skapa/skicka, PDF, publik länk, acceptera → konvertera till order |
+| 3 | ✅ Klar | Order: direktskapande, statusflöde, utlämning mot behörig kontakt |
+| 4 | ✅ Klar | Kassa: streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning |
+| 5 | ⏳ Kvar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista, justera bort eller behåll, spårbart via `StockMovement`), lågt-lager-varningar |
+| 6 | ⏳ Kvar | Tryck/produktionsflöde kopplat till order-/offertrader |
+| 7 | ⏳ Kvar | Rapporter/dashboard, **Fortnox-integration** (skicka klar order → skapa kundfaktura i Fortnox, synka status/fakturanummer tillbaka), kundportal, påminnelser |
+| 8 | ⏳ Kvar | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
+
+**Tillkommande önskemål** (inte bundna till en specifik fas ovan):
+- Kundkort: flerfils-uppladdning av namngivna logga/tryckvarianter
+  (eps, jpg, png, svg, pdf) – kräver en kunddetaljsida som inte finns än.
+- Inställningar-flik: säljarinfo/logga/färger för offert-PDF och publik
+  offertsida, samt på/av + intervall för e-postpåminnelser (kräver en
+  SMTP-leverantör för själva utskicket).
 
 ## 7. Prisregel: allt hanteras exklusive moms
 

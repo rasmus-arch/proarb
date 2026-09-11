@@ -60,7 +60,15 @@ PLAN.md              Kravspec och fasindelad byggplan
 - **Fas 2** – klar: offerter med rader (inkl. tryck), skicka, PDF, publik
   länk (`/q/:token`) utan inloggning där kunden kan acceptera/avböja, samt
   konvertering av accepterad offert till order.
-- **Kvar**: order-statusflöde/utlämning (Fas 3), kassaförsäljning mot
-  backend (Fas 4), lagersaldo/inventering (Fas 5), tryckordersspårning
-  (Fas 6), Fortnox-integration/rapporter/kundportal (Fas 7), härdning
-  (auth, roller, GDPR — Fas 8). Se `PLAN.md` för detaljer.
+- **Fas 3** – klar: order direkt eller via offert, statusflöde (ny →
+  bekräftad → i produktion → klar för avhämtning → levererad → fakturerad)
+  och utlämning registrerad mot en hämtberättigad kundkontakt (eller
+  manuellt namn), med full utlämningshistorik.
+- **Fas 4** – klar: kassasessioner (öppna/stänga med kassaavstämning),
+  försäljning med streckkodsskanning, delad betalning (flera
+  betalmetoder per köp) och PDF-kvitto.
+- **Kvar**: lagersaldo/inventering (Fas 5), tryckordersspårning (Fas 6),
+  Fortnox-integration/rapporter/kundportal (Fas 7), härdning (auth,
+  roller, GDPR — Fas 8), samt uppföljande önskemål: kundkort med
+  fleruppladdning av namngivna logga/tryckfiler, och en inställningar-flik
+  för offertutseende/e-postpåminnelser. Se `PLAN.md` för detaljer.
