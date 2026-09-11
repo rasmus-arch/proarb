@@ -230,6 +230,37 @@ export async function markViewed(quoteId) {
   await recordEvent(quoteId, "VIEWED");
 }
 
+// ---------------------------------------------------------------------
+// Påminnelser (Fas 7) — no SMTP is wired up, so "reminders" surface as a
+// staff-visible list instead of an actual email. A quote needs one once
+// it's sat unanswered (SENT/VIEWED) for reminder_days_after days and no
+// REMINDER_SENT event has been logged for it yet; staff can mark it
+// handled (recordEvent) once they've followed up by phone/e-mail.
+// ---------------------------------------------------------------------
+
+export async function listQuotesNeedingReminder(reminderDaysAfter) {
+  const [rows] = await pool.query(
+    `SELECT q.id, q.quote_number, q.status, q.sent_at, c.id AS customer_id, c.name AS customer_name
+     FROM quotes q
+     JOIN customers c ON c.id = q.customer_id
+     WHERE q.status IN ('SENT', 'VIEWED')
+       AND q.sent_at IS NOT NULL
+       AND q.sent_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
+       AND NOT EXISTS (
+         SELECT 1 FROM quote_events qe WHERE qe.quote_id = q.id AND qe.type = 'REMINDER_SENT'
+       )
+     ORDER BY q.sent_at ASC`,
+    [reminderDaysAfter]
+  );
+  return rows;
+}
+
+export async function markReminderSent(quoteId) {
+  const [[quote]] = await pool.query(`SELECT id FROM quotes WHERE id = ?`, [quoteId]);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+  await recordEvent(quoteId, "REMINDER_SENT");
+}
+
 export async function respondToQuote(token, decision, meta) {
   const quote = await getQuoteByToken(token);
   if (!quote) return null;

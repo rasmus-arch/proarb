@@ -4,6 +4,8 @@ import { generateQuotePdf } from "./pdf.js";
 import { convertQuoteToOrder } from "../orders/service.js";
 import { getSettings } from "../settings/service.js";
 
+const REMINDER_DEFAULT_DAYS = 5;
+
 // Fas 2: offert-CRUD, PDF-generering, skicka, konvertera till order.
 // Publik länk (/q/:token) och accept/avböj ligger i public.js.
 // TODO (Fas 8): riktig inloggning — "createdBy" är hårdkodad till
@@ -22,6 +24,20 @@ router.get("/", async (req, res, next) => {
       pageSize: Number(pageSize) || 25,
     });
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Fas 7 påminnelser: staff-visible list of unanswered quotes, no SMTP
+// involved (se quotes/service.js). Off entirely when reminder_enabled is
+// false in Inställningar.
+router.get("/reminders", async (req, res, next) => {
+  try {
+    const settings = await getSettings();
+    if (!settings?.reminder_enabled) return res.json({ rows: [] });
+    const rows = await quotes.listQuotesNeedingReminder(settings.reminder_days_after ?? REMINDER_DEFAULT_DAYS);
+    res.json({ rows });
   } catch (err) {
     next(err);
   }
@@ -85,6 +101,16 @@ router.post("/:id/convert-to-order", async (req, res, next) => {
     if (err.message === "QUOTE_NOT_ACCEPTED") {
       return res.status(409).json({ error: "Endast accepterade offerter kan bli order" });
     }
+    next(err);
+  }
+});
+
+router.post("/:id/reminder-sent", async (req, res, next) => {
+  try {
+    await quotes.markReminderSent(Number(req.params.id));
+    res.status(204).end();
+  } catch (err) {
+    if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Not found" });
     next(err);
   }
 });

@@ -125,6 +125,18 @@ router.post("/:id/logos", (req, res, next) => {
   }
 });
 
+// Kundportal (Fas 7): create the share-link token on demand (idempotent —
+// returns the existing token if one was already generated).
+router.post("/:id/portal-token", async (req, res, next) => {
+  try {
+    const token = await customers.getOrCreatePortalToken(Number(req.params.id));
+    if (!token) return res.status(404).json({ error: "Not found" });
+    res.json({ token, url: `${req.protocol}://${req.get("host")}/portal/${token}` });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete("/:id/logos/:logoId", async (req, res, next) => {
   try {
     const logo = await customers.getLogo(Number(req.params.id), Number(req.params.logoId));

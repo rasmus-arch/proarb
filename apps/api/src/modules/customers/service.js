@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { pool } from "@proarb/db";
 
 function nextCustomerNumber() {
@@ -178,4 +179,38 @@ export async function getLogo(customerId, logoId) {
 
 export async function deleteLogo(customerId, logoId) {
   await pool.query(`DELETE FROM customer_logos WHERE id = ? AND customer_id = ?`, [logoId, customerId]);
+}
+
+// ---------------------------------------------------------------------
+// Kundportal (Fas 7) — no-login, read-only link a staff member generates
+// and shares with the customer. Same unguessable-token pattern as the
+// public quote link (quotes.public_token).
+// ---------------------------------------------------------------------
+
+export async function getOrCreatePortalToken(customerId) {
+  const [[row]] = await pool.query(`SELECT portal_token FROM customers WHERE id = ?`, [customerId]);
+  if (!row) return null;
+  if (row.portal_token) return row.portal_token;
+
+  const token = crypto.randomBytes(24).toString("hex");
+  await pool.query(`UPDATE customers SET portal_token = ? WHERE id = ?`, [token, customerId]);
+  return token;
+}
+
+export async function getCustomerByPortalToken(token) {
+  const [[customer]] = await pool.query(`SELECT * FROM customers WHERE portal_token = ?`, [token]);
+  if (!customer) return null;
+
+  const [quotes] = await pool.query(
+    `SELECT id, quote_number, status, created_at, public_token FROM quotes
+     WHERE customer_id = ? ORDER BY created_at DESC`,
+    [customer.id]
+  );
+  const [orders] = await pool.query(
+    `SELECT id, order_number, status, created_at FROM orders
+     WHERE customer_id = ? ORDER BY created_at DESC`,
+    [customer.id]
+  );
+
+  return { customer, quotes, orders };
 }

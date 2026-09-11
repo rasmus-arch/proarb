@@ -74,6 +74,10 @@ CREATE TABLE IF NOT EXISTS customers (
   payment_terms_days INT NOT NULL DEFAULT 30,
   notes              TEXT NULL,
   active             TINYINT(1) NOT NULL DEFAULT 1,
+  -- Fas 7 kundportal: unguessable token for a no-login, read-only page
+  -- (/portal/:token) listing the customer's own offerter/ordrar. Generated
+  -- on demand by staff, same pattern as quotes.public_token.
+  portal_token       VARCHAR(64) NULL UNIQUE,
   created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_customers_price_list FOREIGN KEY (price_list_id) REFERENCES price_lists(id),

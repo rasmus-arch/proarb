@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 
 import customersRouter from "./modules/customers/routes.js";
+import { renderPortalPage } from "./modules/customers/portal.js";
 import quotesRouter from "./modules/quotes/routes.js";
 import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
 import ordersRouter from "./modules/orders/routes.js";
@@ -46,6 +47,10 @@ app.use("/api/stats", statsRouter);
 // Public, no-login quote link shared with customers (see PLAN.md §3).
 app.get("/q/:token", renderPublicQuotePage);
 app.get("/q/:token/pdf", renderPublicQuotePdf);
+
+// Kundportal (Fas 7): no-login, read-only link listing a customer's own
+// offerter/ordrar (see PLAN.md §7).
+app.get("/portal/:token", renderPortalPage);
 
 // Uploaded logo/print-artwork files (customer logos, seller logo).
 app.use("/uploads", express.static(uploadsRoot));

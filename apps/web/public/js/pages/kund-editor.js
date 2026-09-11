@@ -32,6 +32,9 @@ const el = {
   logoError: document.getElementById("logo-error"),
   logoList: document.getElementById("logo-list"),
   logosEmpty: document.getElementById("logos-empty"),
+  portalGenerateBtn: document.getElementById("portal-generate-btn"),
+  portalLink: document.getElementById("portal-link"),
+  portalCopyBtn: document.getElementById("portal-copy-btn"),
 };
 
 function escapeHtml(value) {
@@ -177,6 +180,21 @@ el.logoList.addEventListener("click", async (event) => {
   if (id === undefined) return;
   await api.delete(`/customers/${customerId}/logos/${id}`);
   loadCustomer();
+});
+
+// --- Kundportal ----------------------------------------------------------
+
+el.portalGenerateBtn.addEventListener("click", async () => {
+  const { url } = await api.post(`/customers/${customerId}/portal-token`);
+  el.portalLink.value = url;
+  el.portalLink.classList.remove("hidden");
+  el.portalCopyBtn.classList.remove("hidden");
+});
+
+el.portalCopyBtn.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(el.portalLink.value);
+  el.portalCopyBtn.textContent = "Kopierad!";
+  setTimeout(() => (el.portalCopyBtn.textContent = "Kopiera"), 1500);
 });
 
 loadCustomer();

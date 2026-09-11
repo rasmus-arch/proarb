@@ -94,8 +94,14 @@ PLAN.md              Kravspec och fasindelad byggplan
   klar), med statusövergångar (`WAITING → IN_PRODUCTION → READY`, samt
   en "backa"-möjlighet), och tryckinfo/status visas nu även i
   order-editorn.
-- **Kvar**: riktig Fortnox-koppling/rapporter/kundportal (Fas 7),
-  härdning (auth, roller, GDPR — Fas 8). Mindre lucka: koppla
-  produkt↔leverantör (backend klart, API:et
-  `POST /api/products/:id/suppliers` finns, men saknar ännu en
-  UI-formulär). Se `PLAN.md` för detaljer.
+- **Fas 7** – klar (utom själva Fortnox-anropet, se nedan): kundportal
+  – en länk utan inloggning (`/portal/:token`, genereras från kundkortet)
+  där kunden själv kan se sina offerter och ordrar – samt påminnelser om
+  obesvarade offerter som en att-göra-lista på översiktssidan (ingen
+  e-postleverantör kopplad, så "skicka påminnelse" innebär att ringa/
+  maila manuellt och sen markera den som skickad).
+- **Kvar**: riktig Fortnox-koppling (order → kundfaktura, synk tillbaka
+  — stub finns i `fortnox.js`, väntar på testmiljö), härdning (auth,
+  roller, GDPR — Fas 8). Mindre lucka: koppla produkt↔leverantör
+  (backend klart, API:et `POST /api/products/:id/suppliers` finns, men
+  saknar ännu en UI-formulär). Se `PLAN.md` för detaljer.

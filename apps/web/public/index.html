@@ -16,6 +16,16 @@
         i repot för fullständig kravspec och byggplan.
       </p>
 
+      <!-- Reminders (Fas 7) -->
+      <section id="reminders-section" class="mt-6 hidden card">
+        <h2 class="text-sm font-medium text-slate-900">Påminnelser – obesvarade offerter</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Ingen e-postleverantör är kopplad ännu, så detta är en manuell att-göra-lista –
+          hör av dig till kunden och markera som skickad.
+        </p>
+        <ul id="reminders-list" class="mt-3 divide-y divide-slate-100"></ul>
+      </section>
+
       <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <a href="/kunder.html" class="card hover:ring-slate-400">
           <h2 class="font-medium text-slate-900">Kunder</h2>
@@ -53,5 +63,6 @@
     </main>
 
     <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/dashboard.js"></script>
   </body>
 </html>
