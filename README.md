@@ -53,7 +53,14 @@ PLAN.md              Kravspec och fasindelad byggplan
 
 ## Status
 
-Grundscaffold (Fas 0) plus en fungerande **kundmodul** (kort, kontakter med
-hämtbehörighet) och en enkel **produktsökning**/**kassa-skanning**
-(streckkod → slå upp variant). Offerter, ordrar och lager är stubbar —
-se `PLAN.md` för fasplan och vad som återstår.
+- **Fas 0** – klar: grundscaffold, kundmodul (kort, kontakter med
+  hämtbehörighet), produktsökning och kassa-skanning (streckkod → variant).
+- **Fas 1** – klar: fullt CRUD på produkter/varianter, kategorier/varumärken,
+  och CSV-bulkimport (batch-upsert, klarar stora kataloger).
+- **Fas 2** – klar: offerter med rader (inkl. tryck), skicka, PDF, publik
+  länk (`/q/:token`) utan inloggning där kunden kan acceptera/avböja, samt
+  konvertering av accepterad offert till order.
+- **Kvar**: order-statusflöde/utlämning (Fas 3), kassaförsäljning mot
+  backend (Fas 4), lagersaldo/inventering (Fas 5), tryckordersspårning
+  (Fas 6), Fortnox-integration/rapporter/kundportal (Fas 7), härdning
+  (auth, roller, GDPR — Fas 8). Se `PLAN.md` för detaljer.

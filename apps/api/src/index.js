@@ -5,8 +5,12 @@ import cors from "cors";
 
 import customersRouter from "./modules/customers/routes.js";
 import quotesRouter from "./modules/quotes/routes.js";
+import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
 import ordersRouter from "./modules/orders/routes.js";
 import productsRouter from "./modules/products/routes.js";
+import categoriesRouter from "./modules/catalog/categories.routes.js";
+import brandsRouter from "./modules/catalog/brands.routes.js";
+import printMethodsRouter from "./modules/catalog/print-methods.routes.js";
 import posRouter from "./modules/pos/routes.js";
 import inventoryRouter from "./modules/inventory/routes.js";
 
@@ -23,10 +27,18 @@ app.get("/api/health", (req, res) => {
 
 app.use("/api/customers", customersRouter);
 app.use("/api/quotes", quotesRouter);
+app.use("/api/public/quotes", quotesPublicRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/products", productsRouter);
+app.use("/api/categories", categoriesRouter);
+app.use("/api/brands", brandsRouter);
+app.use("/api/print-methods", printMethodsRouter);
 app.use("/api/pos", posRouter);
 app.use("/api/inventory", inventoryRouter);
+
+// Public, no-login quote link shared with customers (see PLAN.md §3).
+app.get("/q/:token", renderPublicQuotePage);
+app.get("/q/:token/pdf", renderPublicQuotePdf);
 
 // Serve the vanilla JS + Tailwind frontend.
 app.use(express.static(webPublicDir));

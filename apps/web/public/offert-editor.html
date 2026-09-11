@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Offert</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="offerter">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-4xl px-4 py-8">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 id="page-title" class="text-xl font-semibold text-slate-900">Ny offert</h1>
+          <span id="status-badge" class="mt-1 hidden rounded-full px-2 py-0.5 text-xs font-medium"></span>
+        </div>
+        <div id="action-buttons" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <!-- Customer -->
+      <section class="mt-6 card">
+        <h2 class="text-sm font-medium text-slate-900">Kund</h2>
+        <div id="customer-picker" class="mt-2">
+          <input id="customer-search" type="text" placeholder="Sök kund…" class="input max-w-sm" />
+          <div id="customer-results" class="mt-1 max-w-sm divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm empty:hidden"></div>
+        </div>
+        <div id="customer-selected" class="mt-2 hidden items-center gap-3">
+          <span class="font-medium text-slate-900" id="customer-selected-name"></span>
+          <button type="button" id="customer-change-btn" class="text-sm text-blue-700 underline">Byt</button>
+        </div>
+
+        <div class="mt-3 max-w-sm">
+          <label class="block text-sm">
+            <span class="text-slate-700">Referensperson</span>
+            <select id="reference-select" class="input mt-1">
+              <option value="">Ingen referens</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <!-- Lines -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Rader</h2>
+
+        <div id="line-search-wrap" class="relative mt-2 max-w-md">
+          <input id="line-search" type="text" placeholder="Sök produkt att lägga till…" class="input" />
+          <div id="line-results" class="absolute z-10 mt-1 w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>
+        </div>
+
+        <div class="mt-3 overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2 pr-3 font-medium">Produkt</th>
+                <th class="py-2 pr-3 font-medium w-20">Antal</th>
+                <th class="py-2 pr-3 font-medium w-28">à-pris ex moms</th>
+                <th class="py-2 pr-3 font-medium w-20">Rabatt %</th>
+                <th class="py-2 pr-3 font-medium">Tryck</th>
+                <th class="py-2 pr-3 font-medium text-right">Summa ex moms</th>
+                <th class="py-2 pr-3 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody id="line-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="lines-empty" class="py-4 text-center text-sm text-slate-500">Inga rader tillagda ännu.</p>
+        </div>
+
+        <div class="mt-3 flex justify-end">
+          <dl class="w-64 space-y-1 text-sm">
+            <div class="flex justify-between"><dt class="text-slate-600">Delsumma ex moms</dt><dd id="totals-subtotal">0,00 kr</dd></div>
+            <div class="flex justify-between"><dt class="text-slate-600">Moms</dt><dd id="totals-vat">0,00 kr</dd></div>
+            <div class="flex justify-between font-semibold"><dt>Totalt</dt><dd id="totals-total">0,00 kr</dd></div>
+          </dl>
+        </div>
+      </section>
+
+      <!-- Notes / validity -->
+      <section class="mt-4 card">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Giltig till</span>
+            <input id="valid-until" type="date" class="input mt-1" />
+          </label>
+        </div>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Anteckningar</span>
+          <textarea id="notes" rows="3" class="input mt-1"></textarea>
+        </label>
+      </section>
+
+      <p id="form-error" class="mt-3 hidden text-sm text-red-600"></p>
+
+      <div class="mt-4 flex justify-end gap-2">
+        <button type="button" id="save-btn" class="btn">Spara utkast</button>
+      </div>
+
+      <!-- Read-only history, shown once the quote has been sent -->
+      <section id="history-section" class="mt-6 hidden card">
+        <h2 class="text-sm font-medium text-slate-900">Historik</h2>
+        <ul id="history-list" class="mt-2 space-y-1 text-sm text-slate-600"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/offert-editor.js"></script>
+  </body>
+</html>
