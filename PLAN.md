@@ -191,7 +191,7 @@ proarb/
 | 2 | ✅ Klar | Offerter: skapa/skicka, PDF, publik länk, acceptera → konvertera till order |
 | 3 | ✅ Klar | Order: direktskapande, statusflöde, utlämning mot behörig kontakt |
 | 4 | ✅ Klar | Kassa: streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning |
-| 5 | ⏳ Kvar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista, justera bort eller behåll, spårbart via `StockMovement`), lågt-lager-varningar |
+| 5 | ✅ Klar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista inkl. ej skannat, justera eller behåll, spårbart via `StockMovement`), lågt-lager-varningar, **inköpsförslag** per leverantör |
 | 6 | ⏳ Kvar | Tryck/produktionsflöde kopplat till order-/offertrader |
 | 7 | ⏳ Kvar | Rapporter/dashboard, **Fortnox-integration** (skicka klar order → skapa kundfaktura i Fortnox, synka status/fakturanummer tillbaka), kundportal, påminnelser |
 | 8 | ⏳ Kvar | Härdning: roller/behörigheter i detalj, auditlogg, GDPR, prestandaoptimering för stora kataloger |
@@ -212,10 +212,10 @@ proarb/
   Det faktiska Fortnox-API-anropet är en stub (`fortnox.js`) tills en
   testmiljö/inloggning finns – kopplas in i Fas 7 utan att övrig logik
   behöver ändras.
-- ⏳ Inköpsförslag: en egen flik, uppdelad på leverantör och per order,
-  för orderrader som saknar lagertäckning samt produkter under sitt
-  minsta lagersaldo (se Fas 5-raden ovan). Kräver att lagersaldo faktiskt
-  räknas ut (Fas 5) innan den kan byggas.
+- ✅ Inköpsförslag: egen flik i Lager, uppdelad på leverantör, med både
+  orderrader som saknar lagertäckning (eller är markerade "beställ ändå"
+  via `order_lines.sourcing`) och produkter under sitt min-saldo. Går att
+  skapa en inköpsorder direkt från ett förslag.
 
 ## 7. Prisregel: allt hanteras exklusive moms
 

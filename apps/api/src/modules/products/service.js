@@ -67,8 +67,24 @@ export async function getProduct(id) {
     `SELECT * FROM product_variants WHERE product_id = ? ORDER BY color ASC, size ASC`,
     [id]
   );
+  const [suppliers] = await pool.query(
+    `SELECT ps.id, ps.supplier_id, s.name AS supplier_name, ps.supplier_sku, ps.cost_price, ps.lead_time_days
+     FROM product_suppliers ps JOIN suppliers s ON s.id = ps.supplier_id
+     WHERE ps.product_id = ? ORDER BY ps.cost_price IS NULL, ps.cost_price ASC`,
+    [id]
+  );
 
-  return { ...product, variants };
+  return { ...product, variants, suppliers };
+}
+
+export async function addSupplier(productId, { supplierId, supplierSku, costPrice, leadTimeDays }) {
+  await pool.query(
+    `INSERT INTO product_suppliers (product_id, supplier_id, supplier_sku, cost_price, lead_time_days)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE supplier_sku = VALUES(supplier_sku), cost_price = VALUES(cost_price), lead_time_days = VALUES(lead_time_days)`,
+    [productId, supplierId, supplierSku ?? null, costPrice ?? null, leadTimeDays ?? null]
+  );
+  return getProduct(productId);
 }
 
 export async function createProduct(data) {

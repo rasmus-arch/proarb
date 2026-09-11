@@ -9,15 +9,262 @@
   <body class="min-h-screen bg-slate-50" data-active="lager">
     <div id="nav"></div>
 
-    <main class="mx-auto max-w-6xl px-4 py-8">
+    <main class="mx-auto max-w-5xl px-4 py-8">
       <h1 class="text-xl font-semibold text-slate-900">Lager</h1>
-      <div class="mt-4 card text-sm text-slate-600">
-        Lagermodulen byggs i Fas 5: saldo per lagerplats, inleverans och
-        inventering via streckkodsskanning, samt lågt-lager-varningar.
-        Se <strong>PLAN.md</strong> för detaljer.
+
+      <div class="mt-4 flex flex-wrap gap-1 border-b border-slate-200">
+        <button type="button" class="tab-btn" data-tab="saldo">Saldo</button>
+        <button type="button" class="tab-btn" data-tab="inleverans">Inleverans</button>
+        <button type="button" class="tab-btn" data-tab="inventering">Inventering</button>
+        <button type="button" class="tab-btn" data-tab="inkopsforslag">Inköpsförslag</button>
       </div>
+
+      <!-- Saldo -->
+      <section id="tab-saldo" class="tab-panel mt-4">
+        <div class="flex flex-wrap items-end gap-3">
+          <input id="saldo-search" type="search" placeholder="Sök produkt…" class="input max-w-sm" />
+          <label class="flex items-center gap-2 text-sm">
+            <input id="saldo-low-only" type="checkbox" class="rounded border-slate-300" />
+            <span class="text-slate-700">Visa bara under min-saldo</span>
+          </label>
+        </div>
+        <div class="mt-3 overflow-x-auto card">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-2 pr-3 font-medium">Produkt</th>
+                <th class="py-2 pr-3 font-medium">Lager</th>
+                <th class="py-2 pr-3 font-medium text-right">Saldo</th>
+                <th class="py-2 pr-3 font-medium text-right">Min-saldo</th>
+                <th class="py-2 pr-3 font-medium text-right">Beställ</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="saldo-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="saldo-empty" class="hidden py-6 text-center text-sm text-slate-500">Inga lagersaldon ännu.</p>
+        </div>
+      </section>
+
+      <!-- Inleverans -->
+      <section id="tab-inleverans" class="tab-panel mt-4 hidden">
+        <div id="po-list-view">
+          <div class="flex justify-end">
+            <button type="button" id="new-po-btn" class="btn">Ny inköpsorder</button>
+          </div>
+          <div class="mt-3 overflow-x-auto card">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="py-2 pr-3 font-medium">Leverantör</th>
+                  <th class="py-2 pr-3 font-medium">Status</th>
+                  <th class="py-2 pr-3 font-medium text-right">Mottaget</th>
+                  <th class="py-2 pr-3 font-medium">Skapad</th>
+                </tr>
+              </thead>
+              <tbody id="po-rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+            <p id="po-empty" class="hidden py-6 text-center text-sm text-slate-500">Inga inköpsordrar ännu.</p>
+          </div>
+        </div>
+
+        <div id="po-detail-view" class="hidden">
+          <button type="button" id="po-back-btn" class="text-sm text-blue-700 underline">← Tillbaka till listan</button>
+          <div class="mt-2 card">
+            <div class="flex items-center justify-between">
+              <h2 id="po-detail-title" class="text-sm font-medium text-slate-900"></h2>
+              <span id="po-detail-status" class="rounded-full px-2 py-0.5 text-xs font-medium"></span>
+            </div>
+            <div class="mt-3 max-w-xs">
+              <label class="block text-sm">
+                <span class="text-slate-700">Skanna streckkod för att ta emot</span>
+                <input id="po-scan-input" type="text" class="input mt-1" placeholder="Skanna…" />
+              </label>
+              <p id="po-scan-error" class="mt-2 hidden text-sm text-red-600"></p>
+            </div>
+            <table class="mt-3 min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="py-2 pr-3 font-medium">Produkt</th>
+                  <th class="py-2 pr-3 font-medium text-right">Beställt</th>
+                  <th class="py-2 pr-3 font-medium text-right">Mottaget</th>
+                </tr>
+              </thead>
+              <tbody id="po-line-rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Inventering -->
+      <section id="tab-inventering" class="tab-panel mt-4 hidden">
+        <div id="count-list-view">
+          <div class="flex justify-end gap-2">
+            <select id="new-count-warehouse" class="input max-w-[180px]"></select>
+            <button type="button" id="new-count-btn" class="btn">Starta inventering</button>
+          </div>
+          <div class="mt-3 overflow-x-auto card">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="py-2 pr-3 font-medium">Lager</th>
+                  <th class="py-2 pr-3 font-medium">Status</th>
+                  <th class="py-2 pr-3 font-medium">Startad</th>
+                  <th class="py-2 pr-3 font-medium">Av</th>
+                </tr>
+              </thead>
+              <tbody id="count-rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+            <p id="count-empty" class="hidden py-6 text-center text-sm text-slate-500">Inga inventeringar ännu.</p>
+          </div>
+        </div>
+
+        <div id="count-detail-view" class="hidden">
+          <button type="button" id="count-back-btn" class="text-sm text-blue-700 underline">← Tillbaka till listan</button>
+          <div class="mt-2 card">
+            <div class="flex items-center justify-between">
+              <h2 id="count-detail-title" class="text-sm font-medium text-slate-900"></h2>
+              <span id="count-detail-status" class="rounded-full px-2 py-0.5 text-xs font-medium"></span>
+            </div>
+
+            <div id="count-scan-area" class="mt-3 flex flex-wrap items-end gap-2">
+              <label class="block text-sm">
+                <span class="text-slate-700">Skanna streckkod</span>
+                <input id="count-scan-input" type="text" class="input mt-1" placeholder="Skanna…" />
+              </label>
+              <label class="block text-sm">
+                <span class="text-slate-700">Eller sök produkt att lägga in manuellt</span>
+                <input id="count-manual-search" type="text" class="input mt-1" placeholder="Sök produkt…" />
+                <div id="count-manual-results" class="mt-1 divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm empty:hidden empty:border-0"></div>
+              </label>
+            </div>
+            <p id="count-scan-error" class="mt-2 hidden text-sm text-red-600"></p>
+
+            <h3 class="mt-4 text-sm font-medium text-slate-900">Skannade rader</h3>
+            <table class="mt-1 min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="py-2 pr-3 font-medium">Produkt</th>
+                  <th class="py-2 pr-3 font-medium text-right">Skannat</th>
+                  <th class="py-2 pr-3 font-medium text-right">Förväntat</th>
+                  <th class="py-2 pr-3 font-medium">Beslut</th>
+                </tr>
+              </thead>
+              <tbody id="count-scanned-rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+
+            <h3 class="mt-4 text-sm font-medium text-slate-900">Saknas (finns i saldo men ej skannat)</h3>
+            <table class="mt-1 min-w-full divide-y divide-slate-200 text-sm">
+              <thead>
+                <tr class="text-left text-slate-500">
+                  <th class="py-2 pr-3 font-medium">Produkt</th>
+                  <th class="py-2 pr-3 font-medium text-right">Förväntat</th>
+                  <th class="py-2 pr-3 font-medium">Beslut</th>
+                </tr>
+              </thead>
+              <tbody id="count-missing-rows" class="divide-y divide-slate-100"></tbody>
+            </table>
+            <p id="count-clean" class="hidden py-3 text-center text-sm text-green-700">Inga avvikelser kvar.</p>
+
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex gap-2">
+                <button type="button" id="decide-all-adjust-btn" class="btn-secondary">Justera alla avvikelser</button>
+                <button type="button" id="decide-all-keep-btn" class="btn-secondary">Behåll alla avvikelser</button>
+              </div>
+              <button type="button" id="complete-count-btn" class="btn">Avsluta inventering</button>
+            </div>
+            <p id="complete-error" class="mt-2 hidden text-sm text-red-600"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Inköpsförslag -->
+      <section id="tab-inkopsforslag" class="tab-panel mt-4 hidden">
+        <p class="text-sm text-slate-600">
+          Produkter som saknar lagertäckning på en order, är markerade "beställ ändå", eller ligger
+          under sitt min-saldo — uppdelat per leverantör.
+        </p>
+        <div id="suggestions-container" class="mt-3 space-y-4"></div>
+        <p id="suggestions-empty" class="hidden py-6 text-center text-sm text-slate-500">Inga inköpsförslag just nu.</p>
+      </section>
     </main>
 
+    <!-- Adjust stock dialog -->
+    <dialog id="adjust-dialog" class="w-full max-w-sm rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Justera saldo</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Nytt saldo</span>
+          <input id="adjust-quantity" type="number" step="0.01" class="input mt-1" />
+        </label>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Anteckning</span>
+          <input id="adjust-note" type="text" class="input mt-1" />
+        </label>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-adjust-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="save-adjust-btn" class="btn">Spara</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Reorder settings dialog -->
+    <dialog id="reorder-dialog" class="w-full max-w-sm rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Min-saldo &amp; beställningskvantitet</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Min-saldo (varna under detta)</span>
+          <input id="reorder-point" type="number" step="0.01" class="input mt-1" />
+        </label>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Beställ (antal när det går under min-saldo)</span>
+          <input id="reorder-quantity" type="number" step="0.01" class="input mt-1" />
+        </label>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-reorder-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="save-reorder-btn" class="btn">Spara</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- New PO dialog -->
+    <dialog id="new-po-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Ny inköpsorder</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Leverantör</span>
+          <select id="po-supplier-select" class="input mt-1"></select>
+        </label>
+
+        <div class="relative mt-3">
+          <label class="block text-sm">
+            <span class="text-slate-700">Lägg till produkt</span>
+            <input id="po-line-search" type="text" class="input mt-1" placeholder="Sök produkt…" />
+          </label>
+          <div id="po-line-results" class="absolute z-10 mt-1 w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>
+        </div>
+
+        <table class="mt-3 min-w-full divide-y divide-slate-200 text-sm">
+          <thead>
+            <tr class="text-left text-slate-500">
+              <th class="py-1.5 pr-2 font-medium">Produkt</th>
+              <th class="py-1.5 pr-2 font-medium w-20">Antal</th>
+              <th class="py-1.5 pr-2 font-medium w-24">Inköpspris</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="po-new-line-rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+
+        <p id="po-form-error" class="mt-3 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-po-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="create-po-btn" class="btn">Skapa</button>
+        </div>
+      </div>
+    </dialog>
+
     <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/lager.js"></script>
   </body>
 </html>

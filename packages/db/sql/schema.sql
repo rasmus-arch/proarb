@@ -299,6 +299,10 @@ CREATE TABLE IF NOT EXISTS order_lines (
   print_method_id    INT NULL,
   print_description  VARCHAR(255) NULL,
   sort_order         INT NOT NULL DEFAULT 0,
+  -- STOCK (default): fine to fulfil from current lagersaldo. PURCHASE:
+  -- always order this in specifically for this order, even if there's
+  -- stock on hand — always shows up in inköpsförslag (Fas 5).
+  sourcing           ENUM('STOCK', 'PURCHASE') NOT NULL DEFAULT 'STOCK',
   CONSTRAINT fk_ol_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_ol_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
   CONSTRAINT fk_ol_print_method FOREIGN KEY (print_method_id) REFERENCES print_methods(id),
@@ -363,6 +367,8 @@ CREATE TABLE IF NOT EXISTS stock_levels (
   quantity_on_hand   DECIMAL(10,2) NOT NULL DEFAULT 0,
   reserved_qty       DECIMAL(10,2) NOT NULL DEFAULT 0,
   reorder_point      DECIMAL(10,2) NULL,
+  -- how many to order when quantity_on_hand drops below reorder_point.
+  reorder_quantity   DECIMAL(10,2) NULL,
   CONSTRAINT fk_sl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
   CONSTRAINT fk_sl_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
   UNIQUE KEY uq_variant_warehouse (product_variant_id, warehouse_id)
@@ -414,21 +420,30 @@ CREATE TABLE IF NOT EXISTS purchase_order_lines (
 CREATE TABLE IF NOT EXISTS stock_counts (
   id           INT PRIMARY KEY AUTO_INCREMENT,
   warehouse_id INT NOT NULL,
+  started_by   INT NULL,
   started_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME NULL,
   status       VARCHAR(30) NOT NULL DEFAULT 'IN_PROGRESS',
-  CONSTRAINT fk_sc_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses(id)
+  CONSTRAINT fk_sc_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+  CONSTRAINT fk_sc_user FOREIGN KEY (started_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- One row per scanned variant during a stocktake (inventering).
+-- One row per scanned (or manually added) variant during a stocktake
+-- (inventering). decision/decided_by/decided_at give the audit trail the
+-- user asked for: who chose to adjust lagersaldo vs. leave it, and when.
 CREATE TABLE IF NOT EXISTS stock_count_lines (
   id                 INT PRIMARY KEY AUTO_INCREMENT,
   stock_count_id     INT NOT NULL,
   product_variant_id INT NOT NULL,
   counted_qty        DECIMAL(10,2) NOT NULL,
   expected_qty       DECIMAL(10,2) NOT NULL,
+  decision           ENUM('PENDING', 'ADJUST', 'KEEP') NOT NULL DEFAULT 'PENDING',
+  decided_by         INT NULL,
+  decided_at         DATETIME NULL,
   CONSTRAINT fk_scl_count FOREIGN KEY (stock_count_id) REFERENCES stock_counts(id),
   CONSTRAINT fk_scl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
+  CONSTRAINT fk_scl_user FOREIGN KEY (decided_by) REFERENCES users(id),
+  UNIQUE KEY uq_count_variant (stock_count_id, product_variant_id),
   INDEX idx_scl_count (stock_count_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

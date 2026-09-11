@@ -102,6 +102,7 @@ function renderLines() {
             <td class="py-2 pr-3">${line.discountPercent} %</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
             <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+            <td class="py-2 pr-3 text-center">${line.sourcing === "PURCHASE" ? "✓" : ""}</td>
             <td></td>
           </tr>`;
       }
@@ -114,6 +115,7 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
           <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+          <td class="py-2 pr-3 text-center"><input type="checkbox" class="rounded border-slate-300" data-field="sourcingPurchase" data-index="${index}" ${line.sourcing === "PURCHASE" ? "checked" : ""} /></td>
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
     })
@@ -126,11 +128,17 @@ el.lineRows.addEventListener("input", (event) => {
   const { field, index } = event.target.dataset;
   if (field === undefined) return;
   const line = state.lines[Number(index)];
+
+  if (field === "sourcingPurchase") {
+    line.sourcing = event.target.checked ? "PURCHASE" : "STOCK";
+    return;
+  }
+
   line[field] = Number(event.target.value);
   renderTotals();
   const row = event.target.closest("tr");
-  row.querySelector("td:nth-last-child(3)").textContent = money(lineTotal(line));
-  row.querySelector("td:nth-last-child(2)").textContent = marginLabel(lineMargin(line));
+  row.querySelector("td:nth-last-child(4)").textContent = money(lineTotal(line));
+  row.querySelector("td:nth-last-child(3)").textContent = marginLabel(lineMargin(line));
 });
 
 el.lineRows.addEventListener("click", (event) => {
@@ -175,6 +183,7 @@ el.lineResults.addEventListener("click", (event) => {
     discountPercent: 0,
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
+    sourcing: "STOCK",
   });
   el.lineSearch.value = "";
   el.lineResults.innerHTML = "";
@@ -265,6 +274,7 @@ el.saveBtn.addEventListener("click", async () => {
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent,
+      sourcing: l.sourcing,
     })),
   };
 
@@ -328,6 +338,7 @@ async function init() {
       discountPercent: Number(l.discount_percent),
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
+      sourcing: l.sourcing,
     }));
 
     el.title.textContent = `Order ${order.order_number}`;

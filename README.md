@@ -82,7 +82,15 @@ PLAN.md              Kravspec och fasindelad byggplan
   orderförsäljning.
 - **Marginal** – visas nu i kassan, offert-editorn och order-editorn
   (per rad och som totalsumma), baserat på produktens inköpspris.
-- **Kvar**: lagersaldo/inventering inkl. juridiskt spårbar inventering
-  och inköpsförslag (Fas 5), tryckordersspårning (Fas 6), riktig
-  Fortnox-koppling/rapporter/kundportal (Fas 7), härdning (auth, roller,
-  GDPR — Fas 8). Se `PLAN.md` för detaljer.
+- **Fas 5** – klar: lagersaldo per lagerplats, inleverans mot inköpsorder
+  via streckkodsskanning, en juridiskt spårbar inventering (skanna eller
+  lägg in manuellt, avvikelselista inkl. det som *inte* blev skannat,
+  radvis eller bulk-beslut att justera/behålla — allt som en auditerad
+  `StockMovement`), samt inköpsförslag uppdelat per leverantör: dels
+  orderrader utan lagertäckning eller markerade "beställ ändå", dels
+  produkter under sitt min-saldo.
+- **Kvar**: tryckordersspårning (Fas 6), riktig Fortnox-koppling/
+  rapporter/kundportal (Fas 7), härdning (auth, roller, GDPR — Fas 8).
+  Mindre lucka: koppla produkt↔leverantör (backend klart, API:et
+  `POST /api/products/:id/suppliers` finns, men saknar ännu en
+  UI-formulär). Se `PLAN.md` för detaljer.

@@ -109,4 +109,14 @@ router.post("/:id/variants", async (req, res, next) => {
   }
 });
 
+router.post("/:id/suppliers", async (req, res, next) => {
+  try {
+    if (!req.body?.supplierId) return res.status(400).json({ error: "supplierId krävs" });
+    const product = await products.addSupplier(Number(req.params.id), req.body);
+    res.status(201).json(product);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

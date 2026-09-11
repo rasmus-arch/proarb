@@ -15,4 +15,10 @@
   .card {
     @apply rounded-lg bg-white p-4 shadow-sm ring-1 ring-slate-200;
   }
+  .tab-btn {
+    @apply -mb-px rounded-t-md px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-900;
+  }
+  .tab-btn[aria-selected="true"] {
+    @apply border-b-2 border-slate-900 text-slate-900;
+  }
 }

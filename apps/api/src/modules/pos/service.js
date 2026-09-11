@@ -1,5 +1,6 @@
 import { pool } from "@proarb/db";
 import { createCustomerInvoice, createCashInvoice } from "../integrations/fortnox.js";
+import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 
 function nextSaleNumber() {
   return `KV-${Math.floor(Date.now() / 1000)}`;
@@ -205,6 +206,15 @@ export async function createSale(data, userId) {
          VALUES (?, ?, ?, ?, ?)`,
         [saleId, line.productVariantId, line.quantity, line.unitPrice, line.discountPercent ?? 0]
       );
+      await recordMovement(connection, {
+        variantId: line.productVariantId,
+        warehouseId: DEFAULT_WAREHOUSE_ID,
+        type: "SALE_OUT",
+        quantityDelta: -Number(line.quantity),
+        referenceType: "sale",
+        referenceId: saleId,
+        userId,
+      });
     }
 
     const invoicesToSync = [];

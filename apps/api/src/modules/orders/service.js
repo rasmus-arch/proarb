@@ -1,5 +1,6 @@
 import { pool } from "@proarb/db";
 import { getQuote } from "../quotes/service.js";
+import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 
 function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
@@ -139,8 +140,8 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, quantity, unit_price, discount_percent, print_method_id, print_description, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, quantity, unit_price, discount_percent, print_method_id, print_description, sort_order, sourcing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         line.productVariantId ?? line.product_variant_id,
@@ -150,6 +151,7 @@ async function insertOrderLines(connection, orderId, lines) {
         line.printMethodId ?? line.print_method_id ?? null,
         line.printDescription ?? line.print_description ?? null,
         sortOrder++,
+        line.sourcing ?? "STOCK",
       ]
     );
   }
@@ -256,6 +258,18 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
 
     await connection.query(`UPDATE order_lines SET delivered_qty = quantity WHERE order_id = ?`, [orderId]);
     await connection.query(`UPDATE orders SET status = 'DELIVERED' WHERE id = ?`, [orderId]);
+
+    for (const line of order.lines) {
+      await recordMovement(connection, {
+        variantId: line.product_variant_id,
+        warehouseId: DEFAULT_WAREHOUSE_ID,
+        type: "SALE_OUT",
+        quantityDelta: -Number(line.quantity),
+        referenceType: "order",
+        referenceId: orderId,
+        userId: verifiedByUserId,
+      });
+    }
 
     await connection.commit();
     return getOrder(orderId);
