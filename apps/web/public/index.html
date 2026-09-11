@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Översikt</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="dashboard">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <h1 class="text-xl font-semibold text-slate-900">Översikt</h1>
+      <p class="mt-1 text-sm text-slate-600">
+        Affärssystem för Profil &amp; Arbetskläder. Se
+        <a class="underline" href="https://github.com" target="_blank" rel="noopener">PLAN.md</a>
+        i repot för fullständig kravspec och byggplan.
+      </p>
+
+      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <a href="/kunder.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Kunder</h2>
+          <p class="mt-1 text-sm text-slate-600">Kundkort, logga, hämtbehöriga kontakter.</p>
+        </a>
+        <a href="/offerter.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Offerter</h2>
+          <p class="mt-1 text-sm text-slate-600">Skapa, skicka och följ upp offerter. (Fas 2)</p>
+        </a>
+        <a href="/ordrar.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Ordrar</h2>
+          <p class="mt-1 text-sm text-slate-600">Från offert eller direkt, med utlämning. (Fas 3)</p>
+        </a>
+        <a href="/kassa.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Kassa</h2>
+          <p class="mt-1 text-sm text-slate-600">Skanna streckkod, sälj direkt i butik.</p>
+        </a>
+        <a href="/lager.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Lager</h2>
+          <p class="mt-1 text-sm text-slate-600">Saldo, inleverans och inventering. (Fas 5)</p>
+        </a>
+        <a href="/produkter.html" class="card hover:ring-slate-400">
+          <h2 class="font-medium text-slate-900">Produkter</h2>
+          <p class="mt-1 text-sm text-slate-600">Sök i katalogen, färg/storlek, streckkod.</p>
+        </a>
+      </div>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+  </body>
+</html>

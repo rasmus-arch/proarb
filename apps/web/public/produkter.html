@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Produkter</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="produkter">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <h1 class="text-xl font-semibold text-slate-900">Produkter</h1>
+      <p class="mt-1 text-sm text-slate-600">
+        Sök på namn, artikelnummer, SKU eller streckkod. Fullständig katalogadministration
+        (bulkimport, prislistor, leverantörer) kommer i Fas 1/6, se PLAN.md.
+      </p>
+
+      <div class="mt-4">
+        <input id="search" type="search" placeholder="Sök produkt…" class="input max-w-sm" />
+      </div>
+
+      <div class="mt-4 overflow-x-auto card">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead>
+            <tr class="text-left text-slate-500">
+              <th class="py-2 pr-4 font-medium">Artikelnr</th>
+              <th class="py-2 pr-4 font-medium">Namn</th>
+              <th class="py-2 pr-4 font-medium">Färg</th>
+              <th class="py-2 pr-4 font-medium">Storlek</th>
+              <th class="py-2 pr-4 font-medium">SKU</th>
+              <th class="py-2 pr-4 font-medium">Streckkod</th>
+              <th class="py-2 pr-4 font-medium text-right">Pris (ex moms)</th>
+            </tr>
+          </thead>
+          <tbody id="product-rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+        <p id="empty-state" class="hidden py-6 text-center text-sm text-slate-500">
+          Inga produkter ännu — importera katalogen för att komma igång.
+        </p>
+      </div>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/produkter.js"></script>
+  </body>
+</html>

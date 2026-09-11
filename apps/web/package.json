@@ -1,0 +1,13 @@
+{
+  "name": "@proarb/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tailwindcss -i tailwind/input.css -o public/css/styles.css --watch",
+    "build": "tailwindcss -i tailwind/input.css -o public/css/styles.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.14"
+  }
+}

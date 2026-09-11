@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Kunder</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="kunder">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1 class="text-xl font-semibold text-slate-900">Kunder</h1>
+        <button id="new-customer-btn" class="btn">Ny kund</button>
+      </div>
+
+      <div class="mt-4">
+        <input id="search" type="search" placeholder="Sök namn, kundnr eller org.nr…" class="input max-w-sm" />
+      </div>
+
+      <div class="mt-4 overflow-x-auto card">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead>
+            <tr class="text-left text-slate-500">
+              <th class="py-2 pr-4 font-medium">Kundnr</th>
+              <th class="py-2 pr-4 font-medium">Namn</th>
+              <th class="py-2 pr-4 font-medium">Org.nr</th>
+              <th class="py-2 pr-4 font-medium">Ort</th>
+              <th class="py-2 pr-4 font-medium">Telefon</th>
+            </tr>
+          </thead>
+          <tbody id="customer-rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+        <p id="empty-state" class="hidden py-6 text-center text-sm text-slate-500">
+          Inga kunder ännu — skapa den första med knappen ovan.
+        </p>
+      </div>
+    </main>
+
+    <!-- New customer dialog -->
+    <dialog id="new-customer-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <form id="new-customer-form" method="dialog" class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Ny kund</h2>
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm sm:col-span-2">
+            <span class="text-slate-700">Namn *</span>
+            <input name="name" required class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Org.nr</span>
+            <input name="orgNumber" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post</span>
+            <input name="email" type="email" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Telefon</span>
+            <input name="phone" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Ort</span>
+            <input name="city" class="input mt-1" />
+          </label>
+        </div>
+        <p id="form-error" class="mt-3 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-btn" class="btn-secondary">Avbryt</button>
+          <button type="submit" class="btn">Spara</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/kunder.js"></script>
+  </body>
+</html>

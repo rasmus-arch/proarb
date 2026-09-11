@@ -1,0 +1,16 @@
+{
+  "name": "proarb",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,css -c blue,green \"pnpm --filter @proarb/api dev\" \"pnpm --filter @proarb/web dev\"",
+    "css:build": "pnpm --filter @proarb/web build",
+    "db:migrate": "pnpm --filter @proarb/db migrate"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
