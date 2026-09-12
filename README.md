@@ -8,10 +8,12 @@ Affärssystem för butik/webshop inom arbetskläder och profilprodukter
 
 - **Backend**: Node.js + Express (vanilla JS, `type: module`)
 - **Databas**: MySQL, via `mysql2` (rå SQL, ingen ORM) – se
-  [`packages/db/sql/schema.sql`](packages/db/sql/schema.sql)
+  [`apps/api/db/schema.sql`](apps/api/db/schema.sql)
 - **Frontend**: vanilla JavaScript + Tailwind CSS (inget ramverk), statiska
   HTML-sidor som serveras direkt av Express
-- **Monorepo**: pnpm workspaces (`apps/api`, `apps/web`, `packages/db`)
+- **Monorepo**: pnpm/npm workspaces (`apps/api`, `apps/web`) – `apps/api`
+  är en helt fristående Node-app utan interna paketberoenden, så den
+  går att installera med vanlig `npm install` på vilken host som helst
 
 ## Komma igång
 
@@ -45,19 +47,19 @@ Användare).
 
 Se [`DEPLOY-CPANEL.md`](DEPLOY-CPANEL.md) — en riktig, återanvändbar
 publiceringsväg utan SSH: hämta koden (git eller zip), kör `npm install`
-i cPanels Node.js Selector, som automatiskt installerar beroenden **och**
-migrerar/seedar databasen (idempotent, säkert att köra om när ni
-uppdaterar). `apps/api` beror på `packages/db` via ett vanligt
-npm-workspace, så det fungerar utan pnpm på servern.
+i cPanels Node.js Selector med *Application root* satt till `apps/api`.
+Det installerar beroenden **och** migrerar/seedar databasen automatiskt
+(idempotent, säkert att köra om när ni uppdaterar). `apps/api` är en
+helt fristående app (inga interna paketberoenden), så det fungerar med
+vilken npm-version som helst, utan pnpm på servern.
 
 ## Struktur
 
 ```
 apps/
   api/   Express-API (src/modules/<domän>/{routes,service}.js)
+         db/  SQL-schema, seed-data, migrationsscript (körs som postinstall)
   web/   Statiska HTML-sidor + vanilla JS (public/), Tailwind-källa (tailwind/)
-packages/
-  db/    SQL-schema, seed-data, migrationsscript, delad mysql2-pool
 docker-compose.yml   MySQL för lokal utveckling
 PLAN.md              Kravspec och fasindelad byggplan
 ```

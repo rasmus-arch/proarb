@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 function nextCustomerNumber() {
   // Simple time-based number; good enough until a real sequence/counter

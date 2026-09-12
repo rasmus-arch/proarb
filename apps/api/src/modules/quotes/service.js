@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 function nextQuoteNumber() {
   return `OFF-${Math.floor(Date.now() / 1000)}`;

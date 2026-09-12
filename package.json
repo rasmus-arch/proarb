@@ -5,11 +5,11 @@
   "engines": {
     "node": ">=20"
   },
-  "workspaces": ["apps/api", "apps/web", "packages/db"],
+  "workspaces": ["apps/api", "apps/web"],
   "scripts": {
     "dev": "concurrently -n api,css -c blue,green \"pnpm --filter @proarb/api dev\" \"pnpm --filter @proarb/web dev\"",
     "css:build": "pnpm --filter @proarb/web build",
-    "db:migrate": "pnpm --filter @proarb/db migrate"
+    "db:migrate": "node apps/api/db/migrate.js"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

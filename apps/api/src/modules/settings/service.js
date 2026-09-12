@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 export async function getSettings() {
   const [[settings]] = await pool.query(`SELECT * FROM app_settings WHERE id = 1`);

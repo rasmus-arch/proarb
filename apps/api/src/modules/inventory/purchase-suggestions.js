@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 import { DEFAULT_WAREHOUSE_ID } from "./service.js";
 
 const NO_SUPPLIER = { supplier_id: 0, supplier_name: "Ingen leverantör vald" };

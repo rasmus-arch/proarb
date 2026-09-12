@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 import { recordMovement } from "./service.js";
 
 export async function listStockCounts({ warehouseId } = {}) {

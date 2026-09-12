@@ -43,11 +43,11 @@ export async function run() {
 
   await connection.changeUser({ database: DB_NAME });
 
-  const schema = await readFile(path.join(__dirname, "..", "sql", "schema.sql"), "utf8");
+  const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
   console.log("Applying schema.sql ...");
   await connection.query(schema);
 
-  const seed = await readFile(path.join(__dirname, "..", "sql", "seed.sql"), "utf8");
+  const seed = await readFile(path.join(__dirname, "seed.sql"), "utf8");
   console.log("Applying seed.sql ...");
   await connection.query(seed);
 

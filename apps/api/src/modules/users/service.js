@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 const SALT_ROUNDS = 10;
 

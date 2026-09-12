@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
 
 export async function listProducts({ search = "", page = 1, pageSize = 25 }) {

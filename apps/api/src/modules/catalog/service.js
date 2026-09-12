@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 // Resolves a category/brand name to its id, creating the row if it
 // doesn't exist yet. Shared by the "new product" form and the CSV

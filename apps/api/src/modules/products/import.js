@@ -1,5 +1,5 @@
 import { parse } from "csv-parse/sync";
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 // Bulk CSV import for the product catalog. Designed for the "100 000+
 // rows" scale mentioned in PLAN.md: rows are grouped in JS and written to

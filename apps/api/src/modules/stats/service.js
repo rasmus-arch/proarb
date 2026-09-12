@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 function round2(n) {
   return n === null ? null : Math.round(n * 100) / 100;

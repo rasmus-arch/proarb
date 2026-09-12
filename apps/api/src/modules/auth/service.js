@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 const SESSION_TTL_DAYS = 30;
 

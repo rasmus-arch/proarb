@@ -7,16 +7,16 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "postinstall": "node ../../packages/db/src/postinstall-seed.js"
+    "postinstall": "node db/postinstall-seed.js"
   },
   "dependencies": {
-    "@proarb/db": "*",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "csv-parse": "^5.6.0",
     "express": "^4.21.1",
     "multer": "^2.2.0",
+    "mysql2": "^3.11.4",
     "pdfkit": "^0.15.1"
   }
 }

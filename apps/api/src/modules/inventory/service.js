@@ -1,4 +1,4 @@
-import { pool } from "@proarb/db";
+import { pool } from "../../lib/db.js";
 
 // Butik is the only warehouse POS sales and order pickups draw from.
 // TODO (Fas 6+): let a real till/order pick a warehouse explicitly once
