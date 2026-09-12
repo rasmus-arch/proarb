@@ -54,6 +54,14 @@ använda):**
 - **Application startup file**: `src/index.js`
 - *Create*.
 
+> Om ni redan har en app skapad med *Application root* satt till
+> repots rot (fel), går det **inte** att bara ändra fältet till en
+> undermapp (`.../apps/api`) — cPanels Node.js Selector kan inte flytta
+> sin interna miljö till en katalog som ligger inuti den nuvarande och
+> kraschar med `Cannot move a directory into itself`. Ta bort den
+> gamla appen (*Destroy*, tar bara bort Node-registreringen, inte
+> filerna) och skapa en ny med rätt *Application root* från början.
+
 ## 4. Miljövariabler
 
 I samma vy, under *Environment Variables*, lägg till **alla fyra**:
@@ -109,6 +117,17 @@ och `package-lock.json` i `apps/api` och kör *Run NPM Install* igen.
   minst en gång utan fel.
 - **"Cannot find module '.../src/index.js'"**: *Application root*
   pekar på fel mapp — den ska sluta på `apps/api`, inte på repots rot.
+- **"Cannot find module '.../nodevenv/.../lib/db/postinstall-seed.js'"
+  under *Run NPM Install***: vissa cPanel-värdars Node.js Selector kör
+  installationsskriptet i en annan katalog än där filerna faktiskt
+  ligger. `apps/api/package.json`s `postinstall`-skript slår upp sin
+  egen absoluta sökväg via npm:s `$npm_package_json`-miljövariabel
+  istället för att lita på arbetskatalogen, just för att vara okänslig
+  för detta — om ni ser det felet ändå, dubbelkolla att ni har den
+  senaste koden (steg 2) innan ni felsöker vidare.
+- **`Cannot move a directory into itself`**: se rutan i steg 3 — gäller
+  när man försöker ändra *Application root* på en befintlig app till en
+  undermapp av sig själv. Skapa en ny app istället.
 - **Vill seeda om manuellt utan att röra Node-appen**: cPanel →
   phpMyAdmin, välj databasen, fliken *SQL*, klistra in och kör
   `apps/api/db/schema.sql` och sedan `apps/api/db/seed.sql`.

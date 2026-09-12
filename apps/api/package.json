@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "postinstall": "node db/postinstall-seed.js"
+    "postinstall": "node \"$(dirname \"$npm_package_json\")/db/postinstall-seed.js\""
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
