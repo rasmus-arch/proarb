@@ -41,6 +41,15 @@ från samma process. Du landar på `/login.html`; logga in med
 `admin@example.com` / `changeme` (byt lösenord under Inställningar →
 Användare).
 
+## Publicera (t.ex. cPanel)
+
+Se [`DEPLOY-CPANEL.md`](DEPLOY-CPANEL.md) — en riktig, återanvändbar
+publiceringsväg utan SSH: hämta koden (git eller zip), kör `npm install`
+i cPanels Node.js Selector, som automatiskt installerar beroenden **och**
+migrerar/seedar databasen (idempotent, säkert att köra om när ni
+uppdaterar). `apps/api` beror på `packages/db` via ett vanligt
+npm-workspace, så det fungerar utan pnpm på servern.
+
 ## Struktur
 
 ```

@@ -15,7 +15,7 @@ importers:
   apps/api:
     dependencies:
       '@proarb/db':
-        specifier: workspace:*
+        specifier: file:../../packages/db
         version: link:../../packages/db
       bcryptjs:
         specifier: ^3.0.3

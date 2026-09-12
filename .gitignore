@@ -3,5 +3,4 @@ node_modules/
 .env.local
 *.log
 .DS_Store
-apps/web/public/css/styles.css
 uploads/

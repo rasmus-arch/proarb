@@ -6,10 +6,11 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "postinstall": "node ../../packages/db/src/postinstall-seed.js"
   },
   "dependencies": {
-    "@proarb/db": "workspace:*",
+    "@proarb/db": "*",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

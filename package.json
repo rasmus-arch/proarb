@@ -5,6 +5,7 @@
   "engines": {
     "node": ">=20"
   },
+  "workspaces": ["apps/api", "apps/web", "packages/db"],
   "scripts": {
     "dev": "concurrently -n api,css -c blue,green \"pnpm --filter @proarb/api dev\" \"pnpm --filter @proarb/web dev\"",
     "css:build": "pnpm --filter @proarb/web build",
