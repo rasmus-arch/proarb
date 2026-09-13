@@ -75,6 +75,14 @@ I samma vy, under *Environment Variables*, lägg till **alla fyra**:
 
 Rör inte `PORT` — cPanel/Passenger sätter den automatiskt.
 
+**Valfritt — demodata**: lägg även till `SEED_DEMO_DATA` = `true` om ni
+vill ha exempel-kunder/offerter/order/tryckorder (för att visa flödet
+kund → offert → order → tryckorder) automatiskt vid nästa seedning.
+Använd **aldrig** detta på en riktig produktionsdatabas — lägg bara till
+det i en ren demomiljö. Samma data finns även som en fristående fil,
+`apps/api/db/demo-seed.sql`, som går att klistra in i phpMyAdmins
+SQL-flik manuellt istället, oavsett miljövariabeln.
+
 Klicka *Save*.
 
 ## 5. Installera + seeda databasen

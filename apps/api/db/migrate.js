@@ -51,6 +51,16 @@ export async function run() {
   console.log("Applying seed.sql ...");
   await connection.query(seed);
 
+  // Opt-in only — fake customers/quotes/orders that show the full
+  // kund → offert → order → tryckorder flow, for demoing the system.
+  // Never applied unless explicitly asked for, so a real deployment never
+  // gets surprise fake data. See DEPLOY-CPANEL.md.
+  if (process.env.SEED_DEMO_DATA === "true") {
+    const demoSeed = await readFile(path.join(__dirname, "demo-seed.sql"), "utf8");
+    console.log("Applying demo-seed.sql (SEED_DEMO_DATA=true) ...");
+    await connection.query(demoSeed);
+  }
+
   console.log("Done.");
   await connection.end();
 }
