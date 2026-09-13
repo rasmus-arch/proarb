@@ -343,32 +343,6 @@ CREATE TABLE IF NOT EXISTS order_pickups (
   INDEX idx_op_order (order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Deliberately thin: real invoicing/bookkeeping is expected to happen in an
--- external system (Fortnox); this just tracks what needs to be pushed there
--- and the resulting status. Linked to either an order (fakturerad order) or
--- a POS sale paid by invoice/Swish (customer invoice / "kontantfaktura") —
--- not unique per order/sale since a split-payment sale can need more than
--- one (e.g. part Swish, part invoice).
--- status here is the Fortnox sync status: PENDING / SYNCED / FAILED.
-CREATE TABLE IF NOT EXISTS invoices (
-  id             INT PRIMARY KEY AUTO_INCREMENT,
-  order_id       INT NULL,
-  sale_id        INT NULL,
-  type           ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE',
-  invoice_number VARCHAR(50) NULL,
-  external_ref   VARCHAR(100) NULL,
-  status         VARCHAR(30) NOT NULL DEFAULT 'PENDING',
-  status_note    VARCHAR(255) NULL,
-  amount         DECIMAL(10,2) NOT NULL,
-  due_date       DATE NULL,
-  sent_at        DATETIME NULL,
-  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id),
-  CONSTRAINT fk_invoices_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
-  INDEX idx_invoices_order (order_id),
-  INDEX idx_invoices_sale (sale_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- ---------------------------------------------------------------------------
 -- Inventory
 -- ---------------------------------------------------------------------------
@@ -516,6 +490,35 @@ CREATE TABLE IF NOT EXISTS payments (
   reference VARCHAR(120) NULL,
   CONSTRAINT fk_payments_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
   INDEX idx_payments_sale (sale_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Deliberately thin: real invoicing/bookkeeping is expected to happen in an
+-- external system (Fortnox); this just tracks what needs to be pushed there
+-- and the resulting status. Linked to either an order (fakturerad order) or
+-- a POS sale paid by invoice/Swish (customer invoice / "kontantfaktura") —
+-- not unique per order/sale since a split-payment sale can need more than
+-- one (e.g. part Swish, part invoice). Defined here (after orders AND
+-- sales both exist) rather than next to orders, since real MySQL — unlike
+-- MariaDB — refuses to CREATE TABLE a foreign key against a table that
+-- doesn't exist yet even with FOREIGN_KEY_CHECKS=0.
+-- status here is the Fortnox sync status: PENDING / SYNCED / FAILED.
+CREATE TABLE IF NOT EXISTS invoices (
+  id             INT PRIMARY KEY AUTO_INCREMENT,
+  order_id       INT NULL,
+  sale_id        INT NULL,
+  type           ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE',
+  invoice_number VARCHAR(50) NULL,
+  external_ref   VARCHAR(100) NULL,
+  status         VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  status_note    VARCHAR(255) NULL,
+  amount         DECIMAL(10,2) NOT NULL,
+  due_date       DATE NULL,
+  sent_at        DATETIME NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  CONSTRAINT fk_invoices_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
+  INDEX idx_invoices_order (order_id),
+  INDEX idx_invoices_sale (sale_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;

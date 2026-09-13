@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "postinstall": "node \"$(dirname \"$npm_package_json\")/db/postinstall-seed.js\""
+    "postinstall": "p=\"$npm_package_json\"; q=\"${p#$HOME/nodevenv/}\"; if [ \"$q\" != \"$p\" ]; then q=\"${q%/*/lib/package.json}\"; root=\"$HOME/$q\"; else root=\"$(dirname \"$p\")\"; fi; node \"$root/db/postinstall-seed.js\" || true"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

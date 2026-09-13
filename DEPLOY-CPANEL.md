@@ -117,14 +117,18 @@ och `package-lock.json` i `apps/api` och kör *Run NPM Install* igen.
   minst en gång utan fel.
 - **"Cannot find module '.../src/index.js'"**: *Application root*
   pekar på fel mapp — den ska sluta på `apps/api`, inte på repots rot.
-- **"Cannot find module '.../nodevenv/.../lib/db/postinstall-seed.js'"
-  under *Run NPM Install***: vissa cPanel-värdars Node.js Selector kör
-  installationsskriptet i en annan katalog än där filerna faktiskt
-  ligger. `apps/api/package.json`s `postinstall`-skript slår upp sin
-  egen absoluta sökväg via npm:s `$npm_package_json`-miljövariabel
-  istället för att lita på arbetskatalogen, just för att vara okänslig
-  för detta — om ni ser det felet ändå, dubbelkolla att ni har den
-  senaste koden (steg 2) innan ni felsöker vidare.
+- **Auto-seedningen (`postinstall`) verkar inte köras, eller loggen visar
+  ett fel om `.../nodevenv/.../lib/...`**: vissa cPanel-värdars Node.js
+  Selector (CloudLinux) kör `npm install` i en intern "venv"-katalog som
+  skiljer sig från er riktiga kod, och installerar paketen dit istället
+  för till `apps/api/node_modules`. `postinstall`-skriptet är byggt för
+  att räkna ut den riktiga sökvägen i det fallet, men **auto-seedning kan
+  ändå fallera på vissa sådana värdar** eftersom node_modules bokstavligen
+  hamnar på annat ställe än koden. Det är ofarligt (`|| true` gör att det
+  aldrig stoppar installationen) — seeda i så fall manuellt via
+  phpMyAdmin (se nedan) istället, en gång per driftsättningsmiljö.
+  Själva appen påverkas inte av detta (den startas av Passenger på ett
+  annat sätt än `npm install` gör).
 - **`Cannot move a directory into itself`**: se rutan i steg 3 — gäller
   när man försöker ändra *Application root* på en befintlig app till en
   undermapp av sig själv. Skapa en ny app istället.
