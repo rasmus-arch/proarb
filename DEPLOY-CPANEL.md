@@ -83,6 +83,27 @@ det i en ren demomiljö. Samma data finns även som en fristående fil,
 `apps/api/db/demo-seed.sql`, som går att klistra in i phpMyAdmins
 SQL-flik manuellt istället, oavsett miljövariabeln.
 
+**Valfritt — buggrapportering till GitHub**: personalen hos kunden kan
+rapportera problem direkt i appen (knappen "Rapportera problem" i
+menyraden). Rapporterna sparas alltid i databasen, men för att de även
+ska dyka upp som issues i det här GitHub-repot behöver ni lägga till:
+
+| Variabel             | Värde                                                        |
+|----------------------|---------------------------------------------------------------|
+| `GITHUB_ISSUES_TOKEN` | ett fine-grained personal access token (se nedan)             |
+| `GITHUB_ISSUES_REPO`  | `ägare/repo`, t.ex. `rasmus-arch/proarb`                       |
+| `TENANT_NAME`         | valfritt — vilken kund den här driftsatta instansen tillhör    |
+
+Skapa token på
+[github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new):
+välj *Only select repositories* → detta repo, och under *Repository
+permissions* sätt **Issues: Read and write** (inget annat behövs). Sätt
+`TENANT_NAME` till kundens namn (t.ex. `Profil & Arbetskläder AB`) om ni
+säljer systemet till flera kunder mot samma repo — då stämplas det som en
+GitHub-label på issuet så rapporterna går att skilja åt. Utan dessa
+miljövariabler fungerar knappen fortfarande (rapporten sparas lokalt i
+`bug_reports`-tabellen), den synkas bara inte till GitHub.
+
 Klicka *Save*.
 
 ## 5. Installera + seeda databasen

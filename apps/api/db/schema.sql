@@ -535,4 +535,26 @@ CREATE TABLE IF NOT EXISTS invoices (
   INDEX idx_invoices_sale (sale_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Fas 9: kunder som köpt systemet kan rapportera buggar/problem direkt i
+-- appen. Sparas alltid lokalt (så historiken finns kvar även om
+-- GitHub-synken misslyckas eller inte är konfigurerad än), och synkas
+-- best-effort till ett issue i utvecklarens GitHub-repo — se
+-- bug-reports/github.js, samma mönster som Fortnox-integrationen.
+CREATE TABLE IF NOT EXISTS bug_reports (
+  id                  INT PRIMARY KEY AUTO_INCREMENT,
+  reported_by         INT NOT NULL,
+  title               VARCHAR(255) NOT NULL,
+  description         TEXT NOT NULL,
+  severity            ENUM('LOW','MEDIUM','HIGH') NOT NULL DEFAULT 'MEDIUM',
+  page_url            VARCHAR(500) NULL,
+  user_agent          VARCHAR(255) NULL,
+  github_issue_number INT NULL,
+  github_issue_url    VARCHAR(255) NULL,
+  github_sync_status  ENUM('PENDING','SYNCED','FAILED','NOT_CONFIGURED') NOT NULL DEFAULT 'PENDING',
+  github_sync_note    VARCHAR(255) NULL,
+  created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_bug_reports_user FOREIGN KEY (reported_by) REFERENCES users(id),
+  INDEX idx_bug_reports_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SET FOREIGN_KEY_CHECKS = 1;

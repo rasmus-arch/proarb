@@ -130,6 +130,15 @@ PLAN.md              Kravspec och fasindelad byggplan
   Användare hanteras under Inställningar → Användare (endast ADMIN).
   Standardkontot är `admin@example.com` / `changeme` — byt lösenord
   där efter första inloggningen.
+- **Fas 9** – klar: alla inloggade roller kan rapportera problem direkt i
+  appen (knappen "Rapportera problem" i menyraden, syns på alla sidor).
+  Rapporten sparas alltid i `bug_reports` och synkas best-effort till ett
+  issue i utvecklarens GitHub-repo (`GITHUB_ISSUES_TOKEN`/
+  `GITHUB_ISSUES_REPO`, se `.env.example` och `DEPLOY-CPANEL.md`) — utan
+  dessa miljövariabler sparas rapporten ändå lokalt, bara utan
+  GitHub-synk. `TENANT_NAME` stämplas som label så flera kunders
+  rapporter går att skilja åt i samma repo. Listan (`GET
+  /api/bug-reports`, för att se synkstatus) kräver ADMIN.
 - **Kvar**: riktig Fortnox-koppling (order → kundfaktura, synk tillbaka
   — stub finns i `fortnox.js`, väntar på testmiljö). Mindre luckor:
   auditlogg och GDPR-verktyg (export/radering av persondata) är inte
