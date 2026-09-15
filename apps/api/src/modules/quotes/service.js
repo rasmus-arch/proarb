@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
+import { assertValidLines } from "../../lib/lines.js";
 
 function nextQuoteNumber() {
   return `OFF-${Math.floor(Date.now() / 1000)}`;
@@ -52,11 +53,16 @@ export async function listQuotes({ search = "", status = "", page = 1, pageSize 
 }
 
 async function loadQuoteLines(quoteId) {
+  // LEFT JOIN: a fritextrad (free-text line) has no product_variant_id, so
+  // p/v come back all-NULL for it — COALESCE falls back to the line's own
+  // description/tax_rate_percent in that case.
   const [lines] = await pool.query(
-    `SELECT ql.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
+    `SELECT ql.*, COALESCE(p.name, ql.description) AS product_name,
+            COALESCE(p.tax_rate_percent, ql.tax_rate_percent) AS tax_rate_percent,
+            p.cost_price, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
      FROM quote_lines ql
-     JOIN product_variants v ON v.id = ql.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ql.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN print_methods pm ON pm.id = ql.print_method_id
      WHERE ql.quote_id = ?
      ORDER BY ql.sort_order ASC, ql.id ASC`,
@@ -122,6 +128,8 @@ export async function getQuoteByToken(token) {
 }
 
 export async function createQuote(data, userId) {
+  assertValidLines(data.lines ?? []);
+
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -158,17 +166,18 @@ async function insertLines(connection, quoteId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO quote_lines
-         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, print_method_id, print_description, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_method_id, print_description, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quoteId,
-        line.productVariantId,
+        line.productVariantId ?? line.product_variant_id ?? null,
         line.description ?? null,
         line.quantity,
-        line.unitPrice,
-        line.discountPercent ?? 0,
-        line.printMethodId ?? null,
-        line.printDescription ?? null,
+        line.unitPrice ?? line.unit_price,
+        line.discountPercent ?? line.discount_percent ?? 0,
+        line.taxRatePercent ?? line.tax_rate_percent ?? null,
+        line.printMethodId ?? line.print_method_id ?? null,
+        line.printDescription ?? line.print_description ?? null,
         sortOrder++,
       ]
     );
@@ -198,6 +207,7 @@ export async function updateQuote(id, data) {
     }
 
     if (Array.isArray(data.lines)) {
+      assertValidLines(data.lines);
       await connection.query(`DELETE FROM quote_lines WHERE quote_id = ?`, [id]);
       await insertLines(connection, id, data.lines);
     }

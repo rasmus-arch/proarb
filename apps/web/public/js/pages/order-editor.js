@@ -39,6 +39,15 @@ const el = {
   lineSearch: document.getElementById("line-search"),
   lineResults: document.getElementById("line-results"),
   lineRows: document.getElementById("line-rows"),
+  addFritextBtn: document.getElementById("add-fritext-btn"),
+  fritextDialog: document.getElementById("fritext-dialog"),
+  fritextForm: document.getElementById("fritext-form"),
+  cancelFritextBtn: document.getElementById("cancel-fritext-btn"),
+  addProductBtn: document.getElementById("add-product-btn"),
+  newProductDialog: document.getElementById("new-product-dialog"),
+  newProductForm: document.getElementById("new-product-form"),
+  cancelNewProductBtn: document.getElementById("cancel-new-product-btn"),
+  newProductError: document.getElementById("new-product-error"),
   linesEmpty: document.getElementById("lines-empty"),
   totalsSubtotal: document.getElementById("totals-subtotal"),
   totalsVat: document.getElementById("totals-vat"),
@@ -208,6 +217,86 @@ el.lineResults.addEventListener("click", (event) => {
   renderLines();
 });
 
+// --- Fritextrad (free-text line) ----------------------------------------
+
+el.addFritextBtn.addEventListener("click", () => {
+  el.fritextForm.reset();
+  el.fritextDialog.showModal();
+});
+el.cancelFritextBtn.addEventListener("click", () => el.fritextDialog.close());
+
+el.fritextForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = Object.fromEntries(new FormData(el.fritextForm).entries());
+  const description = form.description.trim();
+  const quantity = Number(form.quantity);
+  const unitPrice = Number(form.unitPrice);
+  if (!description || !(quantity > 0) || Number.isNaN(unitPrice)) return;
+
+  state.lines.push({
+    productVariantId: null,
+    description,
+    name: description,
+    colorSize: "Fritextrad",
+    quantity,
+    unitPrice,
+    discountPercent: 0,
+    taxRatePercent: Number(form.taxRatePercent) || 25,
+    costPrice: null,
+    sourcing: "STOCK",
+  });
+  el.fritextDialog.close();
+  renderLines();
+});
+
+// --- Quick-create a new product while building the line list -----------
+
+el.addProductBtn.addEventListener("click", () => {
+  el.newProductForm.reset();
+  el.newProductError.classList.add("hidden");
+  el.newProductDialog.showModal();
+});
+el.cancelNewProductBtn.addEventListener("click", () => el.newProductDialog.close());
+
+el.newProductForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  el.newProductError.classList.add("hidden");
+  const form = Object.fromEntries(new FormData(el.newProductForm).entries());
+  const basePrice = Number(form.basePrice);
+  if (!form.name.trim() || Number.isNaN(basePrice)) return;
+
+  const hasVariantInfo = Boolean(form.color || form.size);
+
+  try {
+    const product = await api.post("/products", {
+      name: form.name.trim(),
+      articleNumber: form.articleNumber.trim() || undefined,
+      basePrice,
+      costPrice: form.costPrice ? Number(form.costPrice) : undefined,
+      printable: form.printable === "on",
+      variants: hasVariantInfo ? [{ color: form.color || null, size: form.size || null }] : undefined,
+    });
+    const v = product.variants[0];
+    state.lines.push({
+      productVariantId: v.id,
+      description: null,
+      name: product.name,
+      colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
+      quantity: 1,
+      unitPrice: Number(product.base_price),
+      discountPercent: 0,
+      taxRatePercent: Number(product.tax_rate_percent),
+      costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
+      sourcing: "STOCK",
+    });
+    el.newProductDialog.close();
+    renderLines();
+  } catch (err) {
+    el.newProductError.textContent = err.message;
+    el.newProductError.classList.remove("hidden");
+  }
+});
+
 // --- Customer picker (shared pattern with offert-editor) -----------------
 
 function selectCustomer(id, name) {
@@ -289,9 +378,11 @@ el.saveBtn.addEventListener("click", async () => {
     deliveryMethod: el.deliveryMethod.value,
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
+      description: l.productVariantId ? null : l.description ?? l.name,
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent,
+      taxRatePercent: l.taxRatePercent,
       sourcing: l.sourcing,
     })),
   };
@@ -349,8 +440,9 @@ async function init() {
     const order = await api.get(`/orders/${orderId}`);
     state.lines = order.lines.map((l) => ({
       productVariantId: l.product_variant_id,
+      description: l.product_variant_id ? null : l.description,
       name: l.product_name,
-      colorSize: [l.color, l.size, l.sku].filter(Boolean).join(" · "),
+      colorSize: l.product_variant_id ? [l.color, l.size, l.sku].filter(Boolean).join(" · ") : "Fritextrad",
       quantity: Number(l.quantity),
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),

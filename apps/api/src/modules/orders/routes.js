@@ -36,6 +36,9 @@ router.post("/", async (req, res, next) => {
     if (err.message === "INVALID_ORDER") {
       return res.status(400).json({ error: "customerId och minst en rad krävs" });
     }
+    if (err.message === "INVALID_LINE") {
+      return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning (fritextrad), plus antal och pris" });
+    }
     next(err);
   }
 });

@@ -1,6 +1,7 @@
 import { pool } from "../../lib/db.js";
 import { createCustomerInvoice, createCashInvoice } from "../integrations/fortnox.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { assertValidLines } from "../../lib/lines.js";
 
 function nextSaleNumber() {
   return `KV-${Math.floor(Date.now() / 1000)}`;
@@ -95,11 +96,16 @@ export async function closeSession(id, { closingFloat }) {
 // --- Försäljning -----------------------------------------------------------
 
 async function loadSaleLines(saleId) {
+  // LEFT JOIN: a fritextrad (free-text line) has no product_variant_id, so
+  // p/v come back all-NULL for it — COALESCE falls back to the line's own
+  // description/tax_rate_percent in that case.
   const [lines] = await pool.query(
-    `SELECT sl.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size
+    `SELECT sl.*, COALESCE(p.name, sl.description) AS product_name,
+            COALESCE(p.tax_rate_percent, sl.tax_rate_percent) AS tax_rate_percent,
+            p.cost_price, v.sku, v.color, v.size
      FROM sale_lines sl
-     JOIN product_variants v ON v.id = sl.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = sl.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      WHERE sl.sale_id = ?
      ORDER BY sl.id ASC`,
     [saleId]
@@ -157,6 +163,7 @@ export async function createSale(data, userId) {
   if (!data.sessionId || !Array.isArray(data.lines) || data.lines.length === 0) {
     throw new Error("INVALID_SALE");
   }
+  assertValidLines(data.lines);
   if (!Array.isArray(data.payments) || data.payments.length === 0) {
     throw new Error("PAYMENT_REQUIRED");
   }
@@ -165,20 +172,25 @@ export async function createSale(data, userId) {
     throw new Error("INVOICE_REQUIRES_CUSTOMER");
   }
 
-  const variantIds = data.lines.map((l) => l.productVariantId);
-  const [taxRows] = await pool.query(
-    `SELECT v.id AS variant_id, p.tax_rate_percent
-     FROM product_variants v JOIN products p ON p.id = v.product_id
-     WHERE v.id IN (?)`,
-    [variantIds]
-  );
-  const taxByVariant = new Map(taxRows.map((r) => [r.variant_id, Number(r.tax_rate_percent)]));
+  // A fritextrad (free-text line) has no productVariantId — its own
+  // taxRatePercent (set by the cashier) is used as-is below instead.
+  const variantIds = data.lines.map((l) => l.productVariantId).filter(Boolean);
+  const taxByVariant = new Map();
+  if (variantIds.length > 0) {
+    const [taxRows] = await pool.query(
+      `SELECT v.id AS variant_id, p.tax_rate_percent
+       FROM product_variants v JOIN products p ON p.id = v.product_id
+       WHERE v.id IN (?)`,
+      [variantIds]
+    );
+    for (const row of taxRows) taxByVariant.set(row.variant_id, Number(row.tax_rate_percent));
+  }
 
   const linesWithTax = data.lines.map((l) => ({
     quantity: l.quantity,
     unit_price: l.unitPrice,
     discount_percent: l.discountPercent ?? 0,
-    tax_rate_percent: taxByVariant.get(l.productVariantId) ?? 25,
+    tax_rate_percent: l.productVariantId ? taxByVariant.get(l.productVariantId) ?? 25 : l.taxRatePercent ?? 25,
   }));
   const totals = summarizeTotals(linesWithTax);
 
@@ -202,10 +214,20 @@ export async function createSale(data, userId) {
 
     for (const line of data.lines) {
       await connection.query(
-        `INSERT INTO sale_lines (sale_id, product_variant_id, quantity, unit_price, discount_percent)
-         VALUES (?, ?, ?, ?, ?)`,
-        [saleId, line.productVariantId, line.quantity, line.unitPrice, line.discountPercent ?? 0]
+        `INSERT INTO sale_lines (sale_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          saleId,
+          line.productVariantId ?? null,
+          line.description ?? null,
+          line.quantity,
+          line.unitPrice,
+          line.discountPercent ?? 0,
+          line.productVariantId ? null : line.taxRatePercent ?? 25,
+        ]
       );
+      // A fritextrad (free-text line) has no product to deduct stock for.
+      if (!line.productVariantId) continue;
       await recordMovement(connection, {
         variantId: line.productVariantId,
         warehouseId: DEFAULT_WAREHOUSE_ID,

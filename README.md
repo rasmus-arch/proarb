@@ -95,6 +95,13 @@ PLAN.md              Kravspec och fasindelad byggplan
   orderförsäljning.
 - **Marginal** – visas nu i kassan, offert-editorn och order-editorn
   (per rad och som totalsumma), baserat på produktens inköpspris.
+- **Fritextrader & snabbskapade produkter** – klar: i offert-editorn,
+  order-editorn och kassan kan man nu lägga till en fritextrad (egen
+  beskrivning, antal, pris och momssats, utan att den behöver finnas som
+  produkt) samt skapa en ny produkt direkt i flödet (namn och pris räcker
+  — artikelnummer och SKU genereras automatiskt om de utelämnas) och
+  lägga till den som rad på en gång. Kassan har dessutom fått fritextsök
+  på produktnamn/artikelnummer/SKU, inte bara streckkodsskanning.
 - **Fas 5** – klar: lagersaldo per lagerplats, inleverans mot inköpsorder
   via streckkodsskanning, en juridiskt spårbar inventering (skanna eller
   lägg in manuellt, avvikelselista inkl. det som *inte* blev skannat,

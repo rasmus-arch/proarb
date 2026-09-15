@@ -54,8 +54,8 @@ router.post("/import", upload.single("file"), async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    if (!req.body?.articleNumber || !req.body?.name || req.body?.basePrice === undefined) {
-      return res.status(400).json({ error: "articleNumber, name och basePrice krävs" });
+    if (!req.body?.name || req.body?.basePrice === undefined) {
+      return res.status(400).json({ error: "name och basePrice krävs" });
     }
     const product = await products.createProduct(req.body);
     res.status(201).json(product);

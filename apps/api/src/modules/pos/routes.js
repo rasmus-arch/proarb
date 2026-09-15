@@ -71,6 +71,9 @@ router.post("/sales", async (req, res, next) => {
         error: `Betalt belopp (${err.received} kr) matchar inte totalsumman (${err.expected} kr)`,
       });
     }
+    if (err.message === "INVALID_LINE") {
+      return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning (fritextrad), plus antal och pris" });
+    }
     next(err);
   }
 });

@@ -47,6 +47,32 @@ export async function run() {
   console.log("Applying schema.sql ...");
   await connection.query(schema);
 
+  // `CREATE TABLE IF NOT EXISTS` above only creates tables that don't exist
+  // yet — it never alters an already-existing table. These ALTERs bring an
+  // existing database (created before fritextrader support was added) up
+  // to date. Harmless no-ops on a fresh database, where schema.sql already
+  // created these columns: ER_DUP_FIELDNAME (1060) is swallowed, everything
+  // else is logged but doesn't block the rest of the migration.
+  const alters = [
+    "ALTER TABLE quote_lines MODIFY product_variant_id INT NULL",
+    "ALTER TABLE quote_lines ADD COLUMN tax_rate_percent DECIMAL(5,2) NULL",
+    "ALTER TABLE order_lines MODIFY product_variant_id INT NULL",
+    "ALTER TABLE order_lines ADD COLUMN description VARCHAR(255) NULL AFTER product_variant_id",
+    "ALTER TABLE order_lines ADD COLUMN tax_rate_percent DECIMAL(5,2) NULL",
+    "ALTER TABLE sale_lines MODIFY product_variant_id INT NULL",
+    "ALTER TABLE sale_lines ADD COLUMN description VARCHAR(255) NULL AFTER product_variant_id",
+    "ALTER TABLE sale_lines ADD COLUMN tax_rate_percent DECIMAL(5,2) NULL",
+  ];
+  for (const statement of alters) {
+    try {
+      await connection.query(statement);
+    } catch (err) {
+      if (err.errno !== 1060) {
+        console.warn(`Migreringssteg hoppades över (${statement}): ${err.message}`);
+      }
+    }
+  }
+
   const seed = await readFile(path.join(__dirname, "seed.sql"), "utf8");
   console.log("Applying seed.sql ...");
   await connection.query(seed);

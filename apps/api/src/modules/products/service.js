@@ -1,6 +1,12 @@
 import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
 
+// Fallback for quick-created products (e.g. from the quote/order/kassa line
+// builder) where the user hasn't typed an article number themselves.
+function nextArticleNumber() {
+  return `ART-${Math.floor(Date.now() / 1000)}`;
+}
+
 export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
@@ -90,13 +96,14 @@ export async function addSupplier(productId, { supplierId, supplierSku, costPric
 export async function createProduct(data) {
   const categoryId = data.categoryId ?? (await resolveNameToId("product_categories", data.category));
   const brandId = data.brandId ?? (await resolveNameToId("brands", data.brand));
+  const articleNumber = data.articleNumber?.trim() || nextArticleNumber();
 
   const [result] = await pool.query(
     `INSERT INTO products
        (article_number, name, description, category_id, brand_id, printable, unit, tax_rate_percent, base_price, cost_price)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      data.articleNumber,
+      articleNumber,
       data.name,
       data.description ?? null,
       categoryId,

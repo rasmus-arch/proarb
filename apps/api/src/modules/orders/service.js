@@ -1,6 +1,7 @@
 import { pool } from "../../lib/db.js";
 import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { assertValidLines } from "../../lib/lines.js";
 
 function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
@@ -87,11 +88,16 @@ export async function listOrders({ search = "", status = "", page = 1, pageSize 
 }
 
 async function loadOrderLines(orderId) {
+  // LEFT JOIN: a fritextrad (free-text line) has no product_variant_id, so
+  // p/v come back all-NULL for it — COALESCE falls back to the line's own
+  // description/tax_rate_percent in that case.
   const [lines] = await pool.query(
-    `SELECT ol.*, p.name AS product_name, p.tax_rate_percent, p.cost_price, v.sku, v.color, v.size, pm.name AS print_method_name
+    `SELECT ol.*, COALESCE(p.name, ol.description) AS product_name,
+            COALESCE(p.tax_rate_percent, ol.tax_rate_percent) AS tax_rate_percent,
+            p.cost_price, v.sku, v.color, v.size, pm.name AS print_method_name
      FROM order_lines ol
-     JOIN product_variants v ON v.id = ol.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ol.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN print_methods pm ON pm.id = ol.print_method_id
      WHERE ol.order_id = ?
      ORDER BY ol.sort_order ASC, ol.id ASC`,
@@ -140,14 +146,16 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, quantity, unit_price, discount_percent, print_method_id, print_description, sort_order, sourcing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_method_id, print_description, sort_order, sourcing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
-        line.productVariantId ?? line.product_variant_id,
+        line.productVariantId ?? line.product_variant_id ?? null,
+        line.description ?? null,
         line.quantity,
         line.unitPrice ?? line.unit_price,
         line.discountPercent ?? line.discount_percent ?? 0,
+        line.taxRatePercent ?? line.tax_rate_percent ?? null,
         line.printMethodId ?? line.print_method_id ?? null,
         line.printDescription ?? line.print_description ?? null,
         sortOrder++,
@@ -163,6 +171,7 @@ export async function createOrder(data, userId) {
   if (!data.customerId || !Array.isArray(data.lines) || data.lines.length === 0) {
     throw new Error("INVALID_ORDER");
   }
+  assertValidLines(data.lines);
 
   const connection = await pool.getConnection();
   try {
@@ -260,6 +269,9 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     await connection.query(`UPDATE orders SET status = 'DELIVERED' WHERE id = ?`, [orderId]);
 
     for (const line of order.lines) {
+      // A fritextrad (free-text line) has no product_variant_id — nothing
+      // physical to deduct from lagersaldo.
+      if (!line.product_variant_id) continue;
       await recordMovement(connection, {
         variantId: line.product_variant_id,
         warehouseId: DEFAULT_WAREHOUSE_ID,
@@ -300,12 +312,12 @@ export async function getPrintQueue({ status = "" } = {}) {
     `SELECT ol.id AS order_line_id, ol.order_id, o.order_number, o.status AS order_status,
             ol.print_status, ol.quantity, ol.print_description,
             pm.name AS print_method_name, c.name AS customer_name,
-            v.sku, v.color, v.size, p.name AS product_name
+            v.sku, v.color, v.size, COALESCE(p.name, ol.description) AS product_name
      FROM order_lines ol
      JOIN orders o ON o.id = ol.order_id
      JOIN customers c ON c.id = o.customer_id
-     JOIN product_variants v ON v.id = ol.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ol.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      JOIN print_methods pm ON pm.id = ol.print_method_id
      WHERE ol.print_method_id IS NOT NULL
        AND o.status NOT IN ('CANCELLED', 'DELIVERED', 'INVOICED')

@@ -3,8 +3,11 @@ import { api } from "../api.js";
 let session = null;
 let selectedCustomer = null;
 let paymentRows = [];
+let fritextCounter = 0;
 
-// key: variant_id -> { name, color, size, unitPrice, taxRatePercent, qty }
+// key: "v:<variantId>" for a product line (scan/search dedupe by variant) or
+// "f:<counter>" for a fritextrad (free-text line, never merges).
+// value: { productVariantId, description, name, color, size, unitPrice, taxRatePercent, costPrice, qty }
 const cart = new Map();
 
 const el = {
@@ -18,6 +21,12 @@ const el = {
   posMain: document.getElementById("pos-main"),
   scanInput: document.getElementById("scan-input"),
   scanError: document.getElementById("scan-error"),
+  productSearch: document.getElementById("product-search"),
+  productSearchResults: document.getElementById("product-search-results"),
+  addFritextBtn: document.getElementById("add-fritext-btn"),
+  fritextDialog: document.getElementById("fritext-dialog"),
+  fritextForm: document.getElementById("fritext-form"),
+  cancelFritextBtn: document.getElementById("cancel-fritext-btn"),
   customerSearch: document.getElementById("customer-search"),
   customerResults: document.getElementById("customer-results"),
   customerSelected: document.getElementById("customer-selected"),
@@ -86,15 +95,15 @@ function renderCart() {
 
   el.cartRows.innerHTML = items
     .map(
-      ([variantId, item]) => `
+      ([key, item]) => `
       <tr>
         <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(item.name)}</td>
-        <td class="py-2 pr-4">${escapeHtml([item.color, item.size].filter(Boolean).join(" / "))}</td>
+        <td class="py-2 pr-4">${item.productVariantId ? escapeHtml([item.color, item.size].filter(Boolean).join(" / ")) : "Fritextrad"}</td>
         <td class="py-2 pr-4 text-right">${item.qty}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice)}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice * item.qty)}</td>
         <td class="py-2 pr-4 text-right text-slate-500">${marginLabel(itemMargin(item))}</td>
-        <td class="py-2 pr-2"><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${variantId}">✕</button></td>
+        <td class="py-2 pr-2"><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${key}">✕</button></td>
       </tr>`
     )
     .join("");
@@ -109,32 +118,39 @@ function renderCart() {
 }
 
 el.cartRows.addEventListener("click", (event) => {
-  const id = event.target.dataset.remove;
-  if (id === undefined) return;
-  cart.delete(Number(id));
+  const key = event.target.dataset.remove;
+  if (key === undefined) return;
+  cart.delete(key);
   renderCart();
 });
+
+// Shared by barcode scan and product search — both resolve to a variant
+// shaped the same way. Repeat adds of the same variant just bump qty.
+function addVariantToCart(variant) {
+  const key = `v:${variant.variant_id}`;
+  const existing = cart.get(key);
+  if (existing) {
+    existing.qty += 1;
+  } else {
+    cart.set(key, {
+      productVariantId: variant.variant_id,
+      name: variant.name,
+      color: variant.color,
+      size: variant.size,
+      unitPrice: Number(variant.price_override ?? variant.base_price),
+      taxRatePercent: Number(variant.tax_rate_percent),
+      costPrice: variant.cost_price === null || variant.cost_price === undefined ? null : Number(variant.cost_price),
+      qty: 1,
+    });
+  }
+  renderCart();
+}
 
 async function handleScan(barcode) {
   el.scanError.classList.add("hidden");
   try {
     const variant = await api.get(`/products/by-barcode/${encodeURIComponent(barcode)}`);
-    const unitPrice = Number(variant.price_override ?? variant.base_price);
-    const existing = cart.get(variant.variant_id);
-    if (existing) {
-      existing.qty += 1;
-    } else {
-      cart.set(variant.variant_id, {
-        name: variant.name,
-        color: variant.color,
-        size: variant.size,
-        unitPrice,
-        taxRatePercent: Number(variant.tax_rate_percent),
-        costPrice: variant.cost_price === null || variant.cost_price === undefined ? null : Number(variant.cost_price),
-        qty: 1,
-      });
-    }
-    renderCart();
+    addVariantToCart(variant);
   } catch (err) {
     el.scanError.textContent = err.message;
     el.scanError.classList.remove("hidden");
@@ -146,6 +162,69 @@ el.scanInput.addEventListener("keydown", (event) => {
   const barcode = el.scanInput.value.trim();
   el.scanInput.value = "";
   if (barcode) handleScan(barcode);
+});
+
+// --- Product name/text search (kassan had barcode-only until now) ------
+
+let productSearchTimer;
+el.productSearch.addEventListener("input", () => {
+  clearTimeout(productSearchTimer);
+  const q = el.productSearch.value.trim();
+  if (!q) {
+    el.productSearchResults.innerHTML = "";
+    return;
+  }
+  productSearchTimer = setTimeout(async () => {
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    el.productSearchResults.innerHTML = rows
+      .map(
+        (v) => `
+        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-variant='${JSON.stringify(v).replace(/'/g, "&#39;")}'>
+          <div class="font-medium text-slate-900">${escapeHtml(v.name)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))} — ${formatMoney(v.price_override ?? v.base_price)}</div>
+        </button>`
+      )
+      .join("");
+  }, 200);
+});
+
+el.productSearchResults.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-variant]");
+  if (!button) return;
+  addVariantToCart(JSON.parse(button.dataset.variant));
+  el.productSearch.value = "";
+  el.productSearchResults.innerHTML = "";
+});
+
+// --- Fritextrad (free-text line) ----------------------------------------
+
+el.addFritextBtn.addEventListener("click", () => {
+  el.fritextForm.reset();
+  el.fritextDialog.showModal();
+});
+el.cancelFritextBtn.addEventListener("click", () => el.fritextDialog.close());
+
+el.fritextForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = Object.fromEntries(new FormData(el.fritextForm).entries());
+  const description = form.description.trim();
+  const quantity = Number(form.quantity);
+  const unitPrice = Number(form.unitPrice);
+  if (!description || !(quantity > 0) || Number.isNaN(unitPrice)) return;
+
+  cart.set(`f:${fritextCounter++}`, {
+    productVariantId: null,
+    description,
+    name: description,
+    color: null,
+    size: null,
+    unitPrice,
+    taxRatePercent: Number(form.taxRatePercent) || 25,
+    costPrice: null,
+    qty: quantity,
+  });
+  el.fritextDialog.close();
+  renderCart();
 });
 
 // --- Optional customer -----------------------------------------------
@@ -249,12 +328,22 @@ el.completeSaleBtn.addEventListener("click", async () => {
   const payload = {
     sessionId: session.id,
     customerId: selectedCustomer?.id ?? null,
-    lines: [...cart.entries()].map(([variantId, item]) => ({
-      productVariantId: variantId,
-      quantity: item.qty,
-      unitPrice: item.unitPrice,
-      discountPercent: 0,
-    })),
+    lines: [...cart.values()].map((item) =>
+      item.productVariantId
+        ? {
+            productVariantId: item.productVariantId,
+            quantity: item.qty,
+            unitPrice: item.unitPrice,
+            discountPercent: 0,
+          }
+        : {
+            description: item.description,
+            quantity: item.qty,
+            unitPrice: item.unitPrice,
+            discountPercent: 0,
+            taxRatePercent: item.taxRatePercent,
+          }
+    ),
     payments: paymentRows.map((p) => ({ method: p.method, amount: p.amount })),
   };
 

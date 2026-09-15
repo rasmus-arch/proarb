@@ -47,6 +47,9 @@ router.post("/", async (req, res, next) => {
     const quote = await quotes.createQuote(req.body, req.user.id);
     res.status(201).json(quote);
   } catch (err) {
+    if (err.message === "INVALID_LINE") {
+      return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning (fritextrad), plus antal och pris" });
+    }
     next(err);
   }
 });
@@ -71,6 +74,9 @@ router.patch("/:id", async (req, res, next) => {
     const quote = await quotes.updateQuote(Number(req.params.id), req.body ?? {});
     res.json(quote);
   } catch (err) {
+    if (err.message === "INVALID_LINE") {
+      return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning (fritextrad), plus antal och pris" });
+    }
     next(err);
   }
 });

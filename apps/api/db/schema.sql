@@ -255,11 +255,15 @@ CREATE TABLE IF NOT EXISTS quotes (
 CREATE TABLE IF NOT EXISTS quote_lines (
   id                 INT PRIMARY KEY AUTO_INCREMENT,
   quote_id           INT NOT NULL,
-  product_variant_id INT NOT NULL,
+  -- NULL for a fritextrad (free-text line) — description then carries the
+  -- text instead of a real product name, and tax_rate_percent is used
+  -- as-is instead of being read off a product.
+  product_variant_id INT NULL,
   description        VARCHAR(255) NULL,
   quantity           DECIMAL(10,2) NOT NULL,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
   print_description  VARCHAR(255) NULL,
   sort_order         INT NOT NULL DEFAULT 0,
@@ -307,11 +311,16 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_lines (
   id                 INT PRIMARY KEY AUTO_INCREMENT,
   order_id           INT NOT NULL,
-  product_variant_id INT NOT NULL,
+  -- NULL for a fritextrad (free-text line) — description then carries the
+  -- text instead of a real product name, and tax_rate_percent is used
+  -- as-is instead of being read off a product.
+  product_variant_id INT NULL,
+  description        VARCHAR(255) NULL,
   quantity           DECIMAL(10,2) NOT NULL,
   delivered_qty      DECIMAL(10,2) NOT NULL DEFAULT 0,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
   print_description  VARCHAR(255) NULL,
   sort_order         INT NOT NULL DEFAULT 0,
@@ -472,10 +481,15 @@ CREATE TABLE IF NOT EXISTS sales (
 CREATE TABLE IF NOT EXISTS sale_lines (
   id                 INT PRIMARY KEY AUTO_INCREMENT,
   sale_id            INT NOT NULL,
-  product_variant_id INT NOT NULL,
+  -- NULL for a fritextrad (free-text line) — description then carries the
+  -- text instead of a real product name, and tax_rate_percent is used
+  -- as-is instead of being read off a product.
+  product_variant_id INT NULL,
+  description        VARCHAR(255) NULL,
   quantity           DECIMAL(10,2) NOT NULL,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent   DECIMAL(5,2) NULL,
   CONSTRAINT fk_sale_lines_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
   CONSTRAINT fk_sale_lines_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
   INDEX idx_sale_lines_sale (sale_id),
