@@ -29,6 +29,9 @@ const HEADER_ALIASES = {
   brand: "brand",
   varumarke: "brand",
   "varumärke": "brand",
+  supplier: "supplier",
+  leverantor: "supplier",
+  "leverantör": "supplier",
   baseprice: "basePrice",
   price: "basePrice",
   pris: "basePrice",
@@ -113,10 +116,11 @@ export async function importProductsCsv(buffer) {
     const articleNumber = row.articleNumber?.trim();
     const name = row.name?.trim();
     const basePrice = toNumberOrNull(row.basePrice);
+    const supplier = row.supplier?.trim();
 
-    if (!articleNumber || !name || basePrice === null) {
+    if (!articleNumber || !name || basePrice === null || !supplier) {
       if (errors.length < 50) {
-        errors.push(`Rad ${rowNumber}: articleNumber, name och basePrice krävs`);
+        errors.push(`Rad ${rowNumber}: articleNumber, name, basePrice och supplier krävs`);
       }
       return;
     }
@@ -127,6 +131,7 @@ export async function importProductsCsv(buffer) {
         name,
         category: row.category?.trim() || null,
         brand: row.brand?.trim() || null,
+        supplier,
         basePrice,
         costPrice: toNumberOrNull(row.costPrice),
         printable: toBool(row.printable),
@@ -145,6 +150,7 @@ export async function importProductsCsv(buffer) {
   const products = [...productsByArticle.values()];
   const categoryMap = await resolveNameToId("product_categories", products.map((p) => p.category));
   const brandMap = await resolveNameToId("brands", products.map((p) => p.brand));
+  const supplierMap = await resolveNameToId("suppliers", products.map((p) => p.supplier));
 
   let productsWritten = 0;
   let variantsWritten = 0;
@@ -159,20 +165,21 @@ export async function importProductsCsv(buffer) {
           p.name,
           p.category ? categoryMap.get(p.category.toLowerCase()) ?? null : null,
           p.brand ? brandMap.get(p.brand.toLowerCase()) ?? null : null,
+          supplierMap.get(p.supplier.toLowerCase()) ?? null,
           p.printable ? 1 : 0,
           p.basePrice,
           p.costPrice
         );
-        return "(?, ?, ?, ?, ?, ?, ?)";
+        return "(?, ?, ?, ?, ?, ?, ?, ?)";
       })
       .join(",");
 
     await pool.query(
-      `INSERT INTO products (article_number, name, category_id, brand_id, printable, base_price, cost_price)
+      `INSERT INTO products (article_number, name, category_id, brand_id, supplier_id, printable, base_price, cost_price)
        VALUES ${placeholders}
        ON DUPLICATE KEY UPDATE
          name = VALUES(name), category_id = VALUES(category_id), brand_id = VALUES(brand_id),
-         printable = VALUES(printable), base_price = VALUES(base_price), cost_price = VALUES(cost_price)`,
+         supplier_id = VALUES(supplier_id), printable = VALUES(printable), base_price = VALUES(base_price), cost_price = VALUES(cost_price)`,
       values
     );
     productsWritten += batch.length;
