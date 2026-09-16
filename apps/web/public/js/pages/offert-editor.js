@@ -38,6 +38,7 @@ const el = {
   newProductForm: document.getElementById("new-product-form"),
   cancelNewProductBtn: document.getElementById("cancel-new-product-btn"),
   newProductError: document.getElementById("new-product-error"),
+  newProductSupplierOptions: document.getElementById("new-product-supplier-options"),
   linesEmpty: document.getElementById("lines-empty"),
   totalsSubtotal: document.getElementById("totals-subtotal"),
   totalsVat: document.getElementById("totals-vat"),
@@ -196,7 +197,8 @@ el.lineSearch.addEventListener("input", () => {
     return;
   }
   lineSearchTimer = setTimeout(async () => {
-    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    const customerParam = state.customerId ? `&customerId=${state.customerId}` : "";
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}${customerParam}`);
     el.lineResults.innerHTML = rows
       .map(
         (v) => `
@@ -219,7 +221,7 @@ el.lineResults.addEventListener("click", (event) => {
     colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
-    discountPercent: 0,
+    discountPercent: Number(v.suggested_discount_percent ?? 0),
     printMethodId: null,
     printDescription: "",
     taxRatePercent: Number(v.tax_rate_percent),
@@ -285,6 +287,7 @@ el.newProductForm.addEventListener("submit", async (event) => {
     const product = await api.post("/products", {
       name: form.name.trim(),
       articleNumber: form.articleNumber.trim() || undefined,
+      supplier: form.supplier,
       basePrice,
       costPrice: form.costPrice ? Number(form.costPrice) : undefined,
       printable: form.printable === "on",
@@ -455,6 +458,9 @@ async function init() {
   el.fritextPrintMethod.innerHTML =
     `<option value="">Inget tryck</option>` +
     printMethods.map((pm) => `<option value="${pm.id}">${escapeHtml(pm.name)}</option>`).join("");
+
+  const suppliers = (await api.get("/suppliers")).rows;
+  el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
   if (quoteId) {
     const quote = await api.get(`/quotes/${quoteId}`);

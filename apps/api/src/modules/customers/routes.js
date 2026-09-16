@@ -149,4 +149,66 @@ router.delete("/:id/logos/:logoId", async (req, res, next) => {
   }
 });
 
+router.get("/:id/discounts", async (req, res, next) => {
+  try {
+    res.json({ rows: await customers.listDiscounts(Number(req.params.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/discounts", async (req, res, next) => {
+  try {
+    const discount = await customers.addDiscount(Number(req.params.id), req.body ?? {});
+    res.status(201).json(discount);
+  } catch (err) {
+    if (err.message === "DISCOUNT_TARGET_REQUIRED") {
+      return res.status(400).json({ error: "Välj antingen leverantör eller produkt" });
+    }
+    if (err.message === "DISCOUNT_TARGET_AMBIGUOUS") {
+      return res.status(400).json({ error: "Välj antingen leverantör eller produkt, inte båda" });
+    }
+    if (err.message === "INVALID_DISCOUNT_PERCENT") {
+      return res.status(400).json({ error: "Rabatten måste vara mellan 0 och 100 %" });
+    }
+    next(err);
+  }
+});
+
+router.delete("/:id/discounts/:discountId", async (req, res, next) => {
+  try {
+    await customers.removeDiscount(Number(req.params.id), Number(req.params.discountId));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/:id/assortment", async (req, res, next) => {
+  try {
+    res.json({ rows: await customers.listAssortment(Number(req.params.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/assortment", async (req, res, next) => {
+  try {
+    if (!req.body?.productId) return res.status(400).json({ error: "productId krävs" });
+    const rows = await customers.addToAssortment(Number(req.params.id), Number(req.body.productId));
+    res.status(201).json({ rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/:id/assortment/:productId", async (req, res, next) => {
+  try {
+    await customers.removeFromAssortment(Number(req.params.id), Number(req.params.productId));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

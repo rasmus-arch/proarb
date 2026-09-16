@@ -197,20 +197,102 @@ export async function getOrCreatePortalToken(customerId) {
   return token;
 }
 
+// "Mina sidor" (portal.js) shows this customer's curated assortment
+// instead of their offert-/orderhistorik — see customer_assortment below.
+// One row per variant (color/size), flat, same shape as listProducts.
 export async function getCustomerByPortalToken(token) {
   const [[customer]] = await pool.query(`SELECT * FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) return null;
 
-  const [quotes] = await pool.query(
-    `SELECT id, quote_number, status, created_at, public_token FROM quotes
-     WHERE customer_id = ? ORDER BY created_at DESC`,
-    [customer.id]
-  );
-  const [orders] = await pool.query(
-    `SELECT id, order_number, status, created_at FROM orders
-     WHERE customer_id = ? ORDER BY created_at DESC`,
+  const [products] = await pool.query(
+    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price,
+            v.id AS variant_id, v.sku, v.color, v.size, v.price_override
+     FROM customer_assortment ca
+     JOIN products p ON p.id = ca.product_id
+     LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
+     WHERE ca.customer_id = ? AND p.active = 1
+     ORDER BY p.name ASC, v.color ASC, v.size ASC`,
     [customer.id]
   );
 
-  return { customer, quotes, orders };
+  return { customer, products };
+}
+
+// --- Sortiment ("Mina sidor") ----------------------------------------------
+// Which products a given customer's portal page is allowed to show. Managed
+// from kund-editor.html; rendered read-only on the public /portal/:token
+// page (customers/portal.js).
+
+export async function listAssortment(customerId) {
+  const [rows] = await pool.query(
+    `SELECT ca.id, p.id AS product_id, p.article_number, p.name, p.base_price
+     FROM customer_assortment ca
+     JOIN products p ON p.id = ca.product_id
+     WHERE ca.customer_id = ?
+     ORDER BY p.name ASC`,
+    [customerId]
+  );
+  return rows;
+}
+
+export async function addToAssortment(customerId, productId) {
+  await pool.query(`INSERT IGNORE INTO customer_assortment (customer_id, product_id) VALUES (?, ?)`, [
+    customerId,
+    productId,
+  ]);
+  return listAssortment(customerId);
+}
+
+export async function removeFromAssortment(customerId, productId) {
+  await pool.query(`DELETE FROM customer_assortment WHERE customer_id = ? AND product_id = ?`, [
+    customerId,
+    productId,
+  ]);
+}
+
+// --- Stående kundrabatter --------------------------------------------------
+// En rad är antingen en leverantörsrabatt (supplier_id satt) eller en
+// produktrabatt (product_id satt), aldrig båda. Produktregeln vinner om en
+// kund har båda på samma produkt — se products/service.js där
+// suggested_discount_percent räknas ut (mest specifika COALESCE-träffen
+// vinner). Rabatten är bara ett förval när en rad läggs till i
+// offert/order/kassa — går fortfarande att skriva över per rad precis som
+// idag.
+
+export async function listDiscounts(customerId) {
+  const [rows] = await pool.query(
+    `SELECT cd.*, s.name AS supplier_name, p.name AS product_name, p.article_number
+     FROM customer_discounts cd
+     LEFT JOIN suppliers s ON s.id = cd.supplier_id
+     LEFT JOIN products p ON p.id = cd.product_id
+     WHERE cd.customer_id = ?
+     ORDER BY cd.created_at DESC`,
+    [customerId]
+  );
+  return rows;
+}
+
+export async function addDiscount(customerId, { supplierId, productId, discountPercent }) {
+  if (!supplierId && !productId) throw new Error("DISCOUNT_TARGET_REQUIRED");
+  if (supplierId && productId) throw new Error("DISCOUNT_TARGET_AMBIGUOUS");
+  const percent = Number(discountPercent);
+  if (!(percent > 0) || percent > 100) throw new Error("INVALID_DISCOUNT_PERCENT");
+
+  const [result] = await pool.query(
+    `INSERT INTO customer_discounts (customer_id, supplier_id, product_id, discount_percent) VALUES (?, ?, ?, ?)`,
+    [customerId, supplierId ?? null, productId ?? null, percent]
+  );
+  const [[row]] = await pool.query(
+    `SELECT cd.*, s.name AS supplier_name, p.name AS product_name, p.article_number
+     FROM customer_discounts cd
+     LEFT JOIN suppliers s ON s.id = cd.supplier_id
+     LEFT JOIN products p ON p.id = cd.product_id
+     WHERE cd.id = ?`,
+    [result.insertId]
+  );
+  return row;
+}
+
+export async function removeDiscount(customerId, discountId) {
+  await pool.query(`DELETE FROM customer_discounts WHERE id = ? AND customer_id = ?`, [discountId, customerId]);
 }

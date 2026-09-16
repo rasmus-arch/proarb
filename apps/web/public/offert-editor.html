@@ -163,6 +163,11 @@
             <span class="text-slate-700">Artikelnummer</span>
             <input name="articleNumber" class="input mt-1" placeholder="Genereras automatiskt om tomt" />
           </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Leverantör *</span>
+            <input name="supplier" list="new-product-supplier-options" required class="input mt-1" />
+            <datalist id="new-product-supplier-options"></datalist>
+          </label>
           <div class="grid grid-cols-2 gap-3">
             <label class="block text-sm">
               <span class="text-slate-700">Pris ex moms *</span>

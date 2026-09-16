@@ -9,6 +9,7 @@ const newProductForm = document.getElementById("new-product-form");
 const productFormError = document.getElementById("product-form-error");
 const categoryOptions = document.getElementById("category-options");
 const brandOptions = document.getElementById("brand-options");
+const supplierOptions = document.getElementById("supplier-options");
 
 const importDialog = document.getElementById("import-dialog");
 const importFileInput = document.getElementById("import-file");
@@ -58,9 +59,14 @@ searchEl.addEventListener("input", () => {
 // --- New product dialog -----------------------------------------------
 
 async function populateDatalists() {
-  const [categories, brands] = await Promise.all([api.get("/categories"), api.get("/brands")]);
+  const [categories, brands, suppliers] = await Promise.all([
+    api.get("/categories"),
+    api.get("/brands"),
+    api.get("/suppliers"),
+  ]);
   categoryOptions.innerHTML = categories.rows.map((c) => `<option value="${escapeHtml(c.name)}">`).join("");
   brandOptions.innerHTML = brands.rows.map((b) => `<option value="${escapeHtml(b.name)}">`).join("");
+  supplierOptions.innerHTML = suppliers.rows.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 }
 
 document.getElementById("new-product-btn").addEventListener("click", async () => {
@@ -81,6 +87,7 @@ newProductForm.addEventListener("submit", async (event) => {
     name: form.name,
     category: form.category || undefined,
     brand: form.brand || undefined,
+    supplier: form.supplier,
     basePrice: Number(form.basePrice),
     costPrice: form.costPrice ? Number(form.costPrice) : undefined,
     printable: form.printable === "on",

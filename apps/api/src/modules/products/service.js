@@ -33,34 +33,49 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
   return { rows, total, page, pageSize };
 }
 
+// Shared by searchVariants/findVariantByBarcode below: a customer's standing
+// discount, when one applies — a rule on this exact product wins over a
+// rule on the product's supplier (see customers/service.js). 0 (not NULL)
+// when no customerId is given or no rule matches, so callers can use it
+// directly as a line's discountPercent without an extra null-check.
+const DISCOUNT_SELECT = `
+  COALESCE(
+    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
+    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
+    0
+  ) AS suggested_discount_percent
+`;
+
 // Used by the POS / warehouse scanning flows: look up a sellable variant
 // directly by the barcode a scanner just read.
-export async function findVariantByBarcode(barcode) {
+export async function findVariantByBarcode(barcode, customerId = null) {
   const [[variant]] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent,
+            ${DISCOUNT_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.barcode = ? AND v.active = 1`,
-    [barcode]
+    [customerId ?? 0, customerId ?? 0, barcode]
   );
   return variant ?? null;
 }
 
 // Small autocomplete result set used by the quote/order line builder.
 // Includes cost_price so the UI can show margin as lines are added.
-export async function searchVariants(search = "", limit = 15) {
+export async function searchVariants(search = "", limit = 15, customerId = null) {
   const like = `%${search}%`;
   const [rows] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable,
+            ${DISCOUNT_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.active = 1 AND p.active = 1
        AND (p.name LIKE ? OR p.article_number LIKE ? OR v.sku LIKE ? OR v.barcode LIKE ?)
      ORDER BY p.name ASC
      LIMIT ?`,
-    [like, like, like, like, limit]
+    [customerId ?? 0, customerId ?? 0, like, like, like, like, limit]
   );
   return rows;
 }
@@ -96,18 +111,22 @@ export async function addSupplier(productId, { supplierId, supplierSku, costPric
 export async function createProduct(data) {
   const categoryId = data.categoryId ?? (await resolveNameToId("product_categories", data.category));
   const brandId = data.brandId ?? (await resolveNameToId("brands", data.brand));
+  // Required (checked in routes.js) since customer_discounts matches a
+  // standing leverantörsrabatt against this column — see PLAN.md.
+  const supplierId = data.supplierId ?? (await resolveNameToId("suppliers", data.supplier));
   const articleNumber = data.articleNumber?.trim() || nextArticleNumber();
 
   const [result] = await pool.query(
     `INSERT INTO products
-       (article_number, name, description, category_id, brand_id, printable, unit, tax_rate_percent, base_price, cost_price)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (article_number, name, description, category_id, brand_id, supplier_id, printable, unit, tax_rate_percent, base_price, cost_price)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       articleNumber,
       data.name,
       data.description ?? null,
       categoryId,
       brandId,
+      supplierId,
       data.printable ? 1 : 0,
       data.unit ?? "st",
       data.taxRatePercent ?? 25,
@@ -132,6 +151,7 @@ export async function updateProduct(id, data) {
     description: data.description,
     category_id: data.categoryId,
     brand_id: data.brandId,
+    supplier_id: data.supplierId,
     printable: data.printable === undefined ? undefined : data.printable ? 1 : 0,
     unit: data.unit,
     tax_rate_percent: data.taxRatePercent,

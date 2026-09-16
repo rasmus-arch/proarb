@@ -167,6 +167,13 @@ CREATE TABLE IF NOT EXISTS products (
   description      TEXT NULL,
   category_id      INT NULL,
   brand_id         INT NULL,
+  -- Den leverantör produkten köps in från. Krävs numera i formulären (även
+  -- vid snabbskapande i offert/order) eftersom stående leverantörsrabatter
+  -- (customer_discounts) matchar på den här kolumnen — men kolumnen är
+  -- NULL-bar i databasen så en uppgraderad, redan i drift, installation med
+  -- äldre produkter inte går sönder; de saknar bara leverantörsrabatt tills
+  -- någon redigerar in en leverantör på dem.
+  supplier_id      INT NULL,
   printable        TINYINT(1) NOT NULL DEFAULT 0,
   unit             VARCHAR(20) NOT NULL DEFAULT 'st',
   tax_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 25.00,
@@ -178,8 +185,10 @@ CREATE TABLE IF NOT EXISTS products (
   updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES product_categories(id),
   CONSTRAINT fk_products_brand FOREIGN KEY (brand_id) REFERENCES brands(id),
+  CONSTRAINT fk_products_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
   INDEX idx_products_category (category_id),
   INDEX idx_products_brand (brand_id),
+  INDEX idx_products_supplier (supplier_id),
   FULLTEXT INDEX ft_products_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -196,6 +205,38 @@ CREATE TABLE IF NOT EXISTS product_variants (
   active         TINYINT(1) NOT NULL DEFAULT 1,
   CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products(id),
   INDEX idx_variants_product (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Stående kundrabatt i procent, antingen på en hel leverantör eller på en
+-- enskild produkt (aldrig båda på samma rad — det väljs i formuläret, se
+-- customers/discounts-service.js). En produktregel slår en leverantörsregel
+-- för samma kund om båda skulle matcha samma rad i en offert/order/kassa.
+CREATE TABLE IF NOT EXISTS customer_discounts (
+  id                INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id       INT NOT NULL,
+  supplier_id       INT NULL,
+  product_id        INT NULL,
+  discount_percent  DECIMAL(5,2) NOT NULL,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cust_discounts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_cust_discounts_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+  CONSTRAINT fk_cust_discounts_product FOREIGN KEY (product_id) REFERENCES products(id),
+  INDEX idx_cust_discounts_customer (customer_id),
+  INDEX idx_cust_discounts_supplier (customer_id, supplier_id),
+  INDEX idx_cust_discounts_product (customer_id, product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- "Mina sidor" (kundportalen, /portal/:token) visar numera ett utvalt
+-- sortiment istället för offert-/orderhistorik — det sortimentet är den
+-- här tabellen: vilka produkter en viss kund får se på sin portalsida.
+CREATE TABLE IF NOT EXISTS customer_assortment (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id INT NOT NULL,
+  product_id  INT NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cust_assortment_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_cust_assortment_product FOREIGN KEY (product_id) REFERENCES products(id),
+  UNIQUE KEY uq_cust_assortment (customer_id, product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS product_suppliers (

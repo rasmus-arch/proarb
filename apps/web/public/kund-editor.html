@@ -109,11 +109,67 @@
         <p id="logos-empty" class="py-4 text-center text-sm text-slate-500">Inga filer uppladdade ännu.</p>
       </section>
 
+      <!-- Stående rabatt -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Stående rabatt</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Rabatt i procent som föreslås automatiskt när en rad läggs till i offert, order eller kassa
+          för den här kunden — går fortfarande att ändra per rad. En rabatt på en specifik produkt
+          vinner över en rabatt på hela leverantören.
+        </p>
+
+        <form id="discount-form" class="mt-3 flex flex-wrap items-end gap-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Typ</span>
+            <select id="discount-target-type" class="input mt-1">
+              <option value="supplier">Leverantör</option>
+              <option value="product">Produkt</option>
+            </select>
+          </label>
+          <label id="discount-supplier-wrap" class="block text-sm">
+            <span class="text-slate-700">Leverantör</span>
+            <input id="discount-supplier-input" list="discount-supplier-options" class="input mt-1" />
+            <datalist id="discount-supplier-options"></datalist>
+          </label>
+          <label id="discount-product-wrap" class="relative hidden block text-sm">
+            <span class="text-slate-700">Produkt</span>
+            <input id="discount-product-input" class="input mt-1 w-48" placeholder="Sök produkt…" autocomplete="off" />
+            <div id="discount-product-results" class="absolute z-10 mt-1 w-56 divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Rabatt %</span>
+            <input id="discount-percent-input" type="number" min="0.01" max="100" step="0.01" class="input mt-1 w-24" />
+          </label>
+          <button type="submit" class="btn">Lägg till</button>
+        </form>
+        <p id="discount-error" class="mt-2 hidden text-sm text-red-600"></p>
+
+        <ul id="discount-list" class="mt-3 divide-y divide-slate-100"></ul>
+        <p id="discounts-empty" class="py-4 text-center text-sm text-slate-500">Inga rabatter ännu.</p>
+      </section>
+
+      <!-- Sortiment (Mina sidor) -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Sortiment (Mina sidor)</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Vilka produkter kunden ser på sin portalsida ("Mina sidor") — ingen order-/offerthistorik
+          visas där längre, bara det utvalda sortimentet nedan.
+        </p>
+
+        <div class="relative mt-3 max-w-sm">
+          <input id="assortment-search" type="text" placeholder="Sök produkt att lägga till…" class="input" autocomplete="off" />
+          <div id="assortment-results" class="absolute z-10 mt-1 w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>
+        </div>
+
+        <ul id="assortment-list" class="mt-3 divide-y divide-slate-100"></ul>
+        <p id="assortment-empty" class="py-4 text-center text-sm text-slate-500">Inget sortiment upplagt ännu.</p>
+      </section>
+
       <!-- Kundportal -->
       <section class="mt-4 card">
         <h2 class="text-sm font-medium text-slate-900">Kundportal</h2>
         <p class="mt-1 text-sm text-slate-600">
-          En länk utan inloggning där kunden själv kan se sina offerter och ordrar.
+          En länk utan inloggning där kunden själv kan se sitt sortiment.
         </p>
         <div class="mt-3 flex flex-wrap items-center gap-2">
           <button type="button" id="portal-generate-btn" class="btn-secondary">Skapa/visa länk</button>

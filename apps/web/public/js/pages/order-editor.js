@@ -33,6 +33,8 @@ const el = {
   customerSelected: document.getElementById("customer-selected"),
   customerSelectedName: document.getElementById("customer-selected-name"),
   customerChangeBtn: document.getElementById("customer-change-btn"),
+  customerNotesBanner: document.getElementById("customer-notes-banner"),
+  customerNotesText: document.getElementById("customer-notes-text"),
   referenceSelect: document.getElementById("reference-select"),
   deliveryMethod: document.getElementById("delivery-method"),
   lineSearchWrap: document.getElementById("line-search-wrap"),
@@ -48,6 +50,7 @@ const el = {
   newProductForm: document.getElementById("new-product-form"),
   cancelNewProductBtn: document.getElementById("cancel-new-product-btn"),
   newProductError: document.getElementById("new-product-error"),
+  newProductSupplierOptions: document.getElementById("new-product-supplier-options"),
   linesEmpty: document.getElementById("lines-empty"),
   totalsSubtotal: document.getElementById("totals-subtotal"),
   totalsVat: document.getElementById("totals-vat"),
@@ -184,7 +187,8 @@ el.lineSearch.addEventListener("input", () => {
     return;
   }
   lineSearchTimer = setTimeout(async () => {
-    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    const customerParam = state.customerId ? `&customerId=${state.customerId}` : "";
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}${customerParam}`);
     el.lineResults.innerHTML = rows
       .map(
         (v) => `
@@ -207,7 +211,7 @@ el.lineResults.addEventListener("click", (event) => {
     colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
-    discountPercent: 0,
+    discountPercent: Number(v.suggested_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
     sourcing: "STOCK",
@@ -271,6 +275,7 @@ el.newProductForm.addEventListener("submit", async (event) => {
     const product = await api.post("/products", {
       name: form.name.trim(),
       articleNumber: form.articleNumber.trim() || undefined,
+      supplier: form.supplier,
       basePrice,
       costPrice: form.costPrice ? Number(form.costPrice) : undefined,
       printable: form.printable === "on",
@@ -312,6 +317,13 @@ function selectCustomer(id, name) {
 async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);
   state.contacts = customer.contacts;
+
+  // Only relevant while creating a NEW order — staff should see anything
+  // noted about the customer before adding lines/leveranssätt etc. An
+  // already-saved order doesn't re-show this (nothing left to act on).
+  const hasNote = isNewOrder() && Boolean(customer.notes?.trim());
+  el.customerNotesBanner.classList.toggle("hidden", !hasNote);
+  if (hasNote) el.customerNotesText.textContent = customer.notes;
   el.referenceSelect.innerHTML =
     `<option value="">Ingen referens</option>` +
     customer.contacts
@@ -436,6 +448,9 @@ function applyReadOnlyState() {
 }
 
 async function init() {
+  const suppliers = (await api.get("/suppliers")).rows;
+  el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
+
   if (orderId) {
     const order = await api.get(`/orders/${orderId}`);
     state.lines = order.lines.map((l) => ({

@@ -35,6 +35,22 @@ const el = {
   portalGenerateBtn: document.getElementById("portal-generate-btn"),
   portalLink: document.getElementById("portal-link"),
   portalCopyBtn: document.getElementById("portal-copy-btn"),
+  discountForm: document.getElementById("discount-form"),
+  discountTargetType: document.getElementById("discount-target-type"),
+  discountSupplierWrap: document.getElementById("discount-supplier-wrap"),
+  discountSupplierInput: document.getElementById("discount-supplier-input"),
+  discountSupplierOptions: document.getElementById("discount-supplier-options"),
+  discountProductWrap: document.getElementById("discount-product-wrap"),
+  discountProductInput: document.getElementById("discount-product-input"),
+  discountProductResults: document.getElementById("discount-product-results"),
+  discountPercentInput: document.getElementById("discount-percent-input"),
+  discountError: document.getElementById("discount-error"),
+  discountList: document.getElementById("discount-list"),
+  discountsEmpty: document.getElementById("discounts-empty"),
+  assortmentSearch: document.getElementById("assortment-search"),
+  assortmentResults: document.getElementById("assortment-results"),
+  assortmentList: document.getElementById("assortment-list"),
+  assortmentEmpty: document.getElementById("assortment-empty"),
 };
 
 function escapeHtml(value) {
@@ -84,6 +100,22 @@ function renderLogos(logos) {
     .join("");
 }
 
+function renderDiscounts(discounts) {
+  el.discountsEmpty.classList.toggle("hidden", discounts.length > 0);
+  el.discountList.innerHTML = discounts
+    .map((d) => {
+      const label = d.supplier_id
+        ? `Leverantör: <span class="font-medium text-slate-900">${escapeHtml(d.supplier_name)}</span>`
+        : `Produkt: <span class="font-medium text-slate-900">${escapeHtml(d.product_name)}</span> <span class="text-slate-500">(${escapeHtml(d.article_number)})</span>`;
+      return `
+      <li class="flex items-center justify-between py-2 text-sm">
+        <div>${label} — ${Number(d.discount_percent)} %</div>
+        <button type="button" class="text-slate-400 hover:text-red-600" data-remove-discount="${d.id}">✕</button>
+      </li>`;
+    })
+    .join("");
+}
+
 async function loadCustomer() {
   const customer = await api.get(`/customers/${customerId}`);
   el.title.textContent = customer.name;
@@ -98,6 +130,31 @@ async function loadCustomer() {
   el.notes.value = customer.notes ?? "";
   renderContacts(customer.contacts);
   renderLogos(customer.logos);
+
+  const { rows: suppliers } = await api.get("/suppliers");
+  el.discountSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
+
+  const { rows: discounts } = await api.get(`/customers/${customerId}/discounts`);
+  renderDiscounts(discounts);
+
+  const { rows: assortment } = await api.get(`/customers/${customerId}/assortment`);
+  renderAssortment(assortment);
+}
+
+function renderAssortment(rows) {
+  el.assortmentEmpty.classList.toggle("hidden", rows.length > 0);
+  el.assortmentList.innerHTML = rows
+    .map(
+      (p) => `
+      <li class="flex items-center justify-between py-2 text-sm">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(p.name)}</span>
+          <span class="ml-2 text-slate-500">${escapeHtml(p.article_number)}</span>
+        </div>
+        <button type="button" class="text-slate-400 hover:text-red-600" data-remove-assortment="${p.product_id}">✕</button>
+      </li>`
+    )
+    .join("");
 }
 
 el.saveBtn.addEventListener("click", async () => {
@@ -179,6 +236,137 @@ el.logoList.addEventListener("click", async (event) => {
   const id = event.target.dataset.removeLogo;
   if (id === undefined) return;
   await api.delete(`/customers/${customerId}/logos/${id}`);
+  loadCustomer();
+});
+
+// --- Stående rabatt --------------------------------------------------------
+
+let selectedDiscountProduct = null;
+
+function updateDiscountTargetVisibility() {
+  const isProduct = el.discountTargetType.value === "product";
+  el.discountSupplierWrap.classList.toggle("hidden", isProduct);
+  el.discountProductWrap.classList.toggle("hidden", !isProduct);
+}
+el.discountTargetType.addEventListener("change", updateDiscountTargetVisibility);
+updateDiscountTargetVisibility();
+
+let discountProductSearchTimer;
+el.discountProductInput.addEventListener("input", () => {
+  selectedDiscountProduct = null;
+  clearTimeout(discountProductSearchTimer);
+  const q = el.discountProductInput.value.trim();
+  if (!q) {
+    el.discountProductResults.innerHTML = "";
+    return;
+  }
+  discountProductSearchTimer = setTimeout(async () => {
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    el.discountProductResults.innerHTML = rows
+      .map(
+        (v) => `
+        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${v.product_id}" data-name="${escapeHtml(v.name)}">
+          <div class="font-medium text-slate-900">${escapeHtml(v.name)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))}</div>
+        </button>`
+      )
+      .join("");
+  }, 200);
+});
+
+el.discountProductResults.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-product-id]");
+  if (!button) return;
+  selectedDiscountProduct = { id: Number(button.dataset.productId), name: button.dataset.name };
+  el.discountProductInput.value = button.dataset.name;
+  el.discountProductResults.innerHTML = "";
+});
+
+el.discountForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  el.discountError.classList.add("hidden");
+
+  const isProduct = el.discountTargetType.value === "product";
+  const payload = { discountPercent: Number(el.discountPercentInput.value) };
+  if (isProduct) {
+    if (!selectedDiscountProduct) {
+      el.discountError.textContent = "Välj en produkt ur sökresultaten";
+      el.discountError.classList.remove("hidden");
+      return;
+    }
+    payload.productId = selectedDiscountProduct.id;
+  } else {
+    if (!el.discountSupplierInput.value.trim()) {
+      el.discountError.textContent = "Välj en leverantör";
+      el.discountError.classList.remove("hidden");
+      return;
+    }
+    const { rows: suppliers } = await api.get("/suppliers");
+    const match = suppliers.find((s) => s.name === el.discountSupplierInput.value.trim());
+    if (!match) {
+      el.discountError.textContent = "Okänd leverantör — välj en från listan";
+      el.discountError.classList.remove("hidden");
+      return;
+    }
+    payload.supplierId = match.id;
+  }
+
+  try {
+    await api.post(`/customers/${customerId}/discounts`, payload);
+    el.discountForm.reset();
+    selectedDiscountProduct = null;
+    updateDiscountTargetVisibility();
+    loadCustomer();
+  } catch (err) {
+    el.discountError.textContent = err.message;
+    el.discountError.classList.remove("hidden");
+  }
+});
+
+el.discountList.addEventListener("click", async (event) => {
+  const id = event.target.dataset.removeDiscount;
+  if (id === undefined) return;
+  await api.delete(`/customers/${customerId}/discounts/${id}`);
+  loadCustomer();
+});
+
+// --- Sortiment (Mina sidor) ------------------------------------------------
+
+let assortmentSearchTimer;
+el.assortmentSearch.addEventListener("input", () => {
+  clearTimeout(assortmentSearchTimer);
+  const q = el.assortmentSearch.value.trim();
+  if (!q) {
+    el.assortmentResults.innerHTML = "";
+    return;
+  }
+  assortmentSearchTimer = setTimeout(async () => {
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    el.assortmentResults.innerHTML = rows
+      .map(
+        (v) => `
+        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${v.product_id}">
+          <div class="font-medium text-slate-900">${escapeHtml(v.name)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))}</div>
+        </button>`
+      )
+      .join("");
+  }, 200);
+});
+
+el.assortmentResults.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-product-id]");
+  if (!button) return;
+  await api.post(`/customers/${customerId}/assortment`, { productId: Number(button.dataset.productId) });
+  el.assortmentSearch.value = "";
+  el.assortmentResults.innerHTML = "";
+  loadCustomer();
+});
+
+el.assortmentList.addEventListener("click", async (event) => {
+  const productId = event.target.dataset.removeAssortment;
+  if (productId === undefined) return;
+  await api.delete(`/customers/${customerId}/assortment/${productId}`);
   loadCustomer();
 });
 

@@ -30,6 +30,11 @@
           <button type="button" id="customer-change-btn" class="text-sm text-blue-700 underline">Byt</button>
         </div>
 
+        <div id="customer-notes-banner" class="mt-3 hidden rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p class="font-medium">Anteckning om kunden</p>
+          <p id="customer-notes-text" class="mt-1 whitespace-pre-wrap"></p>
+        </div>
+
         <div class="mt-3 grid max-w-md grid-cols-2 gap-3">
           <label class="block text-sm">
             <span class="text-slate-700">Referensperson</span>
@@ -168,6 +173,11 @@
           <label class="block text-sm">
             <span class="text-slate-700">Artikelnummer</span>
             <input name="articleNumber" class="input mt-1" placeholder="Genereras automatiskt om tomt" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Leverantör *</span>
+            <input name="supplier" list="new-product-supplier-options" required class="input mt-1" />
+            <datalist id="new-product-supplier-options"></datalist>
           </label>
           <div class="grid grid-cols-2 gap-3">
             <label class="block text-sm">

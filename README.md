@@ -139,6 +139,18 @@ PLAN.md              Kravspec och fasindelad byggplan
   GitHub-synk. `TENANT_NAME` stämplas som label så flera kunders
   rapporter går att skilja åt i samma repo. Listan (`GET
   /api/bug-reports`, för att se synkstatus) kräver ADMIN.
+- **Fas 10** – klar: stående kundrabatter i procent, antingen på en hel
+  leverantör eller på en specifik produkt (produktregeln vinner om båda
+  matchar) — hanteras under kundkortet ("Stående rabatt") och föreslås
+  automatiskt (fortfarande redigerbart per rad) när en rad läggs till i
+  offert, order eller kassa. Detta gjorde leverantör obligatoriskt på alla
+  nya produkter, inklusive de som snabbskapas i offert/order (kolumnen är
+  dock nullable i databasen så en uppgraderad installation med äldre
+  produkter inte går sönder). Ny order åt en kund med en ifylld
+  kundanteckning visar nu anteckningen som en notis direkt i order-editorn.
+  "Mina sidor" (kundportalen) visar numera ett utvalt sortiment istället
+  för offert-/orderhistorik — vilka produkter som visas hanteras under
+  kundkortet ("Sortiment").
 - **Kvar**: riktig Fortnox-koppling (order → kundfaktura, synk tillbaka
   — stub finns i `fortnox.js`, väntar på testmiljö). Mindre luckor:
   auditlogg och GDPR-verktyg (export/radering av persondata) är inte

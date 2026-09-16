@@ -25,7 +25,8 @@ router.get("/", async (req, res, next) => {
 
 router.get("/search", async (req, res, next) => {
   try {
-    const rows = await products.searchVariants(String(req.query.q ?? ""), Number(req.query.limit) || 15);
+    const customerId = req.query.customerId ? Number(req.query.customerId) : null;
+    const rows = await products.searchVariants(String(req.query.q ?? ""), Number(req.query.limit) || 15, customerId);
     res.json({ rows });
   } catch (err) {
     next(err);
@@ -34,7 +35,8 @@ router.get("/search", async (req, res, next) => {
 
 router.get("/by-barcode/:barcode", async (req, res, next) => {
   try {
-    const variant = await products.findVariantByBarcode(req.params.barcode);
+    const customerId = req.query.customerId ? Number(req.query.customerId) : null;
+    const variant = await products.findVariantByBarcode(req.params.barcode, customerId);
     if (!variant) return res.status(404).json({ error: "Ingen produkt med den streckkoden" });
     res.json(variant);
   } catch (err) {
@@ -56,6 +58,9 @@ router.post("/", async (req, res, next) => {
   try {
     if (!req.body?.name || req.body?.basePrice === undefined) {
       return res.status(400).json({ error: "name och basePrice krävs" });
+    }
+    if (!req.body?.supplierId && !req.body?.supplier?.trim()) {
+      return res.status(400).json({ error: "Leverantör krävs" });
     }
     const product = await products.createProduct(req.body);
     res.status(201).json(product);

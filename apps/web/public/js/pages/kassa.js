@@ -71,10 +71,14 @@ function escapeHtml(value) {
   return div.innerHTML;
 }
 
+function itemTotal(item) {
+  return item.unitPrice * item.qty * (1 - (item.discountPercent ?? 0) / 100);
+}
+
 function cartTotals() {
   const items = [...cart.values()];
-  const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.qty, 0);
-  const vat = items.reduce((sum, i) => sum + i.unitPrice * i.qty * (i.taxRatePercent / 100), 0);
+  const subtotal = items.reduce((sum, i) => sum + itemTotal(i), 0);
+  const vat = items.reduce((sum, i) => sum + itemTotal(i) * (i.taxRatePercent / 100), 0);
   return { subtotal, vat, total: subtotal + vat };
 }
 
@@ -82,7 +86,7 @@ function cartTotals() {
 // not zero.
 function itemMargin(item) {
   if (item.costPrice === null || item.costPrice === undefined) return null;
-  return (item.unitPrice - item.costPrice) * item.qty;
+  return itemTotal(item) - item.costPrice * item.qty;
 }
 
 function marginLabel(margin) {
@@ -101,7 +105,8 @@ function renderCart() {
         <td class="py-2 pr-4">${item.productVariantId ? escapeHtml([item.color, item.size].filter(Boolean).join(" / ")) : "Fritextrad"}</td>
         <td class="py-2 pr-4 text-right">${item.qty}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice)}</td>
-        <td class="py-2 pr-4 text-right">${formatMoney(item.unitPrice * item.qty)}</td>
+        <td class="py-2 pr-4 text-right"><input type="number" min="0" max="100" step="0.01" class="input w-16 text-right" data-field="discountPercent" data-key="${key}" value="${item.discountPercent ?? 0}" /></td>
+        <td class="py-2 pr-4 text-right">${formatMoney(itemTotal(item))}</td>
         <td class="py-2 pr-4 text-right text-slate-500">${marginLabel(itemMargin(item))}</td>
         <td class="py-2 pr-2"><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${key}">✕</button></td>
       </tr>`
@@ -124,6 +129,27 @@ el.cartRows.addEventListener("click", (event) => {
   renderCart();
 });
 
+// Patches cells in place (rather than a full renderCart()) so the discount
+// input the user is typing into doesn't lose focus on every keystroke —
+// same approach as offert-editor.js / order-editor.js.
+el.cartRows.addEventListener("input", (event) => {
+  const { field, key } = event.target.dataset;
+  if (field !== "discountPercent" || key === undefined) return;
+  const item = cart.get(key);
+  item.discountPercent = Number(event.target.value) || 0;
+
+  const row = event.target.closest("tr");
+  row.querySelector("td:nth-last-child(3)").textContent = formatMoney(itemTotal(item));
+  row.querySelector("td:nth-last-child(2)").textContent = marginLabel(itemMargin(item));
+
+  const { total } = cartTotals();
+  const items = [...cart.values()];
+  const margins = items.map(itemMargin).filter((m) => m !== null);
+  const marginAmount = margins.reduce((sum, m) => sum + m, 0);
+  el.cartTotal.textContent = formatMoney(total);
+  el.cartMargin.textContent = marginLabel(marginAmount) + (margins.length < items.length && items.length > 0 ? " *" : "");
+});
+
 // Shared by barcode scan and product search — both resolve to a variant
 // shaped the same way. Repeat adds of the same variant just bump qty.
 function addVariantToCart(variant) {
@@ -138,6 +164,7 @@ function addVariantToCart(variant) {
       color: variant.color,
       size: variant.size,
       unitPrice: Number(variant.price_override ?? variant.base_price),
+      discountPercent: Number(variant.suggested_discount_percent ?? 0),
       taxRatePercent: Number(variant.tax_rate_percent),
       costPrice: variant.cost_price === null || variant.cost_price === undefined ? null : Number(variant.cost_price),
       qty: 1,
@@ -149,7 +176,8 @@ function addVariantToCart(variant) {
 async function handleScan(barcode) {
   el.scanError.classList.add("hidden");
   try {
-    const variant = await api.get(`/products/by-barcode/${encodeURIComponent(barcode)}`);
+    const customerParam = selectedCustomer ? `?customerId=${selectedCustomer.id}` : "";
+    const variant = await api.get(`/products/by-barcode/${encodeURIComponent(barcode)}${customerParam}`);
     addVariantToCart(variant);
   } catch (err) {
     el.scanError.textContent = err.message;
@@ -175,7 +203,8 @@ el.productSearch.addEventListener("input", () => {
     return;
   }
   productSearchTimer = setTimeout(async () => {
-    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
+    const customerParam = selectedCustomer ? `&customerId=${selectedCustomer.id}` : "";
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}${customerParam}`);
     el.productSearchResults.innerHTML = rows
       .map(
         (v) => `
@@ -334,7 +363,7 @@ el.completeSaleBtn.addEventListener("click", async () => {
             productVariantId: item.productVariantId,
             quantity: item.qty,
             unitPrice: item.unitPrice,
-            discountPercent: 0,
+            discountPercent: item.discountPercent ?? 0,
           }
         : {
             description: item.description,
