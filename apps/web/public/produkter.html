@@ -38,6 +38,7 @@
               <th class="py-2 pr-4 font-medium">SKU</th>
               <th class="py-2 pr-4 font-medium">Streckkod</th>
               <th class="py-2 pr-4 font-medium text-right">Pris (ex moms)</th>
+              <th class="py-2 pr-4 font-medium"></th>
             </tr>
           </thead>
           <tbody id="product-rows" class="divide-y divide-slate-100"></tbody>
@@ -84,10 +85,6 @@
             <span class="text-slate-700">Inköpspris ex moms (kr)</span>
             <input name="costPrice" type="number" step="0.01" min="0" class="input mt-1" />
           </label>
-          <label class="flex items-center gap-2 text-sm sm:col-span-2">
-            <input name="printable" type="checkbox" class="rounded border-slate-300" />
-            <span class="text-slate-700">Kan tryckas/broderas</span>
-          </label>
         </div>
 
         <h3 class="mt-5 text-sm font-medium text-slate-900">Första varianten</h3>
@@ -113,6 +110,47 @@
         <p id="product-form-error" class="mt-3 hidden text-sm text-red-600"></p>
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" id="cancel-product-btn" class="btn-secondary">Avbryt</button>
+          <button type="submit" class="btn">Spara</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Edit product dialog -->
+    <dialog id="edit-product-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <form id="edit-product-form" method="dialog" class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Redigera produkt</h2>
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm sm:col-span-2">
+            <span class="text-slate-700">Namn *</span>
+            <input name="name" required class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Kategori</span>
+            <input name="category" list="edit-category-options" class="input mt-1" />
+            <datalist id="edit-category-options"></datalist>
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Varumärke</span>
+            <input name="brand" list="edit-brand-options" class="input mt-1" />
+            <datalist id="edit-brand-options"></datalist>
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Leverantör *</span>
+            <input name="supplier" list="edit-supplier-options" required class="input mt-1" />
+            <datalist id="edit-supplier-options"></datalist>
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Pris ex moms (kr) *</span>
+            <input name="basePrice" type="number" step="0.01" min="0" required class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Inköpspris ex moms (kr)</span>
+            <input name="costPrice" type="number" step="0.01" min="0" class="input mt-1" />
+          </label>
+        </div>
+        <p id="edit-product-error" class="mt-3 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-edit-product-btn" class="btn-secondary">Avbryt</button>
           <button type="submit" class="btn">Spara</button>
         </div>
       </form>

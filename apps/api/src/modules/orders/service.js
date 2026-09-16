@@ -294,9 +294,14 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
 }
 
 // ---------------------------------------------------------------------
-// Tryck/produktionsflöde (Fas 6) — only order lines with a print_method_id
-// carry a meaningful print_status; a plain (untryckt) line is irrelevant
-// to the production queue.
+// Tryck/produktionsflöde (Fas 6) — a line only carries a meaningful
+// print_status once it has a print_description; a plain (untryckt) line
+// is irrelevant to the production queue. Previously this was driven by
+// choosing a specific print_method_id (Brodyr/Screentryck/...), but that
+// upfront method choice was dropped — every product can be printed, so
+// staff just type what's needed in print_description instead of picking
+// a category first. print_method_id/print_methods still exist in the
+// schema for old data but are no longer written to.
 // ---------------------------------------------------------------------
 
 const PRINT_STATUS_TRANSITIONS = {
@@ -310,16 +315,14 @@ export async function getPrintQueue({ status = "" } = {}) {
   const params = status ? [status] : [];
   const [rows] = await pool.query(
     `SELECT ol.id AS order_line_id, ol.order_id, o.order_number, o.status AS order_status,
-            ol.print_status, ol.quantity, ol.print_description,
-            pm.name AS print_method_name, c.name AS customer_name,
+            ol.print_status, ol.quantity, ol.print_description, c.name AS customer_name,
             v.sku, v.color, v.size, COALESCE(p.name, ol.description) AS product_name
      FROM order_lines ol
      JOIN orders o ON o.id = ol.order_id
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN product_variants v ON v.id = ol.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
-     JOIN print_methods pm ON pm.id = ol.print_method_id
-     WHERE ol.print_method_id IS NOT NULL
+     WHERE ol.print_description IS NOT NULL AND ol.print_description != ''
        AND o.status NOT IN ('CANCELLED', 'DELIVERED', 'INVOICED')
        ${statusClause}
      ORDER BY o.created_at ASC`,
@@ -334,7 +337,7 @@ export async function updatePrintStatus(orderLineId, newStatus) {
     [orderLineId]
   );
   if (!line) throw new Error("LINE_NOT_FOUND");
-  if (!line.print_method_id) throw new Error("LINE_NOT_PRINTED");
+  if (!line.print_description) throw new Error("LINE_NOT_PRINTED");
 
   const allowed = PRINT_STATUS_TRANSITIONS[line.print_status] ?? [];
   if (!allowed.includes(newStatus)) throw new Error("INVALID_TRANSITION");

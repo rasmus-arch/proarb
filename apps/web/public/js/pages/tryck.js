@@ -53,10 +53,7 @@ function renderRows(rows) {
             <div class="font-medium text-slate-900">${escapeHtml(r.product_name)}</div>
             <div class="text-xs text-slate-500">${escapeHtml([r.color, r.size, r.sku].filter(Boolean).join(" · "))}</div>
           </td>
-          <td class="py-2 pr-3">
-            <div>${escapeHtml(r.print_method_name)}</div>
-            ${r.print_description ? `<div class="text-xs text-slate-500">${escapeHtml(r.print_description)}</div>` : ""}
-          </td>
+          <td class="py-2 pr-3">${escapeHtml(r.print_description)}</td>
           <td class="py-2 pr-3 text-right">${r.quantity}</td>
           <td class="py-2 pr-3"><span class="rounded-full px-2 py-0.5 text-xs font-medium ${PRINT_STATUS_COLORS[r.print_status] ?? ""}">${PRINT_STATUS_LABELS[r.print_status] ?? r.print_status}</span></td>
           <td class="py-2 pr-3 text-right">

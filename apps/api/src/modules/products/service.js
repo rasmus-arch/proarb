@@ -146,13 +146,19 @@ export async function createProduct(data) {
 }
 
 export async function updateProduct(id, data) {
+  // Same free-text-resolves-to-id pattern as createProduct, so the edit
+  // dialog can reuse the exact same datalist-driven inputs as "Ny produkt"
+  // instead of needing raw ids from the caller.
+  const categoryId = data.categoryId ?? (data.category !== undefined ? await resolveNameToId("product_categories", data.category) : undefined);
+  const brandId = data.brandId ?? (data.brand !== undefined ? await resolveNameToId("brands", data.brand) : undefined);
+  const supplierId = data.supplierId ?? (data.supplier !== undefined ? await resolveNameToId("suppliers", data.supplier) : undefined);
+
   const fields = {
     name: data.name,
     description: data.description,
-    category_id: data.categoryId,
-    brand_id: data.brandId,
-    supplier_id: data.supplierId,
-    printable: data.printable === undefined ? undefined : data.printable ? 1 : 0,
+    category_id: categoryId,
+    brand_id: brandId,
+    supplier_id: supplierId,
     unit: data.unit,
     tax_rate_percent: data.taxRatePercent,
     base_price: data.basePrice,

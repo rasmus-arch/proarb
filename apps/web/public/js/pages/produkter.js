@@ -11,9 +11,22 @@ const categoryOptions = document.getElementById("category-options");
 const brandOptions = document.getElementById("brand-options");
 const supplierOptions = document.getElementById("supplier-options");
 
+const editProductDialog = document.getElementById("edit-product-dialog");
+const editProductForm = document.getElementById("edit-product-form");
+const editProductError = document.getElementById("edit-product-error");
+const editCategoryOptions = document.getElementById("edit-category-options");
+const editBrandOptions = document.getElementById("edit-brand-options");
+const editSupplierOptions = document.getElementById("edit-supplier-options");
+
 const importDialog = document.getElementById("import-dialog");
 const importFileInput = document.getElementById("import-file");
 const importStatus = document.getElementById("import-status");
+
+// Cached so "Redigera" can prefill the free-text category/brand/supplier
+// inputs by name — GET /api/products/:id only returns the ids.
+let categoriesCache = [];
+let brandsCache = [];
+let suppliersCache = [];
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -38,6 +51,10 @@ function renderRows(products) {
         <td class="py-2 pr-4">${escapeHtml(p.sku)}</td>
         <td class="py-2 pr-4">${escapeHtml(p.barcode)}</td>
         <td class="py-2 pr-4 text-right">${formatPrice(p.base_price)} kr</td>
+        <td class="py-2 pr-4 text-right whitespace-nowrap">
+          <button type="button" class="text-blue-700 underline" data-edit="${p.id}">Redigera</button>
+          <button type="button" class="ml-2 text-red-600 underline" data-delete="${p.id}">Ta bort</button>
+        </td>
       </tr>`
     )
     .join("");
@@ -64,9 +81,16 @@ async function populateDatalists() {
     api.get("/brands"),
     api.get("/suppliers"),
   ]);
-  categoryOptions.innerHTML = categories.rows.map((c) => `<option value="${escapeHtml(c.name)}">`).join("");
-  brandOptions.innerHTML = brands.rows.map((b) => `<option value="${escapeHtml(b.name)}">`).join("");
-  supplierOptions.innerHTML = suppliers.rows.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
+  categoriesCache = categories.rows;
+  brandsCache = brands.rows;
+  suppliersCache = suppliers.rows;
+
+  categoryOptions.innerHTML = categoriesCache.map((c) => `<option value="${escapeHtml(c.name)}">`).join("");
+  brandOptions.innerHTML = brandsCache.map((b) => `<option value="${escapeHtml(b.name)}">`).join("");
+  supplierOptions.innerHTML = suppliersCache.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
+  editCategoryOptions.innerHTML = categoryOptions.innerHTML;
+  editBrandOptions.innerHTML = brandOptions.innerHTML;
+  editSupplierOptions.innerHTML = supplierOptions.innerHTML;
 }
 
 document.getElementById("new-product-btn").addEventListener("click", async () => {
@@ -90,7 +114,6 @@ newProductForm.addEventListener("submit", async (event) => {
     supplier: form.supplier,
     basePrice: Number(form.basePrice),
     costPrice: form.costPrice ? Number(form.costPrice) : undefined,
-    printable: form.printable === "on",
     variants: [
       {
         color: form.variantColor || undefined,
@@ -108,6 +131,60 @@ newProductForm.addEventListener("submit", async (event) => {
   } catch (err) {
     productFormError.textContent = err.message;
     productFormError.classList.remove("hidden");
+  }
+});
+
+// --- Edit / delete product ------------------------------------------------
+
+rowsEl.addEventListener("click", async (event) => {
+  const editBtn = event.target.closest("button[data-edit]");
+  const deleteBtn = event.target.closest("button[data-delete]");
+
+  if (editBtn) {
+    const product = await api.get(`/products/${editBtn.dataset.edit}`);
+    editProductError.classList.add("hidden");
+    editProductForm.reset();
+    editProductForm.elements.name.value = product.name ?? "";
+    editProductForm.elements.category.value = categoriesCache.find((c) => c.id === product.category_id)?.name ?? "";
+    editProductForm.elements.brand.value = brandsCache.find((b) => b.id === product.brand_id)?.name ?? "";
+    editProductForm.elements.supplier.value = suppliersCache.find((s) => s.id === product.supplier_id)?.name ?? "";
+    editProductForm.elements.basePrice.value = product.base_price ?? "";
+    editProductForm.elements.costPrice.value = product.cost_price ?? "";
+    editProductForm.dataset.productId = editBtn.dataset.edit;
+    editProductDialog.showModal();
+    return;
+  }
+
+  if (deleteBtn) {
+    if (!confirm("Ta bort produkten? Den slutar synas i sök och listor, men historik (offerter/ordrar) påverkas inte.")) return;
+    await api.delete(`/products/${deleteBtn.dataset.delete}`);
+    await loadProducts();
+  }
+});
+
+document.getElementById("cancel-edit-product-btn").addEventListener("click", () => editProductDialog.close());
+
+editProductForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  editProductError.classList.add("hidden");
+  const form = Object.fromEntries(new FormData(editProductForm).entries());
+
+  const payload = {
+    name: form.name,
+    category: form.category || "",
+    brand: form.brand || "",
+    supplier: form.supplier,
+    basePrice: Number(form.basePrice),
+    costPrice: form.costPrice ? Number(form.costPrice) : null,
+  };
+
+  try {
+    await api.patch(`/products/${editProductForm.dataset.productId}`, payload);
+    editProductDialog.close();
+    await loadProducts();
+  } catch (err) {
+    editProductError.textContent = err.message;
+    editProductError.classList.remove("hidden");
   }
 });
 
@@ -149,4 +226,5 @@ document.getElementById("run-import-btn").addEventListener("click", async () => 
   }
 });
 
+populateDatalists();
 loadProducts();

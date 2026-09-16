@@ -57,7 +57,7 @@ export async function renderPublicQuotePage(req, res) {
         <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">
           <div style="font-weight:600;color:#0f172a;">${escapeHtml(line.product_name)}</div>
           <div style="color:#64748b;font-size:13px;">${escapeHtml([line.color, line.size].filter(Boolean).join(" / "))}</div>
-          ${line.print_method_name ? `<div style="color:#64748b;font-size:13px;">Tryck: ${escapeHtml(line.print_method_name)}</div>` : ""}
+          ${line.print_description ? `<div style="color:#64748b;font-size:13px;">Tryck: ${escapeHtml(line.print_description)}</div>` : ""}
         </td>
         <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">${line.quantity}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">${money(line.unit_price)}</td>

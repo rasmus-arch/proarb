@@ -102,7 +102,7 @@ export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
         line.product_name,
         [line.color, line.size].filter(Boolean).join(" / "),
         line.description,
-        line.print_method_name ? `Tryck: ${line.print_method_name}${line.print_description ? " – " + line.print_description : ""}` : null,
+        line.print_description ? `Tryck: ${line.print_description}` : null,
       ]
         .filter(Boolean)
         .join("\n");

@@ -117,8 +117,8 @@ function renderLines() {
     .map((line, index) => {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
-      const printCell = line.printMethodName
-        ? `<div class="text-slate-700">${escapeHtml(line.printMethodName)}</div>${line.printDescription ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div>` : ""}<span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${PRINT_STATUS_COLORS[line.printStatus] ?? ""}">${PRINT_STATUS_LABELS[line.printStatus] ?? ""}</span>`
+      const printCell = line.printDescription
+        ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div><span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${PRINT_STATUS_COLORS[line.printStatus] ?? ""}">${PRINT_STATUS_LABELS[line.printStatus] ?? ""}</span>`
         : `<span class="text-slate-400">–</span>`;
 
       if (!isNewOrder()) {
@@ -278,7 +278,6 @@ el.newProductForm.addEventListener("submit", async (event) => {
       supplier: form.supplier,
       basePrice,
       costPrice: form.costPrice ? Number(form.costPrice) : undefined,
-      printable: form.printable === "on",
       variants: hasVariantInfo ? [{ color: form.color || null, size: form.size || null }] : undefined,
     });
     const v = product.variants[0];
@@ -464,7 +463,6 @@ async function init() {
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
       sourcing: l.sourcing,
-      printMethodName: l.print_method_name,
       printDescription: l.print_description,
       printStatus: l.print_status,
     }));

@@ -133,13 +133,7 @@
             <input name="taxRatePercent" type="number" min="0" max="100" step="1" value="25" class="input mt-1" />
           </label>
           <label class="block text-sm">
-            <span class="text-slate-700">Tryckmetod</span>
-            <select name="printMethodId" id="fritext-print-method" class="input mt-1">
-              <option value="">Inget tryck</option>
-            </select>
-          </label>
-          <label class="block text-sm">
-            <span class="text-slate-700">Tryckbeskrivning</span>
+            <span class="text-slate-700">Tryckbeskrivning (valfritt, hamnar i tryckkön om ifylld)</span>
             <input name="printDescription" class="input mt-1" />
           </label>
         </div>
@@ -188,10 +182,6 @@
               <input name="size" class="input mt-1" />
             </label>
           </div>
-          <label class="flex items-center gap-2 text-sm">
-            <input name="printable" type="checkbox" class="rounded border-slate-300" />
-            <span class="text-slate-700">Printbar (kan tryckas/broderas)</span>
-          </label>
         </div>
         <p id="new-product-error" class="mt-2 hidden text-sm text-red-600"></p>
         <div class="mt-5 flex justify-end gap-2">

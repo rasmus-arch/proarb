@@ -11,8 +11,6 @@ const state = {
   lines: [],
 };
 
-let printMethods = [];
-
 const el = {
   title: document.getElementById("page-title"),
   statusBadge: document.getElementById("status-badge"),
@@ -32,7 +30,6 @@ const el = {
   fritextDialog: document.getElementById("fritext-dialog"),
   fritextForm: document.getElementById("fritext-form"),
   cancelFritextBtn: document.getElementById("cancel-fritext-btn"),
-  fritextPrintMethod: document.getElementById("fritext-print-method"),
   addProductBtn: document.getElementById("add-product-btn"),
   newProductDialog: document.getElementById("new-product-dialog"),
   newProductForm: document.getElementById("new-product-form"),
@@ -127,7 +124,7 @@ function renderLines() {
             <td class="py-2 pr-3">${line.quantity}</td>
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
             <td class="py-2 pr-3">${line.discountPercent} %</td>
-            <td class="py-2 pr-3">${escapeHtml(line.printMethodName ?? "")}${line.printDescription ? " – " + escapeHtml(line.printDescription) : ""}</td>
+            <td class="py-2 pr-3">${escapeHtml(line.printDescription ?? "")}</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
             <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
             <td></td>
@@ -141,11 +138,7 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" step="0.01" class="input" data-field="unitPrice" data-index="${index}" value="${line.unitPrice}" /></td>
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3">
-            <select class="input" data-field="printMethodId" data-index="${index}">
-              <option value="">Inget tryck</option>
-              ${printMethods.map((pm) => `<option value="${pm.id}" ${Number(line.printMethodId) === pm.id ? "selected" : ""}>${escapeHtml(pm.name)}</option>`).join("")}
-            </select>
-            <input type="text" class="input mt-1" placeholder="Beskrivning" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
+            <input type="text" class="input" placeholder="Tryckbeskrivning (valfritt)" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
           </td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
           <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
@@ -161,9 +154,7 @@ el.lineRows.addEventListener("input", (event) => {
   const { field, index } = event.target.dataset;
   if (field === undefined) return;
   const line = state.lines[Number(index)];
-  if (field === "printMethodId") {
-    line.printMethodId = event.target.value || null;
-  } else if (field === "printDescription") {
+  if (field === "printDescription") {
     line.printDescription = event.target.value;
   } else {
     line[field] = Number(event.target.value);
@@ -222,7 +213,6 @@ el.lineResults.addEventListener("click", (event) => {
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
-    printMethodId: null,
     printDescription: "",
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
@@ -256,7 +246,6 @@ el.fritextForm.addEventListener("submit", (event) => {
     quantity,
     unitPrice,
     discountPercent: 0,
-    printMethodId: form.printMethodId || null,
     printDescription: form.printDescription || "",
     taxRatePercent: Number(form.taxRatePercent) || 25,
     costPrice: null,
@@ -290,7 +279,6 @@ el.newProductForm.addEventListener("submit", async (event) => {
       supplier: form.supplier,
       basePrice,
       costPrice: form.costPrice ? Number(form.costPrice) : undefined,
-      printable: form.printable === "on",
       variants: hasVariantInfo ? [{ color: form.color || null, size: form.size || null }] : undefined,
     });
     const v = product.variants[0];
@@ -302,7 +290,6 @@ el.newProductForm.addEventListener("submit", async (event) => {
       quantity: 1,
       unitPrice: Number(product.base_price),
       discountPercent: 0,
-      printMethodId: null,
       printDescription: "",
       taxRatePercent: Number(product.tax_rate_percent),
       costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
@@ -395,7 +382,6 @@ el.saveBtn.addEventListener("click", async () => {
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent,
       taxRatePercent: l.taxRatePercent,
-      printMethodId: l.printMethodId || null,
       printDescription: l.printDescription || null,
     })),
   };
@@ -454,11 +440,6 @@ function applyEditableState() {
 }
 
 async function init() {
-  printMethods = (await api.get("/print-methods")).rows;
-  el.fritextPrintMethod.innerHTML =
-    `<option value="">Inget tryck</option>` +
-    printMethods.map((pm) => `<option value="${pm.id}">${escapeHtml(pm.name)}</option>`).join("");
-
   const suppliers = (await api.get("/suppliers")).rows;
   el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
@@ -474,8 +455,6 @@ async function init() {
       quantity: Number(l.quantity),
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),
-      printMethodId: l.print_method_id,
-      printMethodName: l.print_method_name,
       printDescription: l.print_description ?? "",
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
