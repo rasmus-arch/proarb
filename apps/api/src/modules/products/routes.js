@@ -104,12 +104,25 @@ router.delete("/:id", async (req, res, next) => {
 router.post("/:id/variants", async (req, res, next) => {
   try {
     if (!req.body) return res.status(400).json({ error: "body krävs" });
-    const variant = await products.addVariant(Number(req.params.id), req.body);
+    const productId = Number(req.params.id);
+    const product = await products.getProduct(productId);
+    if (!product) return res.status(404).json({ error: "Not found" });
+
+    const variant = await products.addVariant(productId, req.body, product.article_number, product.variants.length);
     res.status(201).json(variant);
   } catch (err) {
     if (err?.code === "ER_DUP_ENTRY") {
       return res.status(409).json({ error: "SKU eller streckkod finns redan" });
     }
+    next(err);
+  }
+});
+
+router.delete("/:id/variants/:variantId", async (req, res, next) => {
+  try {
+    await products.deactivateVariant(Number(req.params.variantId));
+    res.status(204).end();
+  } catch (err) {
     next(err);
   }
 });

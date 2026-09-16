@@ -88,6 +88,9 @@
         </div>
 
         <h3 class="mt-5 text-sm font-medium text-slate-900">Första varianten</h3>
+        <p class="mt-1 text-xs text-slate-500">
+          Fler färger/storlekar läggs till efter att produkten sparats, under "Redigera" på produkten i listan.
+        </p>
         <div class="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label class="block text-sm">
             <span class="text-slate-700">Färg</span>
@@ -116,7 +119,7 @@
     </dialog>
 
     <!-- Edit product dialog -->
-    <dialog id="edit-product-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+    <dialog id="edit-product-dialog" class="w-full max-w-2xl rounded-lg p-0 backdrop:bg-slate-900/40">
       <form id="edit-product-form" method="dialog" class="card m-0">
         <h2 class="text-lg font-medium text-slate-900">Redigera produkt</h2>
         <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -148,6 +151,20 @@
             <input name="costPrice" type="number" step="0.01" min="0" class="input mt-1" />
           </label>
         </div>
+
+        <h3 class="mt-5 text-sm font-medium text-slate-900">Varianter</h3>
+        <ul id="edit-variant-list" class="mt-2 divide-y divide-slate-100 text-sm"></ul>
+        <p id="edit-variant-empty" class="hidden py-2 text-sm text-slate-500">Inga varianter ännu.</p>
+
+        <div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <input id="edit-variant-color" placeholder="Färg" class="input" />
+          <input id="edit-variant-size" placeholder="Storlek" class="input" />
+          <input id="edit-variant-sku" placeholder="SKU (auto om tomt)" class="input" />
+          <input id="edit-variant-barcode" placeholder="Streckkod" class="input" />
+          <button type="button" id="add-variant-btn" class="btn-secondary">+ Lägg till</button>
+        </div>
+        <p id="edit-variant-error" class="mt-2 hidden text-sm text-red-600"></p>
+
         <p id="edit-product-error" class="mt-3 hidden text-sm text-red-600"></p>
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" id="cancel-edit-product-btn" class="btn-secondary">Avbryt</button>

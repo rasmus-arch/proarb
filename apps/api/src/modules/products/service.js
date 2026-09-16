@@ -180,6 +180,10 @@ export async function deactivateProduct(id) {
   await pool.query(`UPDATE product_variants SET active = 0 WHERE product_id = ?`, [id]);
 }
 
+export async function deactivateVariant(variantId) {
+  await pool.query(`UPDATE product_variants SET active = 0 WHERE id = ?`, [variantId]);
+}
+
 function autoSku(articleNumber, variant, index) {
   const parts = [articleNumber, variant.color, variant.size].filter(Boolean);
   return parts.length > 1 ? parts.join("-").toUpperCase() : `${articleNumber}-${index + 1}`;

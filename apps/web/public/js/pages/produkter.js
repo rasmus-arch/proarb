@@ -17,6 +17,14 @@ const editProductError = document.getElementById("edit-product-error");
 const editCategoryOptions = document.getElementById("edit-category-options");
 const editBrandOptions = document.getElementById("edit-brand-options");
 const editSupplierOptions = document.getElementById("edit-supplier-options");
+const editVariantList = document.getElementById("edit-variant-list");
+const editVariantEmpty = document.getElementById("edit-variant-empty");
+const editVariantColor = document.getElementById("edit-variant-color");
+const editVariantSize = document.getElementById("edit-variant-size");
+const editVariantSku = document.getElementById("edit-variant-sku");
+const editVariantBarcode = document.getElementById("edit-variant-barcode");
+const editVariantError = document.getElementById("edit-variant-error");
+const addVariantBtn = document.getElementById("add-variant-btn");
 
 const importDialog = document.getElementById("import-dialog");
 const importFileInput = document.getElementById("import-file");
@@ -136,22 +144,44 @@ newProductForm.addEventListener("submit", async (event) => {
 
 // --- Edit / delete product ------------------------------------------------
 
+function renderEditVariants(variants) {
+  editVariantEmpty.classList.toggle("hidden", variants.length > 0);
+  editVariantList.innerHTML = variants
+    .map(
+      (v) => `
+      <li class="flex items-center justify-between py-1.5">
+        <span>
+          <span class="font-medium text-slate-900">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</span>
+          <span class="ml-2 text-slate-500">${escapeHtml(v.sku)}${v.barcode ? " · " + escapeHtml(v.barcode) : ""}</span>
+        </span>
+        <button type="button" class="text-slate-400 hover:text-red-600" data-remove-variant="${v.id}">✕</button>
+      </li>`
+    )
+    .join("");
+}
+
+async function openEditDialog(productId) {
+  const product = await api.get(`/products/${productId}`);
+  editProductError.classList.add("hidden");
+  editVariantError.classList.add("hidden");
+  editProductForm.reset();
+  editProductForm.elements.name.value = product.name ?? "";
+  editProductForm.elements.category.value = categoriesCache.find((c) => c.id === product.category_id)?.name ?? "";
+  editProductForm.elements.brand.value = brandsCache.find((b) => b.id === product.brand_id)?.name ?? "";
+  editProductForm.elements.supplier.value = suppliersCache.find((s) => s.id === product.supplier_id)?.name ?? "";
+  editProductForm.elements.basePrice.value = product.base_price ?? "";
+  editProductForm.elements.costPrice.value = product.cost_price ?? "";
+  editProductForm.dataset.productId = productId;
+  renderEditVariants(product.variants.filter((v) => v.active));
+  editProductDialog.showModal();
+}
+
 rowsEl.addEventListener("click", async (event) => {
   const editBtn = event.target.closest("button[data-edit]");
   const deleteBtn = event.target.closest("button[data-delete]");
 
   if (editBtn) {
-    const product = await api.get(`/products/${editBtn.dataset.edit}`);
-    editProductError.classList.add("hidden");
-    editProductForm.reset();
-    editProductForm.elements.name.value = product.name ?? "";
-    editProductForm.elements.category.value = categoriesCache.find((c) => c.id === product.category_id)?.name ?? "";
-    editProductForm.elements.brand.value = brandsCache.find((b) => b.id === product.brand_id)?.name ?? "";
-    editProductForm.elements.supplier.value = suppliersCache.find((s) => s.id === product.supplier_id)?.name ?? "";
-    editProductForm.elements.basePrice.value = product.base_price ?? "";
-    editProductForm.elements.costPrice.value = product.cost_price ?? "";
-    editProductForm.dataset.productId = editBtn.dataset.edit;
-    editProductDialog.showModal();
+    await openEditDialog(editBtn.dataset.edit);
     return;
   }
 
@@ -163,6 +193,37 @@ rowsEl.addEventListener("click", async (event) => {
 });
 
 document.getElementById("cancel-edit-product-btn").addEventListener("click", () => editProductDialog.close());
+
+addVariantBtn.addEventListener("click", async () => {
+  editVariantError.classList.add("hidden");
+  try {
+    await api.post(`/products/${editProductForm.dataset.productId}/variants`, {
+      color: editVariantColor.value || undefined,
+      size: editVariantSize.value || undefined,
+      sku: editVariantSku.value || undefined,
+      barcode: editVariantBarcode.value || undefined,
+    });
+    editVariantColor.value = "";
+    editVariantSize.value = "";
+    editVariantSku.value = "";
+    editVariantBarcode.value = "";
+    const product = await api.get(`/products/${editProductForm.dataset.productId}`);
+    renderEditVariants(product.variants.filter((v) => v.active));
+    await loadProducts();
+  } catch (err) {
+    editVariantError.textContent = err.message;
+    editVariantError.classList.remove("hidden");
+  }
+});
+
+editVariantList.addEventListener("click", async (event) => {
+  const variantId = event.target.dataset.removeVariant;
+  if (variantId === undefined) return;
+  await api.delete(`/products/${editProductForm.dataset.productId}/variants/${variantId}`);
+  const product = await api.get(`/products/${editProductForm.dataset.productId}`);
+  renderEditVariants(product.variants.filter((v) => v.active));
+  await loadProducts();
+});
 
 editProductForm.addEventListener("submit", async (event) => {
   event.preventDefault();
