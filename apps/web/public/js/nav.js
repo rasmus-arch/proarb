@@ -20,17 +20,31 @@ const LINKS = [
   { href: "/installningar.html", label: "Inställningar", key: "installningar", roles: ["ADMIN"] },
 ];
 
-function renderNav(user) {
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value ?? "";
+  return div.innerHTML;
+}
+
+function renderNav(user, branding) {
   const mount = document.getElementById("nav");
   if (!mount) return;
 
   const active = document.body.dataset.active;
   const links = LINKS.filter((link) => !link.roles || link.roles.includes(user.role));
 
+  // Shows the seller's own logo (uploaded under Inställningar) once one
+  // exists, instead of a plain company-name label — falls back to the
+  // name alone (never the "ProArb" product name) so a fresh install
+  // without a logo yet still shows something meaningful.
+  const brandMark = branding?.seller_logo_path
+    ? `<img src="/uploads/${branding.seller_logo_path}" alt="${escapeHtml(branding.seller_name)}" class="mr-4 h-8 w-auto" />`
+    : `<span class="mr-4 text-sm font-semibold tracking-tight text-slate-900">${escapeHtml(branding?.seller_name || "ProArb")}</span>`;
+
   mount.innerHTML = `
     <header class="border-b border-slate-200 bg-white">
       <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-4 py-3">
-        <span class="mr-4 text-sm font-semibold tracking-tight text-slate-900">ProArb</span>
+        ${brandMark}
         ${links
           .map(
             (link) => `
@@ -161,7 +175,10 @@ async function init() {
     return;
   }
   const { user } = await res.json();
-  renderNav(user);
+  const branding = await fetch("/api/settings/branding")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  renderNav(user, branding);
 }
 
 document.addEventListener("DOMContentLoaded", init);

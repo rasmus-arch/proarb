@@ -58,7 +58,7 @@ app.use("/api/suppliers", suppliersRouter);
 app.use("/api/print-methods", printMethodsRouter);
 app.use("/api/pos", posRouter);
 app.use("/api/inventory", inventoryRouter);
-app.use("/api/settings", requireRole("ADMIN"), settingsRouter);
+app.use("/api/settings", settingsRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/bug-reports", bugReportsRouter);
 

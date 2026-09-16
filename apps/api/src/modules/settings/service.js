@@ -5,6 +5,14 @@ export async function getSettings() {
   return settings;
 }
 
+// Small, non-sensitive subset of getSettings() — shown in the nav header
+// (nav.js) to every logged-in role, unlike the full settings page which is
+// ADMIN-only.
+export async function getBranding() {
+  const [[branding]] = await pool.query(`SELECT seller_name, seller_logo_path FROM app_settings WHERE id = 1`);
+  return branding;
+}
+
 export async function updateSettings(data) {
   const fields = {
     seller_name: data.sellerName,
