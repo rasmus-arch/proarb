@@ -35,4 +35,14 @@ export async function createCashInvoice(/* { amount, reference } */) {
   throw new Error("Fortnox cash invoice creation not implemented yet");
 }
 
+// Fortnox "send invoice" action — emails an already-created invoice (see
+// createCustomerInvoice above) to the customer from Fortnox. Called when
+// an order is marked "Fakturerad".
+// TODO (Fas 7, after test environment exists): POST to Fortnox's
+// /3/invoices/{DocumentNumber}/externalprint (or /email) endpoint.
+export async function sendCustomerInvoice(/* { externalRef, invoiceNumber } */) {
+  if (!FORTNOX_CONFIGURED) return notConfigured();
+  throw new Error("Fortnox invoice sending not implemented yet");
+}
+
 export const isFortnoxConfigured = () => FORTNOX_CONFIGURED;

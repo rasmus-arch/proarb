@@ -1,18 +1,6 @@
 import { api } from "../api.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
 
-const PRINT_STATUS_LABELS = {
-  WAITING: "Väntar",
-  IN_PRODUCTION: "I produktion",
-  READY: "Klar",
-};
-
-const PRINT_STATUS_COLORS = {
-  WAITING: "bg-slate-100 text-slate-700",
-  IN_PRODUCTION: "bg-amber-100 text-amber-800",
-  READY: "bg-green-100 text-green-800",
-};
-
 const params = new URLSearchParams(location.search);
 const orderId = params.get("id");
 
@@ -27,6 +15,7 @@ const el = {
   title: document.getElementById("page-title"),
   statusBadge: document.getElementById("status-badge"),
   actionButtons: document.getElementById("action-buttons"),
+  statusNotification: document.getElementById("status-notification"),
   customerPicker: document.getElementById("customer-picker"),
   customerSearch: document.getElementById("customer-search"),
   customerResults: document.getElementById("customer-results"),
@@ -118,7 +107,7 @@ function renderLines() {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
       const printCell = line.printDescription
-        ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div><span class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${PRINT_STATUS_COLORS[line.printStatus] ?? ""}">${PRINT_STATUS_LABELS[line.printStatus] ?? ""}</span>`
+        ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div>`
         : `<span class="text-slate-400">–</span>`;
 
       if (!isNewOrder()) {
@@ -409,18 +398,47 @@ el.saveBtn.addEventListener("click", async () => {
 
 // --- Status actions + pickup ----------------------------------------------
 
-async function changeStatus(orderId, status) {
-  await api.patch(`/orders/${orderId}/status`, { status });
+async function changeStatus(orderId, status, sendEmail) {
+  const order = await api.patch(`/orders/${orderId}/status`, { status, sendEmail });
+  if (order.notification) {
+    sessionStorage.setItem("order-status-notification", JSON.stringify({ status, ...order.notification }));
+  }
   location.reload();
 }
 
+function notificationText({ status, sent, reason }) {
+  const subject = status === "INVOICED" ? "Fakturan" : "E-post till kund";
+  return sent ? `${subject} skickades.` : `${subject} skickades inte: ${reason ?? "okänt fel"}`;
+}
+
 function renderActionButtons(order) {
-  el.actionButtons.innerHTML = order.allowed_next_statuses
-    .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
-    .join("");
+  const emailCheckbox = order.allowed_next_statuses.includes("READY_FOR_PICKUP")
+    ? `<label class="flex items-center gap-1.5 text-xs text-slate-600">
+        <input type="checkbox" id="send-ready-email" checked class="rounded border-slate-300" />
+        Skicka mail till kund
+      </label>`
+    : "";
+
+  el.actionButtons.innerHTML =
+    emailCheckbox +
+    order.allowed_next_statuses
+      .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
+      .join("");
+
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
-    btn.addEventListener("click", () => changeStatus(order.id, btn.dataset.status));
+    btn.addEventListener("click", () => {
+      const sendEmail = btn.dataset.status === "READY_FOR_PICKUP" && document.getElementById("send-ready-email")?.checked;
+      changeStatus(order.id, btn.dataset.status, Boolean(sendEmail));
+    });
   });
+
+  const pending = sessionStorage.getItem("order-status-notification");
+  if (pending) {
+    sessionStorage.removeItem("order-status-notification");
+    const notification = JSON.parse(pending);
+    el.statusNotification.textContent = notificationText(notification);
+    el.statusNotification.classList.remove("hidden");
+  }
 }
 
 el.pickupBtn.addEventListener("click", async () => {
@@ -464,7 +482,6 @@ async function init() {
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
       sourcing: l.sourcing,
       printDescription: l.print_description,
-      printStatus: l.print_status,
     }));
 
     el.title.textContent = `Order ${order.order_number}`;

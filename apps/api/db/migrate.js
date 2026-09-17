@@ -67,6 +67,15 @@ export async function run() {
     "ALTER TABLE products ADD COLUMN supplier_id INT NULL AFTER brand_id",
     "ALTER TABLE products ADD CONSTRAINT fk_products_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)",
     "ALTER TABLE products ADD INDEX idx_products_supplier (supplier_id)",
+    // Simplified order status flow: Order (NEW) -> Redo för utlämning ->
+    // Utlämnad -> Fakturerad, plus Avbruten. Drops CONFIRMED/IN_PRODUCTION
+    // (order status no longer gates on the print/tryck flow) and
+    // PARTIALLY_DELIVERED (never reachable from the UI). Existing rows in
+    // a dropped status are remapped first so the enum can be narrowed
+    // without a strict-mode error.
+    "UPDATE orders SET status = 'NEW' WHERE status IN ('CONFIRMED', 'IN_PRODUCTION')",
+    "UPDATE orders SET status = 'READY_FOR_PICKUP' WHERE status = 'PARTIALLY_DELIVERED'",
+    "ALTER TABLE orders MODIFY status ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW'",
   ];
   for (const statement of alters) {
     try {

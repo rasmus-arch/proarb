@@ -56,7 +56,9 @@ router.get("/:id", async (req, res, next) => {
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });
-    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status);
+    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status, {
+      sendEmail: Boolean(req.body.sendEmail),
+    });
     res.json(order);
   } catch (err) {
     if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });

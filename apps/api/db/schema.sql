@@ -336,7 +336,11 @@ CREATE TABLE IF NOT EXISTS orders (
   customer_id          INT NOT NULL,
   reference_contact_id INT NULL,
   quote_id             INT NULL UNIQUE,
-  status               ENUM('NEW','CONFIRMED','IN_PRODUCTION','READY_FOR_PICKUP','PARTIALLY_DELIVERED','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW',
+  -- Flödet är Order (NEW) -> Redo för utlämning -> Utlämnad -> Fakturerad,
+  -- plus Avbruten. Produktionsspårning (tryck) lever separat på
+  -- order_lines.print_status/print_description och styr inte den här
+  -- statusen längre — se Tryckkö (tryck.html).
+  status               ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW',
   delivery_method      ENUM('PICKUP','SHIPPING') NOT NULL DEFAULT 'PICKUP',
   created_by           INT NOT NULL,
   notes                TEXT NULL,

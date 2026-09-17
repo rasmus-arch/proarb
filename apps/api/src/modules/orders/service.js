@@ -2,6 +2,8 @@ import { pool } from "../../lib/db.js";
 import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { assertValidLines } from "../../lib/lines.js";
+import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
+import { sendOrderReadyEmail } from "../integrations/email.js";
 
 function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
@@ -38,17 +40,13 @@ function summarizeTotals(lines) {
   };
 }
 
-// Fas 3 allowed status transitions. DELIVERED is reached only through
-// recordPickup (below) so "who picked it up" is always on record —
-// never set manually. PARTIALLY_DELIVERED exists in the schema for a
-// future partial-pickup flow; not reachable from the UI yet.
+// Order (NEW) -> Redo för utlämning -> Utlämnad -> Fakturerad, plus
+// Avbruten. DELIVERED is reached only through recordPickup (below) so
+// "who picked it up" is always on record — never set manually.
 const ALLOWED_TRANSITIONS = {
-  NEW: ["CONFIRMED", "CANCELLED"],
-  CONFIRMED: ["IN_PRODUCTION", "CANCELLED"],
-  IN_PRODUCTION: ["READY_FOR_PICKUP", "CANCELLED"],
+  NEW: ["READY_FOR_PICKUP", "CANCELLED"],
   READY_FOR_PICKUP: ["CANCELLED"],
   DELIVERED: ["INVOICED"],
-  PARTIALLY_DELIVERED: ["DELIVERED", "INVOICED"],
   INVOICED: [],
   CANCELLED: [],
 };
@@ -111,8 +109,9 @@ async function loadOrderLines(orderId) {
 
 export async function getOrder(id) {
   const [[order]] = await pool.query(
-    `SELECT o.*, c.name AS customer_name, c.address AS customer_address, c.postal_code AS customer_postal_code,
-            c.city AS customer_city, cc.name AS reference_name, u.name AS created_by_name
+    `SELECT o.*, c.name AS customer_name, c.email AS customer_email, c.address AS customer_address,
+            c.postal_code AS customer_postal_code, c.city AS customer_city, cc.name AS reference_name,
+            u.name AS created_by_name
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN customer_contacts cc ON cc.id = o.reference_contact_id
@@ -232,7 +231,12 @@ export async function convertQuoteToOrder(quoteId, userId) {
   }
 }
 
-export async function updateOrderStatus(id, newStatus) {
+// notification is best-effort and never blocks the status change itself
+// (same "never let an unconfigured/slow integration undo real work"
+// principle as the Fortnox sync in pos/service.js): { sent: true } once a
+// real provider exists, or { sent: false, reason } today while
+// email.js/fortnox.js are still stubs.
+export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {}) {
   const order = await getOrder(id);
   if (!order) throw new Error("ORDER_NOT_FOUND");
 
@@ -242,13 +246,63 @@ export async function updateOrderStatus(id, newStatus) {
   }
 
   await pool.query(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, id]);
-  return getOrder(id);
+
+  let notification = null;
+  if (newStatus === "READY_FOR_PICKUP" && sendEmail) {
+    try {
+      const result = await sendOrderReadyEmail({
+        to: order.customer_email,
+        customerName: order.customer_name,
+        orderNumber: order.order_number,
+      });
+      notification = result.ok ? { sent: true } : { sent: false, reason: result.note ?? result.reason };
+    } catch (err) {
+      notification = { sent: false, reason: err.message };
+    }
+  } else if (newStatus === "INVOICED") {
+    notification = await sendOrderInvoiceFromFortnox(id);
+  }
+
+  return { ...(await getOrder(id)), notification };
+}
+
+// The invoice itself is created (in Fortnox) when the order becomes
+// DELIVERED — see recordPickup. Marking an order "Fakturerad" just tells
+// Fortnox to actually send that already-created invoice to the customer.
+async function sendOrderInvoiceFromFortnox(orderId) {
+  const [[invoice]] = await pool.query(
+    `SELECT * FROM invoices WHERE order_id = ? ORDER BY id DESC LIMIT 1`,
+    [orderId]
+  );
+  if (!invoice) return { sent: false, reason: "Ingen faktura hittades för ordern." };
+
+  try {
+    const result = await sendCustomerInvoice({
+      externalRef: invoice.external_ref,
+      invoiceNumber: invoice.invoice_number,
+    });
+    if (result.ok) {
+      await pool.query(`UPDATE invoices SET status = 'SYNCED', sent_at = NOW() WHERE id = ?`, [invoice.id]);
+      return { sent: true };
+    }
+    await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoice.id]);
+    return { sent: false, reason: result.note ?? result.reason };
+  } catch (err) {
+    await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [err.message, invoice.id]);
+    return { sent: false, reason: err.message };
+  }
 }
 
 // Registers who picked up the order in-store. Marks every line fully
-// delivered and the order DELIVERED — per-line/partial pickup is left
-// for a later iteration (the schema already supports it via
-// order_lines.delivered_qty / the PARTIALLY_DELIVERED status).
+// delivered and the order DELIVERED — per-line/partial pickup is left for
+// a later iteration (the schema already supports it via
+// order_lines.delivered_qty). Also creates the customer invoice in
+// Fortnox ("när en order blir utlämnad ska en faktura skickas till
+// fortnox") — best-effort, same PENDING-row-then-sync-after-commit
+// pattern pos/service.js uses so a slow/unconfigured Fortnox never blocks
+// the pickup itself. Actually emailing that invoice to the customer
+// happens later, when the order is marked "Fakturerad" — see
+// sendOrderInvoiceFromFortnox above.
 export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByName, verifiedByUserId }) {
   const order = await getOrder(orderId);
   if (!order) throw new Error("ORDER_NOT_FOUND");
@@ -256,6 +310,7 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   if (!pickedUpByContactId && !pickedUpByName?.trim()) throw new Error("PICKUP_IDENTITY_REQUIRED");
 
   const connection = await pool.getConnection();
+  let invoiceId;
   try {
     await connection.beginTransaction();
 
@@ -283,14 +338,40 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
       });
     }
 
+    const [invoiceResult] = await connection.query(
+      `INSERT INTO invoices (order_id, type, amount, status) VALUES (?, 'CUSTOMER_INVOICE', ?, 'PENDING')`,
+      [orderId, order.totals.total_inc_vat]
+    );
+    invoiceId = invoiceResult.insertId;
+
     await connection.commit();
-    return getOrder(orderId);
   } catch (err) {
     await connection.rollback();
     throw err;
   } finally {
     connection.release();
   }
+
+  try {
+    const result = await createCustomerInvoice({
+      customerId: order.customer_id,
+      amount: order.totals.total_inc_vat,
+      orderId,
+    });
+    if (result.ok) {
+      await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [
+        result.externalRef ?? null,
+        result.invoiceNumber ?? null,
+        invoiceId,
+      ]);
+    } else {
+      await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoiceId]);
+    }
+  } catch (err) {
+    await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [err.message, invoiceId]);
+  }
+
+  return getOrder(orderId);
 }
 
 // ---------------------------------------------------------------------
