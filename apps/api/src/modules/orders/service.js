@@ -201,6 +201,35 @@ export async function createOrder(data, userId) {
   }
 }
 
+// "Duplicera" — a fresh order (status NEW) with the same customer/
+// referens/leveranssätt/rader/anteckningar. New order_number, not linked
+// to any quote_id, no pickups/status history carried over.
+export async function duplicateOrder(id, userId) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [nextOrderNumber(), order.customer_id, order.reference_contact_id, order.delivery_method, order.notes, userId]
+    );
+    const orderId = result.insertId;
+    await insertOrderLines(connection, orderId, order.lines);
+
+    await connection.commit();
+    return getOrder(orderId);
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function convertQuoteToOrder(quoteId, userId) {
   const quote = await getQuote(quoteId);
   if (!quote) throw new Error("QUOTE_NOT_FOUND");

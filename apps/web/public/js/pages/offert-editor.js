@@ -434,6 +434,7 @@ function renderActionButtons(quote) {
   if (quote.status === "ACCEPTED") {
     buttons.push(`<button type="button" id="convert-btn" class="btn">Konvertera till order</button>`);
   }
+  buttons.push(`<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>`);
   el.actionButtons.innerHTML = buttons.join("");
 
   document.getElementById("send-btn")?.addEventListener("click", async () => {
@@ -453,9 +454,16 @@ function renderActionButtons(quote) {
   });
   document.getElementById("convert-btn")?.addEventListener("click", async () => {
     try {
-      await api.post(`/quotes/${quote.id}/convert-to-order`, {});
-      alert("Order skapad! Se Ordrar-sidan.");
-      location.reload();
+      const order = await api.post(`/quotes/${quote.id}/convert-to-order`, {});
+      location.href = `/order-editor.html?id=${order.id}`;
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  document.getElementById("duplicate-btn")?.addEventListener("click", async () => {
+    try {
+      const duplicate = await api.post(`/quotes/${quote.id}/duplicate`, {});
+      location.href = `/offert-editor.html?id=${duplicate.id}`;
     } catch (err) {
       alert(err.message);
     }

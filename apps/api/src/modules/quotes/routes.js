@@ -54,6 +54,16 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+router.post("/:id/duplicate", async (req, res, next) => {
+  try {
+    const quote = await quotes.duplicateQuote(Number(req.params.id), req.user.id);
+    res.status(201).json(quote);
+  } catch (err) {
+    if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const quote = await quotes.getQuote(Number(req.params.id));

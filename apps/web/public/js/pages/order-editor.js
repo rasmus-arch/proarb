@@ -450,13 +450,23 @@ function renderActionButtons(order) {
     emailCheckbox +
     order.allowed_next_statuses
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
-      .join("");
+      .join("") +
+    `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>`;
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const sendEmail = btn.dataset.status === "READY_FOR_PICKUP" && document.getElementById("send-ready-email")?.checked;
       changeStatus(order.id, btn.dataset.status, Boolean(sendEmail));
     });
+  });
+
+  document.getElementById("duplicate-btn").addEventListener("click", async () => {
+    try {
+      const duplicate = await api.post(`/orders/${order.id}/duplicate`, {});
+      location.href = `/order-editor.html?id=${duplicate.id}`;
+    } catch (err) {
+      alert(err.message);
+    }
   });
 
   const pending = sessionStorage.getItem("order-status-notification");

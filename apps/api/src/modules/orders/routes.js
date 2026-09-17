@@ -53,6 +53,16 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
+router.post("/:id/duplicate", async (req, res, next) => {
+  try {
+    const order = await orders.duplicateOrder(Number(req.params.id), req.user.id);
+    res.status(201).json(order);
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });

@@ -228,6 +228,26 @@ export async function recordEvent(quoteId, type, meta = null) {
   await pool.query(`INSERT INTO quote_events (quote_id, type, meta) VALUES (?, ?, ?)`, [quoteId, type, meta]);
 }
 
+// "Duplicera" — a fresh DRAFT with the same customer/referens/rader/
+// anteckningar, new quote_number and public_token, nothing else carried
+// over (status, sent_at, valid_until, events all start clean). Reuses
+// createQuote, which already accepts quote.lines' snake_case DB shape
+// directly (see insertLines above).
+export async function duplicateQuote(id, userId) {
+  const quote = await getQuote(id);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+
+  return createQuote(
+    {
+      customerId: quote.customer_id,
+      referenceContactId: quote.reference_contact_id,
+      notes: quote.notes,
+      lines: quote.lines,
+    },
+    userId
+  );
+}
+
 export async function sendQuote(id) {
   await pool.query(`UPDATE quotes SET status = 'SENT', sent_at = NOW() WHERE id = ? AND status = 'DRAFT'`, [id]);
   await recordEvent(id, "SENT");
