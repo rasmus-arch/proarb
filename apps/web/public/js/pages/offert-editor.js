@@ -16,6 +16,7 @@ const el = {
   title: document.getElementById("page-title"),
   statusBadge: document.getElementById("status-badge"),
   actionButtons: document.getElementById("action-buttons"),
+  emailNotification: document.getElementById("email-notification"),
   customerPicker: document.getElementById("customer-picker"),
   customerSearch: document.getElementById("customer-search"),
   customerResults: document.getElementById("customer-results"),
@@ -419,9 +420,13 @@ el.saveBtn.addEventListener("click", async () => {
 
 function renderActionButtons(quote) {
   const buttons = [];
+  const hasEmail = Boolean(quote.customer_email);
   if (quote.status === "DRAFT") {
-    buttons.push(`<button type="button" id="send-btn" class="btn">Skicka offert</button>`);
+    buttons.push(`<button type="button" id="send-btn" class="btn-secondary">Skicka offert</button>`);
   }
+  buttons.push(
+    `<button type="button" id="email-btn" class="btn" ${hasEmail ? "" : "disabled"} title="${hasEmail ? "" : "Kunden saknar e-postadress"}">Maila offert till kund</button>`
+  );
   if (["SENT", "VIEWED", "ACCEPTED", "DECLINED", "EXPIRED", "CONVERTED"].includes(quote.status)) {
     buttons.push(`<a href="/api/quotes/${quote.id}/pdf" target="_blank" class="btn-secondary">Visa PDF</a>`);
     buttons.push(`<a href="/q/${quote.public_token}" target="_blank" class="btn-secondary">Öppna offentlig länk</a>`);
@@ -435,6 +440,17 @@ function renderActionButtons(quote) {
     await api.post(`/quotes/${quote.id}/send`, {});
     location.reload();
   });
+  document.getElementById("email-btn")?.addEventListener("click", async () => {
+    try {
+      const result = await api.post(`/quotes/${quote.id}/email`, {});
+      if (result.notification) {
+        sessionStorage.setItem("quote-email-notification", JSON.stringify(result.notification));
+      }
+      location.reload();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
   document.getElementById("convert-btn")?.addEventListener("click", async () => {
     try {
       await api.post(`/quotes/${quote.id}/convert-to-order`, {});
@@ -444,6 +460,16 @@ function renderActionButtons(quote) {
       alert(err.message);
     }
   });
+
+  const pending = sessionStorage.getItem("quote-email-notification");
+  if (pending) {
+    sessionStorage.removeItem("quote-email-notification");
+    const notification = JSON.parse(pending);
+    el.emailNotification.textContent = notification.sent
+      ? "E-post skickad till kunden."
+      : `E-post skickades inte: ${notification.reason ?? "okänt fel"}`;
+    el.emailNotification.classList.remove("hidden");
+  }
 }
 
 function applyEditableState() {

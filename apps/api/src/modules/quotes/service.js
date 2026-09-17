@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { assertValidLines } from "../../lib/lines.js";
+import { getSettings } from "../settings/service.js";
+import { sendQuoteEmail } from "../integrations/email.js";
 
 function nextQuoteNumber() {
   return `OFF-${Math.floor(Date.now() / 1000)}`;
@@ -230,6 +232,40 @@ export async function sendQuote(id) {
   await pool.query(`UPDATE quotes SET status = 'SENT', sent_at = NOW() WHERE id = ? AND status = 'DRAFT'`, [id]);
   await recordEvent(id, "SENT");
   return getQuote(id);
+}
+
+// "Maila offert till kund" — actually emails the public quote link
+// (rather than just marking the quote SENT and leaving staff to send it
+// themselves some other way). Marks it SENT first if it's still a DRAFT,
+// same as the plain "Skicka offert" action, then best-effort sends the
+// email via integrations/email.js (a stub until SMTP is configured — see
+// that file). publicUrl is built by the route handler (needs req.protocol
+// /req.get("host"), not available down here).
+export async function emailQuoteToCustomer(id, publicUrl) {
+  let quote = await getQuote(id);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+  if (!quote.customer_email) throw new Error("NO_CUSTOMER_EMAIL");
+
+  if (quote.status === "DRAFT") {
+    quote = await sendQuote(id);
+  }
+
+  const settings = await getSettings();
+  const result = await sendQuoteEmail({
+    to: quote.customer_email,
+    customerName: quote.reference_name || quote.customer_name,
+    quoteNumber: quote.quote_number,
+    publicUrl,
+    totalIncVat: quote.totals.total_inc_vat,
+    validUntil: quote.valid_until,
+    sellerName: settings?.seller_name,
+    sellerLogoUrl: settings?.seller_logo_path ? `${new URL(publicUrl).origin}/uploads/${settings.seller_logo_path}` : null,
+    brandColor: settings?.brand_color,
+  });
+
+  const reason = result.note ?? result.reason;
+  await recordEvent(id, result.ok ? "EMAILED" : "EMAIL_FAILED", result.ok ? null : reason);
+  return { ...(await getQuote(id)), notification: { sent: result.ok, reason } };
 }
 
 export async function markViewed(quoteId) {

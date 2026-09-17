@@ -91,6 +91,21 @@ router.post("/:id/send", async (req, res, next) => {
   }
 });
 
+router.post("/:id/email", async (req, res, next) => {
+  try {
+    const quote = await quotes.getQuote(Number(req.params.id));
+    if (!quote) return res.status(404).json({ error: "Not found" });
+    const publicUrl = `${req.protocol}://${req.get("host")}/q/${quote.public_token}`;
+    const result = await quotes.emailQuoteToCustomer(Number(req.params.id), publicUrl);
+    res.json(result);
+  } catch (err) {
+    if (err.message === "NO_CUSTOMER_EMAIL") {
+      return res.status(400).json({ error: "Kunden saknar e-postadress" });
+    }
+    next(err);
+  }
+});
+
 router.post("/:id/convert-to-order", async (req, res, next) => {
   try {
     const order = await convertQuoteToOrder(Number(req.params.id), req.user.id);
