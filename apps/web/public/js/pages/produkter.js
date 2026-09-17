@@ -54,28 +54,86 @@ function formatPrice(price) {
   return Number(price).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function renderRows(products) {
+// Flat rows (one per variant) -> one block per product, so a product with
+// many colors/sizes reads as one product with N variants instead of N
+// near-identical rows repeating the same name.
+function groupByProduct(rows) {
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.id)) {
+      map.set(r.id, { id: r.id, article_number: r.article_number, name: r.name, base_price: r.base_price, variants: [] });
+    }
+    if (r.variant_id) {
+      map.get(r.id).variants.push({ variant_id: r.variant_id, color: r.color, size: r.size, sku: r.sku, barcode: r.barcode });
+    }
+  }
+  return [...map.values()];
+}
+
+function renderRows(rows) {
+  const products = groupByProduct(rows);
+
   rowsEl.innerHTML = products
-    .map(
-      (p) => `
+    .map((p) => {
+      const single = p.variants.length <= 1;
+      const v = p.variants[0] ?? {};
+      const badge = !single
+        ? `<button type="button" class="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200" data-toggle="${p.id}">
+             <span data-chevron>▸</span> ${p.variants.length} varianter
+           </button>`
+        : "";
+
+      const mainRow = `
       <tr>
         <td class="py-2 pr-4 text-slate-500">${escapeHtml(p.article_number)}</td>
-        <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(p.name)}</td>
-        <td class="py-2 pr-4">${escapeHtml(p.color)}</td>
-        <td class="py-2 pr-4">${escapeHtml(p.size)}</td>
-        <td class="py-2 pr-4">${escapeHtml(p.sku)}</td>
-        <td class="py-2 pr-4">${escapeHtml(p.barcode)}</td>
+        <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(p.name)}${badge}</td>
+        <td class="py-2 pr-4">${single ? escapeHtml(v.color) : "–"}</td>
+        <td class="py-2 pr-4">${single ? escapeHtml(v.size) : "–"}</td>
+        <td class="py-2 pr-4">${single ? escapeHtml(v.sku) : "–"}</td>
+        <td class="py-2 pr-4">${single ? escapeHtml(v.barcode) : "–"}</td>
         <td class="py-2 pr-4 text-right">${formatPrice(p.base_price)} kr</td>
         <td class="py-2 pr-4 text-right whitespace-nowrap">
           <button type="button" class="text-blue-700 underline" data-edit="${p.id}">Redigera</button>
           <button type="button" class="ml-2 text-red-600 underline" data-delete="${p.id}">Ta bort</button>
         </td>
-      </tr>`
-    )
+      </tr>`;
+
+      const detailRow = !single
+        ? `<tr class="hidden bg-slate-50" data-detail-for="${p.id}">
+            <td></td>
+            <td colspan="7" class="py-2 pr-4">
+              <table class="w-full text-xs text-slate-600">
+                <tbody>
+                  ${p.variants
+                    .map(
+                      (variant) => `
+                    <tr>
+                      <td class="py-1 pr-4">${escapeHtml([variant.color, variant.size].filter(Boolean).join(" / ") || "–")}</td>
+                      <td class="py-1 pr-4">${escapeHtml(variant.sku)}</td>
+                      <td class="py-1 pr-4">${escapeHtml(variant.barcode)}</td>
+                    </tr>`
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </td>
+          </tr>`
+        : "";
+
+      return mainRow + detailRow;
+    })
     .join("");
 
   emptyStateEl.classList.toggle("hidden", products.length > 0);
 }
+
+rowsEl.addEventListener("click", (event) => {
+  const toggleBtn = event.target.closest("button[data-toggle]");
+  if (!toggleBtn) return;
+  const detailRow = rowsEl.querySelector(`tr[data-detail-for="${toggleBtn.dataset.toggle}"]`);
+  const nowHidden = detailRow.classList.toggle("hidden");
+  toggleBtn.querySelector("[data-chevron]").textContent = nowHidden ? "▸" : "▾";
+});
 
 const PAGE_SIZE = 50;
 let currentPage = 1;

@@ -79,39 +79,41 @@ export async function renderPortalPage(req, res) {
 
   const blocks = products
     .map((p) => {
-      const variantBadge =
-        p.variants.length > 1
-          ? `<span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">Variabel produkt · ${p.variants.length} varianter</span>`
-          : "";
-
-      const header = `
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;">
-          <div>
-            <div style="font-weight:600;">${escapeHtml(p.name)}${variantBadge}</div>
-            <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+      if (p.variants.length <= 1) {
+        return `<div style="border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;">
+            <div>
+              <div style="font-weight:600;">${escapeHtml(p.name)}</div>
+              <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+            </div>
+            ${priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent)}
           </div>
-          ${p.variants.length <= 1 ? priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent) : ""}
         </div>`;
+      }
 
-      const variantTable =
-        p.variants.length > 1
-          ? `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;font-size:13px;">
-              <tbody>
-                ${p.variants
-                  .map(
-                    (v) => `
-                  <tr>
-                    <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
-                    <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
-                    <td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>
-                  </tr>`
-                  )
-                  .join("")}
-              </tbody>
-            </table>`
-          : "";
+      const variantTable = `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;font-size:13px;">
+          <tbody>
+            ${p.variants
+              .map(
+                (v) => `
+              <tr>
+                <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
+                <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
+                <td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>
+              </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>`;
 
-      return `<div style="border-bottom:1px solid #e2e8f0;">${header}${variantTable}</div>`;
+      return `<details style="border-bottom:1px solid #e2e8f0;padding:10px 0;">
+          <summary style="cursor:pointer;list-style:none;">
+            <span style="font-weight:600;">${escapeHtml(p.name)}</span>
+            <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
+            <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
+          </summary>
+          <div style="margin-top:8px;">${variantTable}</div>
+        </details>`;
     })
     .join("");
 
@@ -125,6 +127,9 @@ export async function renderPortalPage(req, res) {
     body { font-family: system-ui, sans-serif; background:#f8fafc; color:#0f172a; margin:0; padding:24px 16px; }
     .card { max-width: 720px; margin: 0 auto 16px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:24px; }
     .empty { color:#64748b; font-size:14px; margin-top:12px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: "▸"; display: inline-block; margin-right: 8px; color: #94a3b8; transition: transform 0.15s; }
+    details[open] summary::before { transform: rotate(90deg); }
   </style>
 </head>
 <body>
