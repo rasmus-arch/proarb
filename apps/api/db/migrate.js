@@ -92,6 +92,7 @@ export async function run() {
     "ALTER TABLE quote_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
     "ALTER TABLE order_lines ADD COLUMN print_price DECIMAL(10,2) NULL",
     "ALTER TABLE order_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE stock_levels ADD INDEX idx_sl_warehouse (warehouse_id)",
   ];
   for (const statement of alters) {
     try {

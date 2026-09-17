@@ -206,20 +206,53 @@ export async function decideMissing(countId, { productVariantId, decision, userI
 }
 
 // Bulk apply one decision to every still-pending discrepancy (scanned
-// mismatches and missing items alike).
+// mismatches and missing items alike). Does the whole batch in a single
+// transaction and reloads the count once at the end — calling
+// decideLine/decideMissing in a loop would reload the full count (header +
+// lines + missing) twice per item, an N+1 that stalls on a warehouse with
+// many discrepancies. This also makes the batch atomic: a failure partway
+// through rolls back every decision instead of leaving some applied.
 export async function decideAll(countId, { decision, userId }) {
   const count = await getStockCount(countId);
   if (!count) throw new Error("COUNT_NOT_FOUND");
 
-  for (const line of count.lines) {
-    if (line.decision === "PENDING" && Number(line.counted_qty) !== Number(line.expected_qty)) {
-      await decideLine(countId, line.id, { decision, userId });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    for (const line of count.lines) {
+      if (line.decision === "PENDING" && Number(line.counted_qty) !== Number(line.expected_qty)) {
+        await applyDecision(connection, countId, { ...line, warehouse_id: count.warehouse_id }, decision, userId);
+      }
     }
+
+    // A "missing" item doesn't have a stock_count_lines row yet —
+    // materialize one (counted_qty = 0) before deciding, same as
+    // decideMissing does for a single item.
+    for (const missing of count.missing) {
+      const [result] = await connection.query(
+        `INSERT INTO stock_count_lines (stock_count_id, product_variant_id, counted_qty, expected_qty)
+         VALUES (?, ?, 0, ?)`,
+        [countId, missing.product_variant_id, missing.expected_qty]
+      );
+      const line = {
+        id: result.insertId,
+        product_variant_id: missing.product_variant_id,
+        counted_qty: 0,
+        expected_qty: missing.expected_qty,
+        warehouse_id: count.warehouse_id,
+      };
+      await applyDecision(connection, countId, line, decision, userId);
+    }
+
+    await connection.commit();
+    return getStockCount(countId);
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
   }
-  for (const missing of count.missing) {
-    await decideMissing(countId, { productVariantId: missing.product_variant_id, decision, userId });
-  }
-  return getStockCount(countId);
 }
 
 // Only completable once every discrepancy has an explicit decision —

@@ -441,7 +441,11 @@ CREATE TABLE IF NOT EXISTS stock_levels (
   reorder_quantity   DECIMAL(10,2) NULL,
   CONSTRAINT fk_sl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
   CONSTRAINT fk_sl_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
-  UNIQUE KEY uq_variant_warehouse (product_variant_id, warehouse_id)
+  UNIQUE KEY uq_variant_warehouse (product_variant_id, warehouse_id),
+  -- The unique key above leads with product_variant_id, so a warehouse-only
+  -- lookup (e.g. stocktake's "missing items" scan) can't use it as an index
+  -- and falls back to a full table scan without this.
+  INDEX idx_sl_warehouse (warehouse_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Append-only ledger of every stock change, always traceable back to what

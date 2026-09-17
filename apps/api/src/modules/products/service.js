@@ -27,7 +27,7 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(DISTINCT p.id) AS total
      FROM products p
-     LEFT JOIN product_variants v ON v.product_id = p.id
+     LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE p.active = 1 AND (p.name LIKE ? OR p.article_number LIKE ? OR v.sku LIKE ? OR v.barcode LIKE ?)`,
     [like, like, like, like]
   );
