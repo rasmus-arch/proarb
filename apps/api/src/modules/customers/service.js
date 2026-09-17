@@ -197,22 +197,37 @@ export async function getOrCreatePortalToken(customerId) {
   return token;
 }
 
+// Standing discount, when one applies — a rule on this exact product wins
+// over a rule on the product's supplier. Shared by getCustomerByPortalToken
+// and listAssortment below so both the customer-facing "Mina sidor" page
+// and the staff-facing picker in kund-editor.html show the same number.
+const ASSORTMENT_DISCOUNT_SELECT = `
+  COALESCE(
+    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
+    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
+    0
+  ) AS discount_percent
+`;
+
 // "Mina sidor" (portal.js) shows this customer's curated assortment
 // instead of their offert-/orderhistorik — see customer_assortment below.
-// One row per variant (color/size), flat, same shape as listProducts.
+// One row per variant (color/size), flat, same shape as listProducts;
+// portal.js groups rows back into one block per product so a product with
+// many variants reads as one product, not N near-identical rows.
 export async function getCustomerByPortalToken(token) {
   const [[customer]] = await pool.query(`SELECT * FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) return null;
 
   const [products] = await pool.query(
     `SELECT p.id AS product_id, p.article_number, p.name, p.base_price,
-            v.id AS variant_id, v.sku, v.color, v.size, v.price_override
+            v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
+            ${ASSORTMENT_DISCOUNT_SELECT}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE ca.customer_id = ? AND p.active = 1
      ORDER BY p.name ASC, v.color ASC, v.size ASC`,
-    [customer.id]
+    [customer.id, customer.id, customer.id]
   );
 
   return { customer, products };
@@ -225,12 +240,16 @@ export async function getCustomerByPortalToken(token) {
 
 export async function listAssortment(customerId) {
   const [rows] = await pool.query(
-    `SELECT ca.id, p.id AS product_id, p.article_number, p.name, p.base_price
+    `SELECT ca.id, p.id AS product_id, p.article_number, p.name, p.base_price,
+            COUNT(v.id) AS variant_count,
+            ${ASSORTMENT_DISCOUNT_SELECT}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
+     LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE ca.customer_id = ?
+     GROUP BY ca.id, p.id, p.article_number, p.name, p.base_price, p.supplier_id
      ORDER BY p.name ASC`,
-    [customerId]
+    [customerId, customerId, customerId]
   );
   return rows;
 }

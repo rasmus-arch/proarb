@@ -144,16 +144,25 @@ async function loadCustomer() {
 function renderAssortment(rows) {
   el.assortmentEmpty.classList.toggle("hidden", rows.length > 0);
   el.assortmentList.innerHTML = rows
-    .map(
-      (p) => `
+    .map((p) => {
+      const variantBadge =
+        p.variant_count > 1
+          ? `<span class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Variabel produkt · ${p.variant_count} varianter</span>`
+          : "";
+      const discountBadge =
+        Number(p.discount_percent) > 0
+          ? `<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">-${p.discount_percent}% rabatt</span>`
+          : "";
+      return `
       <li class="flex items-center justify-between py-2 text-sm">
         <div>
           <span class="font-medium text-slate-900">${escapeHtml(p.name)}</span>
           <span class="ml-2 text-slate-500">${escapeHtml(p.article_number)}</span>
+          ${variantBadge}${discountBadge}
         </div>
         <button type="button" class="text-slate-400 hover:text-red-600" data-remove-assortment="${p.product_id}">✕</button>
-      </li>`
-    )
+      </li>`;
+    })
     .join("");
 }
 
@@ -341,15 +350,29 @@ el.assortmentSearch.addEventListener("input", () => {
     return;
   }
   assortmentSearchTimer = setTimeout(async () => {
-    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
-    el.assortmentResults.innerHTML = rows
-      .map(
-        (v) => `
-        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${v.product_id}">
-          <div class="font-medium text-slate-900">${escapeHtml(v.name)}</div>
-          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))}</div>
-        </button>`
-      )
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}&customerId=${customerId}&limit=50`);
+    // /products/search returns one row per variant — group back to one
+    // entry per product so a 20-color/size product isn't 20 near-identical
+    // buttons in the dropdown; picking any one adds the whole product
+    // (customer_assortment is product-level, so every variant follows).
+    const byProduct = new Map();
+    for (const v of rows) {
+      if (!byProduct.has(v.product_id)) {
+        byProduct.set(v.product_id, { ...v, variant_count: 0 });
+      }
+      byProduct.get(v.product_id).variant_count += 1;
+    }
+    el.assortmentResults.innerHTML = [...byProduct.values()]
+      .map((p) => {
+        const variantNote = p.variant_count > 1 ? `Variabel produkt · ${p.variant_count} varianter` : escapeHtml(p.sku ?? "");
+        const discountNote =
+          Number(p.suggested_discount_percent) > 0 ? ` · -${p.suggested_discount_percent}% rabatt för kunden` : "";
+        return `
+        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${p.product_id}">
+          <div class="font-medium text-slate-900">${escapeHtml(p.name)}</div>
+          <div class="text-xs text-slate-500">${variantNote}${discountNote}</div>
+        </button>`;
+      })
       .join("");
   }, 200);
 });
