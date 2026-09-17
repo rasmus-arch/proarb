@@ -60,6 +60,8 @@ document.getElementById("cancel-btn").addEventListener("click", () => dialogEl.c
 formEl.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(formEl).entries());
+  if (data.paymentTermsDays) data.paymentTermsDays = Number(data.paymentTermsDays);
+  else delete data.paymentTermsDays;
 
   try {
     await api.post("/customers", data);

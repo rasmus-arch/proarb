@@ -241,6 +241,28 @@
             <span class="text-slate-700">E-post</span>
             <input name="email" type="email" class="input mt-1" />
           </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Adress</span>
+            <input name="address" class="input mt-1" />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="block text-sm">
+              <span class="text-slate-700">Postnr</span>
+              <input name="postalCode" class="input mt-1" />
+            </label>
+            <label class="block text-sm">
+              <span class="text-slate-700">Ort</span>
+              <input name="city" class="input mt-1" />
+            </label>
+          </div>
+          <label class="block text-sm">
+            <span class="text-slate-700">Betalningsvillkor (dagar)</span>
+            <input name="paymentTermsDays" type="number" min="0" placeholder="30" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Anteckningar</span>
+            <textarea name="notes" rows="2" class="input mt-1"></textarea>
+          </label>
         </div>
         <p id="quick-new-customer-error" class="mt-3 hidden text-sm text-red-600"></p>
         <div class="mt-5 flex justify-end gap-2">

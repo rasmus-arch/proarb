@@ -26,6 +26,8 @@ export function openNewCustomerDialog(callback) {
 customerForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(customerForm).entries());
+  if (data.paymentTermsDays) data.paymentTermsDays = Number(data.paymentTermsDays);
+  else delete data.paymentTermsDays;
   try {
     const customer = await api.post("/customers", data);
     customerDialog.close();
