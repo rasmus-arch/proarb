@@ -132,7 +132,7 @@ el.logoForm.addEventListener("submit", async (event) => {
 
 // --- Users (Fas 8) --------------------------------------------------------
 
-const ROLES = ["ADMIN", "SALES", "WAREHOUSE", "POS"];
+const ROLES = ["ADMIN", "SALES", "WAREHOUSE"];
 
 function escapeHtml(value) {
   const div = document.createElement("div");

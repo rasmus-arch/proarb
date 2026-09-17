@@ -31,6 +31,8 @@ const el = {
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
   newPickupContactQuickBtn: document.getElementById("new-pickup-contact-quick-btn"),
   lineSearchWrap: document.getElementById("line-search-wrap"),
+  scanInput: document.getElementById("scan-input"),
+  scanError: document.getElementById("scan-error"),
   lineSearch: document.getElementById("line-search"),
   lineResults: document.getElementById("line-results"),
   lineRows: document.getElementById("line-rows"),
@@ -190,6 +192,55 @@ el.lineRows.addEventListener("click", (event) => {
   renderLines();
 });
 
+// Shared by barcode scan and product search — both resolve to a variant
+// shaped the same way.
+function variantToLine(v) {
+  return {
+    productVariantId: v.variant_id,
+    name: v.name,
+    colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
+    quantity: 1,
+    unitPrice: Number(v.price_override ?? v.base_price),
+    discountPercent: Number(v.suggested_discount_percent ?? 0),
+    printDescription: "",
+    printPrice: null,
+    printDiscountPercent: 0,
+    taxRatePercent: Number(v.tax_rate_percent),
+    costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
+    sourcing: "STOCK",
+  };
+}
+
+// --- Barcode scanning (replaces the old kassa/POS flow — same lookup,
+// scanners act as keyboard wedges typing the code + Enter) ----------------
+
+async function handleScan(barcode) {
+  el.scanError.classList.add("hidden");
+  try {
+    const customerParam = state.customerId ? `?customerId=${state.customerId}` : "";
+    const v = await api.get(`/products/by-barcode/${encodeURIComponent(barcode)}${customerParam}`);
+    // Rescanning the same item just bumps its quantity instead of adding a
+    // duplicate row — the point of a barcode workflow is scan-scan-scan.
+    const existing = state.lines.find((l) => l.productVariantId === v.variant_id);
+    if (existing) {
+      existing.quantity = Number(existing.quantity) + 1;
+    } else {
+      state.lines.push(variantToLine(v));
+    }
+    renderLines();
+  } catch (err) {
+    el.scanError.textContent = err.message;
+    el.scanError.classList.remove("hidden");
+  }
+}
+
+el.scanInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  const barcode = el.scanInput.value.trim();
+  el.scanInput.value = "";
+  if (barcode) handleScan(barcode);
+});
+
 let lineSearchTimer;
 el.lineSearch.addEventListener("input", () => {
   clearTimeout(lineSearchTimer);
@@ -216,21 +267,7 @@ el.lineSearch.addEventListener("input", () => {
 el.lineResults.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-variant]");
   if (!button) return;
-  const v = JSON.parse(button.dataset.variant);
-  state.lines.push({
-    productVariantId: v.variant_id,
-    name: v.name,
-    colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
-    quantity: 1,
-    unitPrice: Number(v.price_override ?? v.base_price),
-    discountPercent: Number(v.suggested_discount_percent ?? 0),
-    printDescription: "",
-    printPrice: null,
-    printDiscountPercent: 0,
-    taxRatePercent: Number(v.tax_rate_percent),
-    costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
-    sourcing: "STOCK",
-  });
+  state.lines.push(variantToLine(JSON.parse(button.dataset.variant)));
   el.lineSearch.value = "";
   el.lineResults.innerHTML = "";
   renderLines();

@@ -38,7 +38,7 @@ pnpm dev
 ```
 
 Öppna sedan http://localhost:3001 — Express serverar både API:t
-(`/api/...`) och de statiska sidorna (`/kunder.html`, `/kassa.html`, osv.)
+(`/api/...`) och de statiska sidorna (`/kunder.html`, `/ordrar.html`, osv.)
 från samma process. Du landar på `/login.html`; logga in med
 `admin@example.com` / `changeme` (byt lösenord under Inställningar →
 Användare).
@@ -124,7 +124,7 @@ PLAN.md              Kravspec och fasindelad byggplan
   session i en `sessions`-tabell bakom en HttpOnly-cookie — inte JWT,
   så en utloggning/inaktivering slår igenom direkt). Alla `/api`-rutter
   utom `/api/auth/*` och de publika offert-svaren kräver en inloggad
-  session. Fyra roller (ADMIN/SALES/WAREHOUSE/POS): Inställningar och
+  session. Tre roller (ADMIN/SALES/WAREHOUSE): Inställningar och
   användarhantering kräver ADMIN, att ändra lagersaldo (justera,
   inventering, ta emot inköpsorder) kräver WAREHOUSE eller ADMIN.
   Användare hanteras under Inställningar → Användare (endast ADMIN).

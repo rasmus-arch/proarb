@@ -66,6 +66,10 @@
         <h2 class="text-sm font-medium text-slate-900">Rader</h2>
 
         <div id="line-search-wrap" class="mt-2 flex flex-wrap items-start gap-2">
+          <div class="max-w-xs">
+            <input id="scan-input" type="text" placeholder="Skanna streckkod…" class="input" />
+            <p id="scan-error" class="mt-1 hidden text-xs text-red-600"></p>
+          </div>
           <div class="relative max-w-md flex-1">
             <input id="line-search" type="text" placeholder="Sök produkt att lägga till…" class="input" />
             <div id="line-results" class="absolute z-10 mt-1 w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>

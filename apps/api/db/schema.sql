@@ -528,7 +528,10 @@ CREATE TABLE IF NOT EXISTS stock_count_lines (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
--- Point of sale (kassa)
+-- Point of sale (kassa) — REMOVED as a feature (streckkodsläsning flyttades
+-- till order-editor istället). Tables kept, unused, for historical sales
+-- data and because `invoices` still references sale_id alongside order_id
+-- (never DROP a table with real transaction history on a live database).
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS pos_sessions (

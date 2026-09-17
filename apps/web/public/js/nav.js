@@ -12,7 +12,6 @@ const LINKS = [
   { href: "/kunder.html", label: "Kunder", key: "kunder" },
   { href: "/offerter.html", label: "Offerter", key: "offerter" },
   { href: "/ordrar.html", label: "Ordrar", key: "ordrar" },
-  { href: "/kassa.html", label: "Kassa", key: "kassa" },
   { href: "/lager.html", label: "Lager", key: "lager" },
   { href: "/produkter.html", label: "Produkter", key: "produkter" },
   { href: "/statistik.html", label: "Statistik", key: "statistik" },
