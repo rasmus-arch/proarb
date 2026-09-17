@@ -1,9 +1,11 @@
 import { api } from "../api.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
+import { renderPager } from "../pagination.js";
 
 const rowsEl = document.getElementById("order-rows");
 const emptyStateEl = document.getElementById("empty-state");
 const searchEl = document.getElementById("search");
+const pagerEl = document.getElementById("pager");
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -34,15 +36,21 @@ function renderRows(orders) {
   emptyStateEl.classList.toggle("hidden", orders.length > 0);
 }
 
+const PAGE_SIZE = 25;
+let currentPage = 1;
+
 let searchTimer;
-async function loadOrders() {
-  const { rows } = await api.get(`/orders?search=${encodeURIComponent(searchEl.value)}`);
+async function loadOrders(page = currentPage) {
+  currentPage = page;
+  const params = new URLSearchParams({ search: searchEl.value, page: currentPage, pageSize: PAGE_SIZE });
+  const { rows, total } = await api.get(`/orders?${params}`);
   renderRows(rows);
+  renderPager(pagerEl, { page: currentPage, pageSize: PAGE_SIZE, total, onChange: loadOrders });
 }
 
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadOrders, 250);
+  searchTimer = setTimeout(() => loadOrders(1), 250);
 });
 
 loadOrders();

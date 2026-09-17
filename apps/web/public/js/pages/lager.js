@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { renderPager } from "../pagination.js";
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -42,11 +43,22 @@ const saldoSearch = document.getElementById("saldo-search");
 const saldoLowOnly = document.getElementById("saldo-low-only");
 const saldoRows = document.getElementById("saldo-rows");
 const saldoEmpty = document.getElementById("saldo-empty");
+const saldoPager = document.getElementById("saldo-pager");
 
-async function loadSaldo() {
-  const params = new URLSearchParams({ search: saldoSearch.value, lowStockOnly: String(saldoLowOnly.checked) });
-  const { rows } = await api.get(`/inventory/stock-levels?${params}`);
+const SALDO_PAGE_SIZE = 50;
+let saldoPage = 1;
+
+async function loadSaldo(page = saldoPage) {
+  saldoPage = page;
+  const params = new URLSearchParams({
+    search: saldoSearch.value,
+    lowStockOnly: String(saldoLowOnly.checked),
+    page: saldoPage,
+    pageSize: SALDO_PAGE_SIZE,
+  });
+  const { rows, total } = await api.get(`/inventory/stock-levels?${params}`);
   saldoEmpty.classList.toggle("hidden", rows.length > 0);
+  renderPager(saldoPager, { page: saldoPage, pageSize: SALDO_PAGE_SIZE, total, onChange: loadSaldo });
   saldoRows.innerHTML = rows
     .map(
       (r) => `
@@ -68,8 +80,8 @@ async function loadSaldo() {
     .join("");
 }
 
-saldoSearch.addEventListener("input", () => loadSaldo());
-saldoLowOnly.addEventListener("change", () => loadSaldo());
+saldoSearch.addEventListener("input", () => loadSaldo(1));
+saldoLowOnly.addEventListener("change", () => loadSaldo(1));
 
 const adjustDialog = document.getElementById("adjust-dialog");
 let adjustTarget = null;

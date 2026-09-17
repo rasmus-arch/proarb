@@ -1,9 +1,11 @@
 import { api } from "../api.js";
+import { renderPager } from "../pagination.js";
 
 const rowsEl = document.getElementById("quote-rows");
 const emptyStateEl = document.getElementById("empty-state");
 const searchEl = document.getElementById("search");
 const statusEl = document.getElementById("status-filter");
+const pagerEl = document.getElementById("pager");
 
 const STATUS_LABELS = {
   DRAFT: "Utkast",
@@ -54,17 +56,27 @@ function renderRows(quotes) {
   emptyStateEl.classList.toggle("hidden", quotes.length > 0);
 }
 
+const PAGE_SIZE = 25;
+let currentPage = 1;
+
 let searchTimer;
-async function loadQuotes() {
-  const params = new URLSearchParams({ search: searchEl.value, status: statusEl.value });
-  const { rows } = await api.get(`/quotes?${params}`);
+async function loadQuotes(page = currentPage) {
+  currentPage = page;
+  const params = new URLSearchParams({
+    search: searchEl.value,
+    status: statusEl.value,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  });
+  const { rows, total } = await api.get(`/quotes?${params}`);
   renderRows(rows);
+  renderPager(pagerEl, { page: currentPage, pageSize: PAGE_SIZE, total, onChange: loadQuotes });
 }
 
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadQuotes, 250);
+  searchTimer = setTimeout(() => loadQuotes(1), 250);
 });
-statusEl.addEventListener("change", loadQuotes);
+statusEl.addEventListener("change", () => loadQuotes(1));
 
 loadQuotes();

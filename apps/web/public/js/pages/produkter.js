@@ -1,8 +1,10 @@
 import { api } from "../api.js";
+import { renderPager } from "../pagination.js";
 
 const rowsEl = document.getElementById("product-rows");
 const emptyStateEl = document.getElementById("empty-state");
 const searchEl = document.getElementById("search");
+const pagerEl = document.getElementById("pager");
 
 const newProductDialog = document.getElementById("new-product-dialog");
 const newProductForm = document.getElementById("new-product-form");
@@ -70,15 +72,21 @@ function renderRows(products) {
   emptyStateEl.classList.toggle("hidden", products.length > 0);
 }
 
+const PAGE_SIZE = 50;
+let currentPage = 1;
+
 let searchTimer;
-async function loadProducts() {
-  const { rows } = await api.get(`/products?search=${encodeURIComponent(searchEl.value)}`);
+async function loadProducts(page = currentPage) {
+  currentPage = page;
+  const params = new URLSearchParams({ search: searchEl.value, page: currentPage, pageSize: PAGE_SIZE });
+  const { rows, total } = await api.get(`/products?${params}`);
   renderRows(rows);
+  renderPager(pagerEl, { page: currentPage, pageSize: PAGE_SIZE, total, onChange: loadProducts });
 }
 
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadProducts, 250);
+  searchTimer = setTimeout(() => loadProducts(1), 250);
 });
 
 // --- New product dialog -----------------------------------------------

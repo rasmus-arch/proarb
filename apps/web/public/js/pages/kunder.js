@@ -1,8 +1,10 @@
 import { api } from "../api.js";
+import { renderPager } from "../pagination.js";
 
 const rowsEl = document.getElementById("customer-rows");
 const emptyStateEl = document.getElementById("empty-state");
 const searchEl = document.getElementById("search");
+const pagerEl = document.getElementById("pager");
 const dialogEl = document.getElementById("new-customer-dialog");
 const formEl = document.getElementById("new-customer-form");
 const formErrorEl = document.getElementById("form-error");
@@ -30,15 +32,21 @@ function escapeHtml(value) {
   return div.innerHTML;
 }
 
+const PAGE_SIZE = 50;
+let currentPage = 1;
+
 let searchTimer;
-async function loadCustomers() {
-  const { rows } = await api.get(`/customers?search=${encodeURIComponent(searchEl.value)}`);
+async function loadCustomers(page = currentPage) {
+  currentPage = page;
+  const params = new URLSearchParams({ search: searchEl.value, page: currentPage, pageSize: PAGE_SIZE });
+  const { rows, total } = await api.get(`/customers?${params}`);
   renderRows(rows);
+  renderPager(pagerEl, { page: currentPage, pageSize: PAGE_SIZE, total, onChange: loadCustomers });
 }
 
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadCustomers, 250);
+  searchTimer = setTimeout(() => loadCustomers(1), 250);
 });
 
 document.getElementById("new-customer-btn").addEventListener("click", () => {
