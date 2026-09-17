@@ -61,7 +61,7 @@ async function loadQuoteLines(quoteId) {
   const [lines] = await pool.query(
     `SELECT ql.*, COALESCE(p.name, ql.description) AS product_name,
             COALESCE(p.tax_rate_percent, ql.tax_rate_percent) AS tax_rate_percent,
-            p.cost_price, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
+            p.cost_price, p.image_url, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
      FROM quote_lines ql
      LEFT JOIN product_variants v ON v.id = ql.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id

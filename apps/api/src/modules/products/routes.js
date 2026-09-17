@@ -1,13 +1,17 @@
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
 import multer from "multer";
 import * as products from "./service.js";
 import { importProductsCsv } from "./import.js";
+import { createLogoUpload, uploadsRoot, PRODUCT_IMAGE_EXTENSIONS } from "../../lib/uploads.js";
 
 // Fas 1: sökbar produkt-/variantlista, fullt CRUD på produkt+varianter,
 // slå upp variant via streckkod (kassan) och bulkimport från CSV.
 // Prislistor och lagersaldo per plats kommer i senare faser, se PLAN.md.
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const imageUpload = createLogoUpload("product-images", PRODUCT_IMAGE_EXTENSIONS);
 
 router.get("/", async (req, res, next) => {
   try {
@@ -86,6 +90,47 @@ router.patch("/:id", async (req, res, next) => {
   try {
     const product = await products.updateProduct(Number(req.params.id), req.body ?? {});
     if (!product) return res.status(404).json({ error: "Not found" });
+    res.json(product);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Produktbild — visas i digitala offerter (den publika offertsidan). Ett
+// foto per produkt (inte per variant); jpg/png/webp enforced av
+// createLogoUpload via PRODUCT_IMAGE_EXTENSIONS.
+router.post(
+  "/:id/image",
+  (req, res, next) => {
+    imageUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  },
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Ingen fil bifogad (fältnamn: file)" });
+      const existing = await products.getProduct(Number(req.params.id));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+
+      const product = await products.updateProduct(Number(req.params.id), {
+        imageUrl: `product-images/${req.file.filename}`,
+      });
+      if (existing.image_url) fs.unlink(path.join(uploadsRoot, existing.image_url), () => {});
+      res.json(product);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+router.delete("/:id/image", async (req, res, next) => {
+  try {
+    const existing = await products.getProduct(Number(req.params.id));
+    if (!existing) return res.status(404).json({ error: "Not found" });
+
+    const product = await products.updateProduct(Number(req.params.id), { imageUrl: null });
+    if (existing.image_url) fs.unlink(path.join(uploadsRoot, existing.image_url), () => {});
     res.json(product);
   } catch (err) {
     next(err);

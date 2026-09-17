@@ -27,6 +27,11 @@ const editVariantSku = document.getElementById("edit-variant-sku");
 const editVariantBarcode = document.getElementById("edit-variant-barcode");
 const editVariantError = document.getElementById("edit-variant-error");
 const addVariantBtn = document.getElementById("add-variant-btn");
+const editProductImagePreview = document.getElementById("edit-product-image-preview");
+const editProductImageEmpty = document.getElementById("edit-product-image-empty");
+const editProductImageInput = document.getElementById("edit-product-image-input");
+const editProductImageError = document.getElementById("edit-product-image-error");
+const removeProductImageBtn = document.getElementById("remove-product-image-btn");
 
 const importDialog = document.getElementById("import-dialog");
 const importFileInput = document.getElementById("import-file");
@@ -168,10 +173,19 @@ function renderEditVariants(variants) {
     .join("");
 }
 
+function renderEditImage(imageUrl) {
+  editProductImagePreview.classList.toggle("hidden", !imageUrl);
+  editProductImageEmpty.classList.toggle("hidden", Boolean(imageUrl));
+  removeProductImageBtn.classList.toggle("hidden", !imageUrl);
+  editProductImagePreview.src = imageUrl ? `/uploads/${imageUrl}` : "";
+}
+
 async function openEditDialog(productId) {
   const product = await api.get(`/products/${productId}`);
   editProductError.classList.add("hidden");
   editVariantError.classList.add("hidden");
+  editProductImageError.classList.add("hidden");
+  editProductImageInput.value = "";
   editProductForm.reset();
   editProductForm.elements.name.value = product.name ?? "";
   editProductForm.elements.category.value = categoriesCache.find((c) => c.id === product.category_id)?.name ?? "";
@@ -181,8 +195,39 @@ async function openEditDialog(productId) {
   editProductForm.elements.costPrice.value = product.cost_price ?? "";
   editProductForm.dataset.productId = productId;
   renderEditVariants(product.variants.filter((v) => v.active));
+  renderEditImage(product.image_url);
   editProductDialog.showModal();
 }
+
+editProductImageInput.addEventListener("change", async () => {
+  const file = editProductImageInput.files[0];
+  if (!file) return;
+  editProductImageError.classList.add("hidden");
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/products/${editProductForm.dataset.productId}/image`, { method: "POST", body: formData });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? "Uppladdning misslyckades");
+    renderEditImage(body.image_url);
+    await loadProducts();
+  } catch (err) {
+    editProductImageError.textContent = err.message;
+    editProductImageError.classList.remove("hidden");
+  }
+});
+
+removeProductImageBtn.addEventListener("click", async () => {
+  editProductImageError.classList.add("hidden");
+  try {
+    await api.delete(`/products/${editProductForm.dataset.productId}/image`);
+    renderEditImage(null);
+    await loadProducts();
+  } catch (err) {
+    editProductImageError.textContent = err.message;
+    editProductImageError.classList.remove("hidden");
+  }
+});
 
 rowsEl.addEventListener("click", async (event) => {
   const editBtn = event.target.closest("button[data-edit]");

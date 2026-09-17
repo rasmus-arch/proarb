@@ -163,6 +163,7 @@ export async function updateProduct(id, data) {
     tax_rate_percent: data.taxRatePercent,
     base_price: data.basePrice,
     cost_price: data.costPrice,
+    image_url: data.imageUrl,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

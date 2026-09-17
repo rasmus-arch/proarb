@@ -153,6 +153,16 @@
           </label>
         </div>
 
+        <h3 class="mt-5 text-sm font-medium text-slate-900">Produktbild</h3>
+        <p class="mt-1 text-xs text-slate-500">Visas i digitala offerter. Tillåtna format: jpg, png, webp.</p>
+        <div class="mt-2 flex items-center gap-3">
+          <img id="edit-product-image-preview" class="hidden h-16 w-16 rounded-md border border-slate-200 object-cover" alt="" />
+          <p id="edit-product-image-empty" class="text-xs text-slate-400">Ingen bild uppladdad.</p>
+          <input id="edit-product-image-input" type="file" accept="image/jpeg,image/png,image/webp" class="input max-w-xs" />
+          <button type="button" id="remove-product-image-btn" class="hidden text-sm text-red-600 underline">Ta bort</button>
+        </div>
+        <p id="edit-product-image-error" class="mt-2 hidden text-sm text-red-600"></p>
+
         <h3 class="mt-5 text-sm font-medium text-slate-900">Varianter</h3>
         <ul id="edit-variant-list" class="mt-2 divide-y divide-slate-100 text-sm"></ul>
         <p id="edit-variant-empty" class="hidden py-2 text-sm text-slate-500">Inga varianter ännu.</p>

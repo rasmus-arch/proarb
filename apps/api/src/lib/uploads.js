@@ -20,7 +20,7 @@ const MIME_BY_EXTENSION = {
   ".pdf": "application/pdf",
 };
 
-export function createLogoUpload(subdir) {
+export function createLogoUpload(subdir, allowedExtensions = ALLOWED_EXTENSIONS) {
   const destination = path.join(uploadsRoot, subdir);
   fs.mkdirSync(destination, { recursive: true });
 
@@ -37,14 +37,18 @@ export function createLogoUpload(subdir) {
     limits: { fileSize: 20 * 1024 * 1024 },
     fileFilter(req, file, cb) {
       const ext = path.extname(file.originalname).toLowerCase();
-      if (!ALLOWED_EXTENSIONS.has(ext)) {
-        cb(new Error(`Filtypen ${ext || "okänd"} stöds inte. Tillåtna format: eps, jpg, png, svg, pdf.`));
+      if (!allowedExtensions.has(ext)) {
+        cb(new Error(`Filtypen ${ext || "okänd"} stöds inte. Tillåtna format: ${[...allowedExtensions].map((e) => e.slice(1)).join(", ")}.`));
         return;
       }
       cb(null, true);
     },
   });
 }
+
+// Product photos shown in digital quotes — real photo formats only
+// (unlike logos, which also allow eps/pdf/svg for print underlag).
+export const PRODUCT_IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 
 export function mimeTypeForExtension(ext) {
   return MIME_BY_EXTENSION[ext.toLowerCase()] ?? "application/octet-stream";

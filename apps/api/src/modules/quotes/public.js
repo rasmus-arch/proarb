@@ -54,6 +54,13 @@ export async function renderPublicQuotePage(req, res) {
     .map(
       (line) => `
       <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;width:56px;">
+          ${
+            line.image_url
+              ? `<img src="/uploads/${line.image_url}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;" />`
+              : ""
+          }
+        </td>
         <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">
           <div style="font-weight:600;color:#0f172a;">${escapeHtml(line.product_name)}</div>
           <div style="color:#64748b;font-size:13px;">${escapeHtml([line.color, line.size].filter(Boolean).join(" / "))}</div>
@@ -96,7 +103,7 @@ export async function renderPublicQuotePage(req, res) {
     </div>
 
     <table>
-      <thead><tr><th>Produkt</th><th style="text-align:right;">Antal</th><th style="text-align:right;">à-pris ex moms</th><th style="text-align:right;">Summa ex moms</th></tr></thead>
+      <thead><tr><th></th><th>Produkt</th><th style="text-align:right;">Antal</th><th style="text-align:right;">à-pris ex moms</th><th style="text-align:right;">Summa ex moms</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
 
