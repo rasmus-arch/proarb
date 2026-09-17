@@ -72,7 +72,11 @@ function money(value) {
 }
 
 function lineTotal(line) {
-  return Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
+  const productTotal = Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
+  const printTotal = line.printPrice
+    ? Number(line.quantity) * Number(line.printPrice) * (1 - Number(line.printDiscountPercent || 0) / 100)
+    : 0;
+  return productTotal + printTotal;
 }
 
 // null when the product has no cost price on file — margin is unknown,
@@ -110,11 +114,10 @@ function renderLines() {
     .map((line, index) => {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
-      const printCell = line.printDescription
-        ? `<div class="text-xs text-slate-500">${escapeHtml(line.printDescription)}</div>`
-        : `<span class="text-slate-400">–</span>`;
-
       if (!isNewOrder()) {
+        const printSummary = line.printDescription
+          ? `<div>${escapeHtml(line.printDescription)}</div><div class="text-xs text-slate-500">${money(line.printPrice || 0)}${Number(line.printDiscountPercent) > 0 ? ` (-${line.printDiscountPercent} %)` : ""}</div>`
+          : "";
         return `
           <tr>
             <td class="py-2 pr-3">${productCell}</td>
@@ -123,7 +126,7 @@ function renderLines() {
             <td class="py-2 pr-3">${line.discountPercent} %</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
             <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
-            <td class="py-2 pr-3">${printCell}</td>
+            <td class="py-2 pr-3">${printSummary}</td>
             <td class="py-2 pr-3 text-center">${line.sourcing === "PURCHASE" ? "✓" : ""}</td>
             <td></td>
           </tr>`;
@@ -137,7 +140,13 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
           <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
-          <td class="py-2 pr-3 text-slate-400">–</td>
+          <td class="py-2 pr-3">
+            <input type="text" class="input" placeholder="Tryckbeskrivning (valfritt)" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
+            <div class="mt-1 flex gap-1">
+              <input type="number" min="0" step="0.01" class="input" placeholder="Tryckpris" data-field="printPrice" data-index="${index}" value="${line.printPrice ?? ""}" />
+              <input type="number" min="0" max="100" step="1" class="input" placeholder="Rabatt %" data-field="printDiscountPercent" data-index="${index}" value="${line.printDiscountPercent || 0}" />
+            </div>
+          </td>
           <td class="py-2 pr-3 text-center"><input type="checkbox" class="rounded border-slate-300" data-field="sourcingPurchase" data-index="${index}" ${line.sourcing === "PURCHASE" ? "checked" : ""} /></td>
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
@@ -157,11 +166,21 @@ el.lineRows.addEventListener("input", (event) => {
     return;
   }
 
-  line[field] = Number(event.target.value);
+  if (field === "printDescription") {
+    line.printDescription = event.target.value;
+    return;
+  } else if (field === "printPrice") {
+    line.printPrice = event.target.value === "" ? null : Number(event.target.value);
+  } else {
+    line[field] = Number(event.target.value);
+  }
+
   renderTotals();
-  const row = event.target.closest("tr");
-  row.querySelector("td:nth-last-child(4)").textContent = money(lineTotal(line));
-  row.querySelector("td:nth-last-child(3)").textContent = marginLabel(lineMargin(line));
+  if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent"].includes(field)) {
+    const row = event.target.closest("tr");
+    row.querySelector("td:nth-last-child(5)").textContent = money(lineTotal(line));
+    row.querySelector("td:nth-last-child(4)").textContent = marginLabel(lineMargin(line));
+  }
 });
 
 el.lineRows.addEventListener("click", (event) => {
@@ -205,6 +224,9 @@ el.lineResults.addEventListener("click", (event) => {
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
+    printDescription: "",
+    printPrice: null,
+    printDiscountPercent: 0,
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
     sourcing: "STOCK",
@@ -238,6 +260,9 @@ el.fritextForm.addEventListener("submit", (event) => {
     quantity,
     unitPrice,
     discountPercent: 0,
+    printDescription: form.printDescription || "",
+    printPrice: form.printPrice ? Number(form.printPrice) : null,
+    printDiscountPercent: Number(form.printDiscountPercent) || 0,
     taxRatePercent: Number(form.taxRatePercent) || 25,
     costPrice: null,
     sourcing: "STOCK",
@@ -282,6 +307,9 @@ el.newProductForm.addEventListener("submit", async (event) => {
       quantity: 1,
       unitPrice: Number(product.base_price),
       discountPercent: 0,
+      printDescription: "",
+      printPrice: null,
+      printDiscountPercent: 0,
       taxRatePercent: Number(product.tax_rate_percent),
       costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
       sourcing: "STOCK",
@@ -410,6 +438,9 @@ el.saveBtn.addEventListener("click", async () => {
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent,
       taxRatePercent: l.taxRatePercent,
+      printDescription: l.printDescription || null,
+      printPrice: l.printPrice ?? null,
+      printDiscountPercent: l.printDiscountPercent || 0,
       sourcing: l.sourcing,
     })),
   };
@@ -518,7 +549,9 @@ async function init() {
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
       sourcing: l.sourcing,
-      printDescription: l.print_description,
+      printDescription: l.print_description ?? "",
+      printPrice: l.print_price === null || l.print_price === undefined ? null : Number(l.print_price),
+      printDiscountPercent: Number(l.print_discount_percent ?? 0),
     }));
 
     el.title.textContent = `Order ${order.order_number}`;

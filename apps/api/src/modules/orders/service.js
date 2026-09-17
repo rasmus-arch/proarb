@@ -10,8 +10,16 @@ function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
 }
 
+// unit_price * quantity * (1 - discount%), plus the same for tryck (if
+// print_price is set — tryck is optional per line, quantity always
+// follows the line's own quantity, no separate tryckantal).
 function lineTotal(line) {
-  return Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
+  const productTotal = Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
+  const printTotal =
+    line.print_price === null || line.print_price === undefined
+      ? 0
+      : Number(line.quantity) * Number(line.print_price) * (1 - Number(line.print_discount_percent ?? 0) / 100);
+  return productTotal + printTotal;
 }
 
 // null when the product has no cost_price set — margin for that line is
@@ -66,7 +74,10 @@ export async function listOrders({ search = "", status = "", page = 1, pageSize 
   const [rows] = await pool.query(
     `SELECT o.id, o.order_number, o.status, o.delivery_method, o.created_at,
             c.id AS customer_id, c.name AS customer_name,
-            COALESCE(SUM(ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)), 0) AS total_amount
+            COALESCE(SUM(
+              ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
+              + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+            ), 0) AS total_amount
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN order_lines ol ON ol.order_id = o.id
@@ -93,11 +104,10 @@ async function loadOrderLines(orderId) {
   const [lines] = await pool.query(
     `SELECT ol.*, COALESCE(p.name, ol.description) AS product_name,
             COALESCE(p.tax_rate_percent, ol.tax_rate_percent) AS tax_rate_percent,
-            p.cost_price, v.sku, v.color, v.size, pm.name AS print_method_name
+            p.cost_price, v.sku, v.color, v.size
      FROM order_lines ol
      LEFT JOIN product_variants v ON v.id = ol.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
-     LEFT JOIN print_methods pm ON pm.id = ol.print_method_id
      WHERE ol.order_id = ?
      ORDER BY ol.sort_order ASC, ol.id ASC`,
     [orderId]
@@ -146,8 +156,8 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_method_id, print_description, sort_order, sourcing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order, sourcing)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -156,8 +166,9 @@ async function insertOrderLines(connection, orderId, lines) {
         line.unitPrice ?? line.unit_price,
         line.discountPercent ?? line.discount_percent ?? 0,
         line.taxRatePercent ?? line.tax_rate_percent ?? null,
-        line.printMethodId ?? line.print_method_id ?? null,
         line.printDescription ?? line.print_description ?? null,
+        line.printPrice ?? line.print_price ?? null,
+        line.printDiscountPercent ?? line.print_discount_percent ?? 0,
         sortOrder++,
         line.sourcing ?? "STOCK",
       ]
@@ -408,57 +419,4 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   }
 
   return getOrder(orderId);
-}
-
-// ---------------------------------------------------------------------
-// Tryck/produktionsflöde (Fas 6) — a line only carries a meaningful
-// print_status once it has a print_description; a plain (untryckt) line
-// is irrelevant to the production queue. Previously this was driven by
-// choosing a specific print_method_id (Brodyr/Screentryck/...), but that
-// upfront method choice was dropped — every product can be printed, so
-// staff just type what's needed in print_description instead of picking
-// a category first. print_method_id/print_methods still exist in the
-// schema for old data but are no longer written to.
-// ---------------------------------------------------------------------
-
-const PRINT_STATUS_TRANSITIONS = {
-  WAITING: ["IN_PRODUCTION"],
-  IN_PRODUCTION: ["READY", "WAITING"],
-  READY: ["IN_PRODUCTION"],
-};
-
-export async function getPrintQueue({ status = "" } = {}) {
-  const statusClause = status ? "AND ol.print_status = ?" : "";
-  const params = status ? [status] : [];
-  const [rows] = await pool.query(
-    `SELECT ol.id AS order_line_id, ol.order_id, o.order_number, o.status AS order_status,
-            ol.print_status, ol.quantity, ol.print_description, c.name AS customer_name,
-            v.sku, v.color, v.size, COALESCE(p.name, ol.description) AS product_name
-     FROM order_lines ol
-     JOIN orders o ON o.id = ol.order_id
-     JOIN customers c ON c.id = o.customer_id
-     LEFT JOIN product_variants v ON v.id = ol.product_variant_id
-     LEFT JOIN products p ON p.id = v.product_id
-     WHERE ol.print_description IS NOT NULL AND ol.print_description != ''
-       AND o.status NOT IN ('CANCELLED', 'DELIVERED', 'INVOICED')
-       ${statusClause}
-     ORDER BY o.created_at ASC`,
-    params
-  );
-  return rows;
-}
-
-export async function updatePrintStatus(orderLineId, newStatus) {
-  const [[line]] = await pool.query(
-    `SELECT ol.*, o.id AS order_id FROM order_lines ol JOIN orders o ON o.id = ol.order_id WHERE ol.id = ?`,
-    [orderLineId]
-  );
-  if (!line) throw new Error("LINE_NOT_FOUND");
-  if (!line.print_description) throw new Error("LINE_NOT_PRINTED");
-
-  const allowed = PRINT_STATUS_TRANSITIONS[line.print_status] ?? [];
-  if (!allowed.includes(newStatus)) throw new Error("INVALID_TRANSITION");
-
-  await pool.query(`UPDATE order_lines SET print_status = ? WHERE id = ?`, [newStatus, orderLineId]);
-  return getOrder(line.order_id);
 }

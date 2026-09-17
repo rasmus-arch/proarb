@@ -83,7 +83,11 @@ function money(value) {
 }
 
 function lineTotal(line) {
-  return Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
+  const productTotal = Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
+  const printTotal = line.printPrice
+    ? Number(line.quantity) * Number(line.printPrice) * (1 - Number(line.printDiscountPercent || 0) / 100)
+    : 0;
+  return productTotal + printTotal;
 }
 
 // null when the product has no cost price on file — margin is unknown,
@@ -122,13 +126,16 @@ function renderLines() {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
       if (!isEditable()) {
+        const printSummary = line.printDescription
+          ? `<div>${escapeHtml(line.printDescription)}</div><div class="text-xs text-slate-500">${money(line.printPrice || 0)}${Number(line.printDiscountPercent) > 0 ? ` (-${line.printDiscountPercent} %)` : ""}</div>`
+          : "";
         return `
           <tr>
             <td class="py-2 pr-3">${productCell}</td>
             <td class="py-2 pr-3">${line.quantity}</td>
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
             <td class="py-2 pr-3">${line.discountPercent} %</td>
-            <td class="py-2 pr-3">${escapeHtml(line.printDescription ?? "")}</td>
+            <td class="py-2 pr-3">${printSummary}</td>
             <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
             <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
             <td></td>
@@ -143,6 +150,10 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
           <td class="py-2 pr-3">
             <input type="text" class="input" placeholder="Tryckbeskrivning (valfritt)" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
+            <div class="mt-1 flex gap-1">
+              <input type="number" min="0" step="0.01" class="input" placeholder="Tryckpris" data-field="printPrice" data-index="${index}" value="${line.printPrice ?? ""}" />
+              <input type="number" min="0" max="100" step="1" class="input" placeholder="Rabatt %" data-field="printDiscountPercent" data-index="${index}" value="${line.printDiscountPercent || 0}" />
+            </div>
           </td>
           <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
           <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
@@ -160,6 +171,8 @@ el.lineRows.addEventListener("input", (event) => {
   const line = state.lines[Number(index)];
   if (field === "printDescription") {
     line.printDescription = event.target.value;
+  } else if (field === "printPrice") {
+    line.printPrice = event.target.value === "" ? null : Number(event.target.value);
   } else {
     line[field] = Number(event.target.value);
   }
@@ -167,7 +180,7 @@ el.lineRows.addEventListener("input", (event) => {
   // Only the total/margin cells need refreshing on numeric edits — patch
   // them in place rather than a full re-render so the input being typed
   // into doesn't lose focus.
-  if (field === "quantity" || field === "unitPrice" || field === "discountPercent") {
+  if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent"].includes(field)) {
     const row = event.target.closest("tr");
     row.querySelector("td:nth-last-child(3)").textContent = money(lineTotal(line));
     row.querySelector("td:nth-last-child(2)").textContent = marginLabel(lineMargin(line));
@@ -218,6 +231,8 @@ el.lineResults.addEventListener("click", (event) => {
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
     printDescription: "",
+    printPrice: null,
+    printDiscountPercent: 0,
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
   });
@@ -251,6 +266,8 @@ el.fritextForm.addEventListener("submit", (event) => {
     unitPrice,
     discountPercent: 0,
     printDescription: form.printDescription || "",
+    printPrice: form.printPrice ? Number(form.printPrice) : null,
+    printDiscountPercent: Number(form.printDiscountPercent) || 0,
     taxRatePercent: Number(form.taxRatePercent) || 25,
     costPrice: null,
   });
@@ -295,6 +312,8 @@ el.newProductForm.addEventListener("submit", async (event) => {
       unitPrice: Number(product.base_price),
       discountPercent: 0,
       printDescription: "",
+      printPrice: null,
+      printDiscountPercent: 0,
       taxRatePercent: Number(product.tax_rate_percent),
       costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
     });
@@ -401,6 +420,8 @@ el.saveBtn.addEventListener("click", async () => {
       discountPercent: l.discountPercent,
       taxRatePercent: l.taxRatePercent,
       printDescription: l.printDescription || null,
+      printPrice: l.printPrice ?? null,
+      printDiscountPercent: l.printDiscountPercent || 0,
     })),
   };
 
@@ -507,6 +528,8 @@ async function init() {
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),
       printDescription: l.print_description ?? "",
+      printPrice: l.print_price === null || l.print_price === undefined ? null : Number(l.print_price),
+      printDiscountPercent: Number(l.print_discount_percent ?? 0),
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
     }));

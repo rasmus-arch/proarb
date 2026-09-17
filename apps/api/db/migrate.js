@@ -88,6 +88,10 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN fortnox_client_secret VARCHAR(255) NULL",
     "ALTER TABLE app_settings ADD COLUMN fortnox_access_token VARCHAR(500) NULL",
     "ALTER TABLE app_settings ADD COLUMN fortnox_refresh_token VARCHAR(500) NULL",
+    "ALTER TABLE quote_lines ADD COLUMN print_price DECIMAL(10,2) NULL",
+    "ALTER TABLE quote_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE order_lines ADD COLUMN print_price DECIMAL(10,2) NULL",
+    "ALTER TABLE order_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
   ];
   for (const statement of alters) {
     try {

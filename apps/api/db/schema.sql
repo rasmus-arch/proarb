@@ -319,7 +319,12 @@ CREATE TABLE IF NOT EXISTS quote_lines (
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
   tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
+  -- Tryck är valfritt per rad: fylls print_description i räknas
+  -- print_price/print_discount_percent (antalet följer alltid radens
+  -- egen quantity — inget eget tryckantal).
   print_description  VARCHAR(255) NULL,
+  print_price        DECIMAL(10,2) NULL,
+  print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
   sort_order         INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_ql_quote FOREIGN KEY (quote_id) REFERENCES quotes(id),
   CONSTRAINT fk_ql_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
@@ -350,9 +355,8 @@ CREATE TABLE IF NOT EXISTS orders (
   reference_contact_id INT NULL,
   quote_id             INT NULL UNIQUE,
   -- Flödet är Order (NEW) -> Redo för utlämning -> Utlämnad -> Fakturerad,
-  -- plus Avbruten. Produktionsspårning (tryck) lever separat på
-  -- order_lines.print_status/print_description och styr inte den här
-  -- statusen längre — se Tryckkö (tryck.html).
+  -- plus Avbruten. Tryck är bara ett valfritt textfält + pris/rabatt per
+  -- rad (se order_lines) — ingen egen produktionsstatus/kö längre.
   status               ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW',
   delivery_method      ENUM('PICKUP','SHIPPING') NOT NULL DEFAULT 'PICKUP',
   created_by           INT NOT NULL,
@@ -380,13 +384,20 @@ CREATE TABLE IF NOT EXISTS order_lines (
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
   tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
+  -- Tryck är valfritt per rad: fylls print_description i räknas
+  -- print_price/print_discount_percent (antalet följer alltid radens
+  -- egen quantity — inget eget tryckantal). print_status var en separat
+  -- produktionskö (Fas 6) — borttagen, kolumnen lämnas kvar oanvänd
+  -- (samma "läs/skriv aldrig igen" som print_method_id) hellre än att
+  -- DROP:a en kolumn på en databas som redan är i drift.
   print_description  VARCHAR(255) NULL,
+  print_price        DECIMAL(10,2) NULL,
+  print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
   sort_order         INT NOT NULL DEFAULT 0,
   -- STOCK (default): fine to fulfil from current lagersaldo. PURCHASE:
   -- always order this in specifically for this order, even if there's
   -- stock on hand — always shows up in inköpsförslag (Fas 5).
   sourcing           ENUM('STOCK', 'PURCHASE') NOT NULL DEFAULT 'STOCK',
-  -- Only meaningful when print_method_id is set (Fas 6 production queue).
   print_status       ENUM('WAITING', 'IN_PRODUCTION', 'READY') NOT NULL DEFAULT 'WAITING',
   CONSTRAINT fk_ol_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_ol_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),

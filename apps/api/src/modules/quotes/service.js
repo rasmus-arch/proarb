@@ -12,9 +12,17 @@ function newPublicToken() {
   return crypto.randomBytes(24).toString("hex");
 }
 
-// unit_price * quantity * (1 - discount%) — always ex moms, per PLAN.md.
+// unit_price * quantity * (1 - discount%), plus the same for tryck (if
+// print_price is set — tryck is optional per line, quantity always
+// follows the line's own quantity, no separate tryckantal) — always ex
+// moms, per PLAN.md.
 function lineTotal(line) {
-  return Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
+  const productTotal = Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
+  const printTotal =
+    line.print_price === null || line.print_price === undefined
+      ? 0
+      : Number(line.quantity) * Number(line.print_price) * (1 - Number(line.print_discount_percent ?? 0) / 100);
+  return productTotal + printTotal;
 }
 
 // null when the product has no cost_price set — margin for that line is
@@ -34,7 +42,10 @@ export async function listQuotes({ search = "", status = "", page = 1, pageSize 
   const [rows] = await pool.query(
     `SELECT q.id, q.quote_number, q.status, q.valid_until, q.created_at, q.sent_at,
             c.id AS customer_id, c.name AS customer_name,
-            COALESCE(SUM(ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)), 0) AS total_amount
+            COALESCE(SUM(
+              ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)
+              + IFNULL(ql.quantity * ql.print_price * (1 - ql.print_discount_percent / 100), 0)
+            ), 0) AS total_amount
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
      LEFT JOIN quote_lines ql ON ql.quote_id = q.id
@@ -61,11 +72,10 @@ async function loadQuoteLines(quoteId) {
   const [lines] = await pool.query(
     `SELECT ql.*, COALESCE(p.name, ql.description) AS product_name,
             COALESCE(p.tax_rate_percent, ql.tax_rate_percent) AS tax_rate_percent,
-            p.cost_price, p.image_url, v.sku, v.color, v.size, v.barcode, pm.name AS print_method_name
+            p.cost_price, p.image_url, v.sku, v.color, v.size, v.barcode
      FROM quote_lines ql
      LEFT JOIN product_variants v ON v.id = ql.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
-     LEFT JOIN print_methods pm ON pm.id = ql.print_method_id
      WHERE ql.quote_id = ?
      ORDER BY ql.sort_order ASC, ql.id ASC`,
     [quoteId]
@@ -168,8 +178,8 @@ async function insertLines(connection, quoteId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO quote_lines
-         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_method_id, print_description, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quoteId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -178,8 +188,9 @@ async function insertLines(connection, quoteId, lines) {
         line.unitPrice ?? line.unit_price,
         line.discountPercent ?? line.discount_percent ?? 0,
         line.taxRatePercent ?? line.tax_rate_percent ?? null,
-        line.printMethodId ?? line.print_method_id ?? null,
         line.printDescription ?? line.print_description ?? null,
+        line.printPrice ?? line.print_price ?? null,
+        line.printDiscountPercent ?? line.print_discount_percent ?? 0,
         sortOrder++,
       ]
     );
