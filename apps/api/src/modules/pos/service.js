@@ -2,6 +2,7 @@ import { pool } from "../../lib/db.js";
 import { createCustomerInvoice, createCashInvoice } from "../integrations/fortnox.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { assertValidLines } from "../../lib/lines.js";
+import { getSettings } from "../settings/service.js";
 
 function nextSaleNumber() {
   return `KV-${Math.floor(Date.now() / 1000)}`;
@@ -271,12 +272,13 @@ export async function createSale(data, userId) {
     // Best-effort: Fortnox isn't configured yet (see fortnox.js), so this
     // just marks each invoice PENDING-with-a-note today. Never lets a
     // Fortnox failure undo an already-completed sale.
+    const settings = invoicesToSync.length > 0 ? await getSettings() : null;
     for (const invoice of invoicesToSync) {
       try {
         const result =
           invoice.type === "CUSTOMER_INVOICE"
-            ? await createCustomerInvoice({ customerId: data.customerId, amount: invoice.amount, saleId })
-            : await createCashInvoice({ amount: invoice.amount, saleId });
+            ? await createCustomerInvoice({ settings, customerId: data.customerId, amount: invoice.amount, saleId })
+            : await createCashInvoice({ settings, amount: invoice.amount, saleId });
 
         if (result.ok) {
           await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [

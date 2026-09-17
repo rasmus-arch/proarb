@@ -271,17 +271,23 @@ export async function emailQuoteToCustomer(id, publicUrl) {
   }
 
   const settings = await getSettings();
-  const result = await sendQuoteEmail({
-    to: quote.customer_email,
-    customerName: quote.reference_name || quote.customer_name,
-    quoteNumber: quote.quote_number,
-    publicUrl,
-    totalIncVat: quote.totals.total_inc_vat,
-    validUntil: quote.valid_until,
-    sellerName: settings?.seller_name,
-    sellerLogoUrl: settings?.seller_logo_path ? `${new URL(publicUrl).origin}/uploads/${settings.seller_logo_path}` : null,
-    brandColor: settings?.brand_color,
-  });
+  let result;
+  try {
+    result = await sendQuoteEmail({
+      settings,
+      to: quote.customer_email,
+      customerName: quote.reference_name || quote.customer_name,
+      quoteNumber: quote.quote_number,
+      publicUrl,
+      totalIncVat: quote.totals.total_inc_vat,
+      validUntil: quote.valid_until,
+      sellerName: settings?.seller_name,
+      sellerLogoUrl: settings?.seller_logo_path ? `${new URL(publicUrl).origin}/uploads/${settings.seller_logo_path}` : null,
+      brandColor: settings?.brand_color,
+    });
+  } catch (err) {
+    result = { ok: false, reason: err.message };
+  }
 
   const reason = result.note ?? result.reason;
   await recordEvent(id, result.ok ? "EMAILED" : "EMAIL_FAILED", result.ok ? null : reason);

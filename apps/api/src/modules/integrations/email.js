@@ -1,39 +1,48 @@
 // Outbound email — deliberately a stub for now, same reasoning as
 // fortnox.js: the behaviour is built end-to-end (including the actual
-// HTML that will go out), but no SMTP provider is connected anywhere in
-// this app yet. Fill in `dispatch` below with a real send (e.g.
-// nodemailer) once SMTP_HOST/SMTP_USER/SMTP_PASSWORD (or whatever the
-// eventual provider needs) are available as env vars — every caller
-// already builds real content and just needs dispatch() to work.
+// HTML that will go out), but no SMTP provider is connected yet.
+// Credentials live in app_settings (smtp_host/port/username/password/
+// from_email/use_tls) — filled in under Inställningar whenever a real
+// provider is ready — rather than env vars, so staff can set this up
+// themselves without a redeploy. Every caller already fetches `settings`
+// (getSettings()) for other reasons and just passes it through; fill in
+// `dispatch` below with a real send (e.g. nodemailer) once smtp_host etc.
+// are set, and every caller starts working with no further changes.
 
-const EMAIL_CONFIGURED = Boolean(process.env.SMTP_HOST);
+export function isEmailConfigured(settings) {
+  return Boolean(settings?.smtp_host);
+}
 
 function notConfigured() {
   return { ok: false, reason: "NOT_CONFIGURED", note: "E-post är inte konfigurerat ännu." };
 }
 
-// TODO: real SMTP send once SMTP_HOST etc. exist, e.g.:
-//   const transport = nodemailer.createTransport({ host: process.env.SMTP_HOST, ... });
-//   await transport.sendMail({ to, subject, html, from: ... });
+// TODO: real SMTP send once settings.smtp_host etc. are set, e.g.:
+//   const transport = nodemailer.createTransport({
+//     host: settings.smtp_host, port: settings.smtp_port, secure: Boolean(settings.smtp_use_tls),
+//     auth: { user: settings.smtp_username, pass: settings.smtp_password },
+//   });
+//   await transport.sendMail({ to, subject, html, from: settings.smtp_from_email });
 //   return { ok: true };
-async function dispatch(/* { to, subject, html } */) {
-  if (!EMAIL_CONFIGURED) return notConfigured();
+async function dispatch({ settings, to, subject, html } = {}) {
+  if (!isEmailConfigured(settings)) return notConfigured();
   throw new Error("Email sending not implemented yet");
 }
 
 // Called when staff marks an order "Redo för utlämning" with the
 // "skicka mail" option checked.
-export async function sendOrderReadyEmail({ to, customerName, orderNumber }) {
+export async function sendOrderReadyEmail({ settings, to, customerName, orderNumber }) {
   const html = buildSimpleEmailHtml({
     heading: "Din order är redo för avhämtning",
     body: `<p>Hej ${escapeHtml(customerName)},</p><p>Din order <strong>${escapeHtml(orderNumber)}</strong> är redo för avhämtning i butiken.</p>`,
   });
-  return dispatch({ to, subject: `Order ${orderNumber} är redo för avhämtning`, html });
+  return dispatch({ settings, to, subject: `Order ${orderNumber} är redo för avhämtning`, html });
 }
 
 // Called from "Maila offert till kund" in offert-editor.html — sends the
 // customer a link to the public quote page (/q/:token).
 export async function sendQuoteEmail({
+  settings,
   to,
   customerName,
   quoteNumber,
@@ -55,10 +64,8 @@ export async function sendQuoteEmail({
     brandColor,
   });
   const subject = `Offert ${quoteNumber}${sellerName ? ` från ${sellerName}` : ""}`;
-  return dispatch({ to, subject, html });
+  return dispatch({ settings, to, subject, html });
 }
-
-export const isEmailConfigured = () => EMAIL_CONFIGURED;
 
 // --- HTML templates (real content, ready for dispatch() above) ------------
 

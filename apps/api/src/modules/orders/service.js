@@ -4,6 +4,7 @@ import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { assertValidLines } from "../../lib/lines.js";
 import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
 import { sendOrderReadyEmail } from "../integrations/email.js";
+import { getSettings } from "../settings/service.js";
 
 function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
@@ -279,7 +280,9 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
   let notification = null;
   if (newStatus === "READY_FOR_PICKUP" && sendEmail) {
     try {
+      const settings = await getSettings();
       const result = await sendOrderReadyEmail({
+        settings,
         to: order.customer_email,
         customerName: order.customer_name,
         orderNumber: order.order_number,
@@ -306,7 +309,9 @@ async function sendOrderInvoiceFromFortnox(orderId) {
   if (!invoice) return { sent: false, reason: "Ingen faktura hittades för ordern." };
 
   try {
+    const settings = await getSettings();
     const result = await sendCustomerInvoice({
+      settings,
       externalRef: invoice.external_ref,
       invoiceNumber: invoice.invoice_number,
     });
@@ -382,7 +387,9 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   }
 
   try {
+    const settings = await getSettings();
     const result = await createCustomerInvoice({
+      settings,
       customerId: order.customer_id,
       amount: order.totals.total_inc_vat,
       orderId,

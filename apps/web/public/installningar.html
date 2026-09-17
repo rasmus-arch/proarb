@@ -93,6 +93,71 @@
         </label>
       </section>
 
+      <!-- Email (SMTP) -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">E-post (SMTP)</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Krävs för att "Maila offert till kund" och mail vid "Redo för utlämning" faktiskt ska
+          skickas. Fyll i när ni har en SMTP-leverantör — fram tills dess sparas bara inställningarna,
+          inget mejl skickas.
+        </p>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">SMTP-server</span>
+            <input id="s-smtp-host" placeholder="t.ex. smtp.office365.com" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Port</span>
+            <input id="s-smtp-port" type="number" min="1" placeholder="587" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Användarnamn</span>
+            <input id="s-smtp-username" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Lösenord</span>
+            <input id="s-smtp-password" type="password" autocomplete="new-password" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Avsändaradress</span>
+            <input id="s-smtp-from" type="email" placeholder="offert@dittforetag.se" class="input mt-1" />
+          </label>
+          <label class="mt-1 flex items-center gap-2 text-sm">
+            <input id="s-smtp-tls" type="checkbox" class="rounded border-slate-300" />
+            <span class="text-slate-700">Använd TLS</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Fortnox -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Fortnox</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Krävs för att fakturor faktiskt ska skapas/skickas i Fortnox (vid kassaköp med Faktura/Swish,
+          och när en order blir Utlämnad/Fakturerad). Uppgifterna hämtas från er Fortnox-integration
+          (Mina sidor → Integrationer → API i Fortnox). Fram tills de fylls i sparas bara
+          inställningarna, ingen faktura skickas.
+        </p>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Client ID</span>
+            <input id="s-fortnox-client-id" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Client Secret</span>
+            <input id="s-fortnox-client-secret" type="password" autocomplete="new-password" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Access Token</span>
+            <input id="s-fortnox-access-token" type="password" autocomplete="new-password" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Refresh Token</span>
+            <input id="s-fortnox-refresh-token" type="password" autocomplete="new-password" class="input mt-1" />
+          </label>
+        </div>
+      </section>
+
       <p id="save-error" class="mt-3 hidden text-sm text-red-600"></p>
       <p id="save-success" class="mt-3 hidden text-sm text-green-700"></p>
       <div class="mt-4 flex justify-end">

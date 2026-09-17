@@ -78,6 +78,16 @@ export async function run() {
     "ALTER TABLE orders MODIFY status ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW'",
     "ALTER TABLE purchase_order_lines ADD COLUMN line_status ENUM('OPEN','BACKORDERED','CLOSED') NOT NULL DEFAULT 'OPEN' AFTER received_qty",
     "ALTER TABLE purchase_orders MODIFY status VARCHAR(30) NOT NULL DEFAULT 'ORDERED'",
+    "ALTER TABLE app_settings ADD COLUMN smtp_host VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN smtp_port INT NULL",
+    "ALTER TABLE app_settings ADD COLUMN smtp_username VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN smtp_password VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN smtp_from_email VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN smtp_use_tls TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_client_id VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_client_secret VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_access_token VARCHAR(500) NULL",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_refresh_token VARCHAR(500) NULL",
   ];
   for (const statement of alters) {
     try {

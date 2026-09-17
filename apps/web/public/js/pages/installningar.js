@@ -12,6 +12,16 @@ const el = {
   footer: document.getElementById("s-footer"),
   reminderEnabled: document.getElementById("s-reminder-enabled"),
   reminderDays: document.getElementById("s-reminder-days"),
+  smtpHost: document.getElementById("s-smtp-host"),
+  smtpPort: document.getElementById("s-smtp-port"),
+  smtpUsername: document.getElementById("s-smtp-username"),
+  smtpPassword: document.getElementById("s-smtp-password"),
+  smtpFrom: document.getElementById("s-smtp-from"),
+  smtpTls: document.getElementById("s-smtp-tls"),
+  fortnoxClientId: document.getElementById("s-fortnox-client-id"),
+  fortnoxClientSecret: document.getElementById("s-fortnox-client-secret"),
+  fortnoxAccessToken: document.getElementById("s-fortnox-access-token"),
+  fortnoxRefreshToken: document.getElementById("s-fortnox-refresh-token"),
   logoPreview: document.getElementById("s-logo-preview"),
   logoForm: document.getElementById("logo-form"),
   logoFile: document.getElementById("s-logo-file"),
@@ -40,6 +50,16 @@ function applySettings(settings) {
   el.footer.value = settings.quote_footer_note ?? "";
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
+  el.smtpHost.value = settings.smtp_host ?? "";
+  el.smtpPort.value = settings.smtp_port ?? "";
+  el.smtpUsername.value = settings.smtp_username ?? "";
+  el.smtpPassword.value = settings.smtp_password ?? "";
+  el.smtpFrom.value = settings.smtp_from_email ?? "";
+  el.smtpTls.checked = settings.smtp_use_tls === undefined ? true : Boolean(settings.smtp_use_tls);
+  el.fortnoxClientId.value = settings.fortnox_client_id ?? "";
+  el.fortnoxClientSecret.value = settings.fortnox_client_secret ?? "";
+  el.fortnoxAccessToken.value = settings.fortnox_access_token ?? "";
+  el.fortnoxRefreshToken.value = settings.fortnox_refresh_token ?? "";
 
   if (settings.seller_logo_path) {
     el.logoPreview.src = `/uploads/${settings.seller_logo_path}`;
@@ -69,6 +89,16 @@ el.saveBtn.addEventListener("click", async () => {
       quoteFooterNote: el.footer.value || null,
       reminderEnabled: el.reminderEnabled.checked,
       reminderDaysAfter: Number(el.reminderDays.value) || 5,
+      smtpHost: el.smtpHost.value || null,
+      smtpPort: el.smtpPort.value ? Number(el.smtpPort.value) : null,
+      smtpUsername: el.smtpUsername.value || null,
+      smtpPassword: el.smtpPassword.value || null,
+      smtpFromEmail: el.smtpFrom.value || null,
+      smtpUseTls: el.smtpTls.checked,
+      fortnoxClientId: el.fortnoxClientId.value || null,
+      fortnoxClientSecret: el.fortnoxClientSecret.value || null,
+      fortnoxAccessToken: el.fortnoxAccessToken.value || null,
+      fortnoxRefreshToken: el.fortnoxRefreshToken.value || null,
     });
     el.saveSuccess.textContent = "Sparat.";
     el.saveSuccess.classList.remove("hidden");

@@ -37,9 +37,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- ---------------------------------------------------------------------------
 
 -- Controls how the seller appears on offert-PDF:er and the public offert-
--- sida, plus whether/how unanswered-quote reminder emails go out. Sending
--- itself needs an SMTP provider wired in later — this table only stores
--- the on/off + interval choice, see PLAN.md.
+-- sida, whether/how unanswered-quote reminder emails go out, and holds
+-- the SMTP/Fortnox credentials for the integrations/email.js and
+-- integrations/fortnox.js stubs — filled in here (Inställningar) whenever
+-- a real provider/Fortnox app is ready; both stubs treat those columns
+-- being empty as "not configured yet" and only start actually sending
+-- once dispatch()/the Fortnox calls are implemented for real.
 CREATE TABLE IF NOT EXISTS app_settings (
   id                    INT PRIMARY KEY DEFAULT 1,
   seller_name           VARCHAR(255) NOT NULL DEFAULT 'Mitt företag',
@@ -54,6 +57,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
   quote_footer_note     VARCHAR(1000) NULL,
   reminder_enabled      TINYINT(1) NOT NULL DEFAULT 0,
   reminder_days_after   INT NOT NULL DEFAULT 5,
+  smtp_host             VARCHAR(255) NULL,
+  smtp_port             INT NULL,
+  smtp_username         VARCHAR(255) NULL,
+  smtp_password         VARCHAR(255) NULL,
+  smtp_from_email       VARCHAR(255) NULL,
+  smtp_use_tls          TINYINT(1) NOT NULL DEFAULT 1,
+  fortnox_client_id     VARCHAR(255) NULL,
+  fortnox_client_secret VARCHAR(255) NULL,
+  fortnox_access_token  VARCHAR(500) NULL,
+  fortnox_refresh_token VARCHAR(500) NULL,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

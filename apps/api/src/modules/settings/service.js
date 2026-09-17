@@ -26,6 +26,16 @@ export async function updateSettings(data) {
     quote_footer_note: data.quoteFooterNote,
     reminder_enabled: data.reminderEnabled === undefined ? undefined : data.reminderEnabled ? 1 : 0,
     reminder_days_after: data.reminderDaysAfter,
+    smtp_host: data.smtpHost,
+    smtp_port: data.smtpPort,
+    smtp_username: data.smtpUsername,
+    smtp_password: data.smtpPassword,
+    smtp_from_email: data.smtpFromEmail,
+    smtp_use_tls: data.smtpUseTls === undefined ? undefined : data.smtpUseTls ? 1 : 0,
+    fortnox_client_id: data.fortnoxClientId,
+    fortnox_client_secret: data.fortnoxClientSecret,
+    fortnox_access_token: data.fortnoxAccessToken,
+    fortnox_refresh_token: data.fortnoxRefreshToken,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);
