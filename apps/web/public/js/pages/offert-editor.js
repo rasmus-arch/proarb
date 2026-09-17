@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
 
 const params = new URLSearchParams(location.search);
 const quoteId = params.get("id");
@@ -22,6 +23,8 @@ const el = {
   customerSelectedName: document.getElementById("customer-selected-name"),
   customerChangeBtn: document.getElementById("customer-change-btn"),
   referenceSelect: document.getElementById("reference-select"),
+  newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
+  newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
   lineSearchWrap: document.getElementById("line-search-wrap"),
   lineSearch: document.getElementById("line-search"),
   lineResults: document.getElementById("line-results"),
@@ -311,8 +314,22 @@ function selectCustomer(id, name) {
   el.customerSelected.classList.remove("hidden");
   el.customerSelected.classList.add("flex");
   el.customerSelectedName.textContent = name;
+  el.newContactQuickBtn.disabled = false;
   loadContacts(id);
 }
+
+el.newCustomerQuickBtn.addEventListener("click", () => {
+  openNewCustomerDialog((customer) => {
+    selectCustomer(customer.id, customer.name);
+    el.customerSearch.value = "";
+    el.customerResults.innerHTML = "";
+  });
+});
+
+el.newContactQuickBtn.addEventListener("click", () => {
+  if (!state.customerId) return;
+  openNewContactDialog(state.customerId, (contact) => loadContacts(state.customerId, contact.id));
+});
 
 async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);

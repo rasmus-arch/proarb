@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
+import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
 
 const params = new URLSearchParams(location.search);
 const orderId = params.get("id");
@@ -26,6 +27,9 @@ const el = {
   customerNotesText: document.getElementById("customer-notes-text"),
   referenceSelect: document.getElementById("reference-select"),
   deliveryMethod: document.getElementById("delivery-method"),
+  newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
+  newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
+  newPickupContactQuickBtn: document.getElementById("new-pickup-contact-quick-btn"),
   lineSearchWrap: document.getElementById("line-search-wrap"),
   lineSearch: document.getElementById("line-search"),
   lineResults: document.getElementById("line-results"),
@@ -299,8 +303,31 @@ function selectCustomer(id, name) {
   el.customerSelected.classList.remove("hidden");
   el.customerSelected.classList.add("flex");
   el.customerSelectedName.textContent = name;
+  el.newContactQuickBtn.disabled = false;
+  el.newPickupContactQuickBtn.disabled = false;
   loadContacts(id);
 }
+
+el.newCustomerQuickBtn.addEventListener("click", () => {
+  openNewCustomerDialog((customer) => {
+    selectCustomer(customer.id, customer.name);
+    el.customerSearch.value = "";
+    el.customerResults.innerHTML = "";
+  });
+});
+
+el.newContactQuickBtn.addEventListener("click", () => {
+  if (!state.customerId) return;
+  openNewContactDialog(state.customerId, (contact) => loadContacts(state.customerId, contact.id));
+});
+
+el.newPickupContactQuickBtn.addEventListener("click", () => {
+  if (!state.customerId) return;
+  openNewContactDialog(state.customerId, async (contact) => {
+    await loadContacts(state.customerId, el.referenceSelect.value);
+    el.pickupContactSelect.value = String(contact.id);
+  });
+});
 
 async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);
