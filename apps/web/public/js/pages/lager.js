@@ -21,13 +21,17 @@ function variantLabel(v) {
 
 const tabButtons = [...document.querySelectorAll(".tab-btn")];
 const tabPanels = Object.fromEntries(
-  ["saldo", "inleverans", "inventering", "inkopsforslag"].map((key) => [key, document.getElementById(`tab-${key}`)])
+  ["saldo", "inkopsordrar", "inleverans", "inventering", "inkopsforslag"].map((key) => [
+    key,
+    document.getElementById(`tab-${key}`),
+  ])
 );
 
 function activateTab(key) {
   for (const btn of tabButtons) btn.setAttribute("aria-selected", String(btn.dataset.tab === key));
   for (const [k, el] of Object.entries(tabPanels)) el.classList.toggle("hidden", k !== key);
   if (key === "saldo") loadSaldo();
+  if (key === "inkopsordrar") loadAllPurchaseOrders();
   if (key === "inleverans") loadPurchaseOrders();
   if (key === "inventering") loadStockCounts();
   if (key === "inkopsforslag") loadSuggestions();
@@ -124,10 +128,51 @@ document.getElementById("save-reorder-btn").addEventListener("click", async () =
 });
 
 // ---------------------------------------------------------------------
-// Inleverans (purchase orders)
+// Inköpsordrar / Inleverans (purchase orders)
 // ---------------------------------------------------------------------
 
-const POStatusLabels = { DRAFT: "Utkast", PARTIALLY_RECEIVED: "Delvis mottagen", RECEIVED: "Mottagen" };
+const POStatusLabels = {
+  DRAFT: "Utkast",
+  ORDERED: "Beställd",
+  PARTIALLY_RECEIVED: "Delvis mottagen",
+  RECEIVED: "Mottagen",
+};
+const LineStatusLabels = { BACKORDERED: "Restnoterad", CLOSED: "Borttagen" };
+const LineStatusColors = {
+  BACKORDERED: "bg-amber-100 text-amber-700",
+  CLOSED: "bg-slate-200 text-slate-600",
+};
+
+function poRowHtml(po) {
+  return `
+    <tr class="cursor-pointer hover:bg-slate-50" data-po="${po.id}">
+      <td class="py-2 pr-3 font-medium text-slate-900">${escapeHtml(po.supplier_name)}</td>
+      <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}</td>
+      <td class="py-2 pr-3 text-right">${po.total_received_qty} / ${po.total_qty}</td>
+      <td class="py-2 pr-3 text-slate-500">${new Date(po.created_at).toLocaleDateString("sv-SE")}</td>
+    </tr>`;
+}
+
+// --- Inköpsordrar: full overview, every status ---
+
+const poAllRows = document.getElementById("po-all-rows");
+const poAllEmpty = document.getElementById("po-all-empty");
+
+async function loadAllPurchaseOrders() {
+  const { rows } = await api.get("/inventory/purchase-orders");
+  poAllEmpty.classList.toggle("hidden", rows.length > 0);
+  poAllRows.innerHTML = rows.map(poRowHtml).join("");
+}
+
+poAllRows.addEventListener("click", (event) => {
+  const row = event.target.closest("tr[data-po]");
+  if (!row) return;
+  activateTab("inleverans");
+  openPoDetail(Number(row.dataset.po));
+});
+
+// --- Inleverans: open orders + receiving ---
+
 const poListView = document.getElementById("po-list-view");
 const poDetailView = document.getElementById("po-detail-view");
 const poRows = document.getElementById("po-rows");
@@ -136,18 +181,9 @@ let currentPoId = null;
 
 async function loadPurchaseOrders() {
   const { rows } = await api.get("/inventory/purchase-orders");
-  poEmpty.classList.toggle("hidden", rows.length > 0);
-  poRows.innerHTML = rows
-    .map(
-      (po) => `
-      <tr class="cursor-pointer hover:bg-slate-50" data-po="${po.id}">
-        <td class="py-2 pr-3 font-medium text-slate-900">${escapeHtml(po.supplier_name)}</td>
-        <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}</td>
-        <td class="py-2 pr-3 text-right">${po.total_received_qty} / ${po.total_qty}</td>
-        <td class="py-2 pr-3 text-slate-500">${new Date(po.created_at).toLocaleDateString("sv-SE")}</td>
-      </tr>`
-    )
-    .join("");
+  const open = rows.filter((po) => po.status !== "RECEIVED");
+  poEmpty.classList.toggle("hidden", open.length > 0);
+  poRows.innerHTML = open.map(poRowHtml).join("");
 }
 
 poRows.addEventListener("click", (event) => {
@@ -163,20 +199,49 @@ async function openPoDetail(id) {
   await renderPoDetail();
 }
 
+function poLineRowHtml(l) {
+  const received = Number(l.received_qty);
+  const ordered = Number(l.quantity);
+  const outstanding = Math.max(0, ordered - received);
+  const done = received >= ordered || l.line_status === "CLOSED";
+
+  const statusBadge = done
+    ? l.line_status === "CLOSED"
+      ? `<span class="rounded-full px-2 py-0.5 text-xs font-medium ${LineStatusColors.CLOSED}">${LineStatusLabels.CLOSED}</span>`
+      : `<span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Mottagen</span>`
+    : l.line_status === "BACKORDERED"
+      ? `<span class="rounded-full px-2 py-0.5 text-xs font-medium ${LineStatusColors.BACKORDERED}">${LineStatusLabels.BACKORDERED}</span>`
+      : `<span class="text-xs text-slate-400">Väntar</span>`;
+
+  const receiveInput = done
+    ? ""
+    : `<input type="number" min="0" step="1" class="input w-20" data-receive-qty="${l.id}" value="${outstanding}" />`;
+
+  const actionSelect = done
+    ? ""
+    : `<select class="input" data-receive-action="${l.id}">
+        <option value="">—</option>
+        <option value="BACKORDER" ${l.line_status === "BACKORDERED" ? "selected" : ""}>Restnoterad</option>
+        <option value="REMOVE">Ta bort resten</option>
+      </select>`;
+
+  return `
+    <tr>
+      <td class="py-2 pr-3">${escapeHtml(variantLabel(l))}</td>
+      <td class="py-2 pr-3 text-right">${ordered}</td>
+      <td class="py-2 pr-3 text-right">${received}</td>
+      <td class="py-2 pr-3 text-right">${receiveInput}</td>
+      <td class="py-2 pr-3">${actionSelect}</td>
+      <td class="py-2 pr-3">${statusBadge}</td>
+    </tr>`;
+}
+
 async function renderPoDetail() {
   const po = await api.get(`/inventory/purchase-orders/${currentPoId}`);
   document.getElementById("po-detail-title").textContent = `Inköpsorder – ${po.supplier_name}`;
   document.getElementById("po-detail-status").textContent = POStatusLabels[po.status] ?? po.status;
-  document.getElementById("po-line-rows").innerHTML = po.lines
-    .map(
-      (l) => `
-      <tr>
-        <td class="py-2 pr-3">${escapeHtml(variantLabel(l))}</td>
-        <td class="py-2 pr-3 text-right">${l.quantity}</td>
-        <td class="py-2 pr-3 text-right ${Number(l.received_qty) >= Number(l.quantity) ? "text-green-700 font-medium" : ""}">${l.received_qty}</td>
-      </tr>`
-    )
-    .join("");
+  document.getElementById("po-line-rows").innerHTML = po.lines.map(poLineRowHtml).join("");
+  document.getElementById("po-submit-receiving-btn").classList.toggle("hidden", po.status === "RECEIVED");
 }
 
 document.getElementById("po-back-btn").addEventListener("click", () => {
@@ -199,6 +264,29 @@ poScanInput.addEventListener("keydown", async (event) => {
   } catch (err) {
     poScanError.textContent = err.message;
     poScanError.classList.remove("hidden");
+  }
+});
+
+const poReceiveError = document.getElementById("po-receive-error");
+document.getElementById("po-submit-receiving-btn").addEventListener("click", async () => {
+  poReceiveError.classList.add("hidden");
+  const lines = [...document.querySelectorAll("[data-receive-qty]")]
+    .map((input) => {
+      const lineId = input.dataset.receiveQty;
+      const receivedQty = Number(input.value) || 0;
+      const action = document.querySelector(`[data-receive-action="${lineId}"]`)?.value || undefined;
+      return { lineId, receivedQty, action };
+    })
+    .filter((l) => l.receivedQty > 0 || l.action);
+
+  if (lines.length === 0) return;
+
+  try {
+    await api.post(`/inventory/purchase-orders/${currentPoId}/submit-receiving`, { lines, warehouseId: 1 });
+    await renderPoDetail();
+  } catch (err) {
+    poReceiveError.textContent = err.message;
+    poReceiveError.classList.remove("hidden");
   }
 });
 

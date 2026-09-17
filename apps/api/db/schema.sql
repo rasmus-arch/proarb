@@ -441,22 +441,32 @@ CREATE TABLE IF NOT EXISTS stock_movements (
   INDEX idx_sm_reference (reference_type, reference_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- status: ORDERED (default — created and placed, nothing app-side needs a
+-- separate "send" step) -> PARTIALLY_RECEIVED / RECEIVED, set from the
+-- line statuses below by receiveByBarcode/submitReceiving. VARCHAR (not
+-- ENUM) so old DRAFT rows from before this comment still display fine.
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id            INT PRIMARY KEY AUTO_INCREMENT,
   supplier_id   INT NOT NULL,
-  status        VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+  status        VARCHAR(30) NOT NULL DEFAULT 'ORDERED',
   expected_date DATE NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_po_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Received via barcode scanning against expected quantity.
+-- Received via barcode scanning (receiveByBarcode) or the line-by-line
+-- review form (submitReceiving) against expected quantity. line_status
+-- lets staff explicitly resolve a line that wasn't fully received instead
+-- of it silently sitting open forever: BACKORDERED (still expected later)
+-- or CLOSED (the remainder was cancelled — quantity is lowered to match
+-- what actually arrived).
 CREATE TABLE IF NOT EXISTS purchase_order_lines (
   id                 INT PRIMARY KEY AUTO_INCREMENT,
   purchase_order_id  INT NOT NULL,
   product_variant_id INT NOT NULL,
   quantity           DECIMAL(10,2) NOT NULL,
   received_qty       DECIMAL(10,2) NOT NULL DEFAULT 0,
+  line_status        ENUM('OPEN','BACKORDERED','CLOSED') NOT NULL DEFAULT 'OPEN',
   cost_price         DECIMAL(10,2) NOT NULL,
   CONSTRAINT fk_pol_po FOREIGN KEY (purchase_order_id) REFERENCES purchase_orders(id),
   CONSTRAINT fk_pol_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),

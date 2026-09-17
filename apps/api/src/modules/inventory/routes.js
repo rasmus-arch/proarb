@@ -116,6 +116,24 @@ router.post("/purchase-orders/:id/receive", canAdjustStock, async (req, res, nex
   }
 });
 
+router.post("/purchase-orders/:id/submit-receiving", canAdjustStock, async (req, res, next) => {
+  try {
+    if (!Array.isArray(req.body?.lines)) return res.status(400).json({ error: "lines krävs" });
+    const po = await purchaseOrders.submitReceiving(Number(req.params.id), {
+      lines: req.body.lines,
+      warehouseId: req.body.warehouseId ?? inventory.DEFAULT_WAREHOUSE_ID,
+      userId: req.user.id,
+    });
+    res.json(po);
+  } catch (err) {
+    if (err.message === "PO_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "PO_ALREADY_RECEIVED") return res.status(409).json({ error: "Ordern är redan mottagen" });
+    if (err.message === "NO_LINES") return res.status(400).json({ error: "lines krävs" });
+    if (err.message === "INVALID_QUANTITY") return res.status(400).json({ error: "Ogiltigt antal" });
+    next(err);
+  }
+});
+
 // --- Stock counts / inventering ------------------------------------------
 
 router.get("/stock-counts", async (req, res, next) => {

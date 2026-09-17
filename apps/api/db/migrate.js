@@ -76,6 +76,8 @@ export async function run() {
     "UPDATE orders SET status = 'NEW' WHERE status IN ('CONFIRMED', 'IN_PRODUCTION')",
     "UPDATE orders SET status = 'READY_FOR_PICKUP' WHERE status = 'PARTIALLY_DELIVERED'",
     "ALTER TABLE orders MODIFY status ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW'",
+    "ALTER TABLE purchase_order_lines ADD COLUMN line_status ENUM('OPEN','BACKORDERED','CLOSED') NOT NULL DEFAULT 'OPEN' AFTER received_qty",
+    "ALTER TABLE purchase_orders MODIFY status VARCHAR(30) NOT NULL DEFAULT 'ORDERED'",
   ];
   for (const statement of alters) {
     try {
