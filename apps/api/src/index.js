@@ -8,6 +8,8 @@ import authRouter from "./modules/auth/routes.js";
 import usersRouter from "./modules/users/routes.js";
 import customersRouter from "./modules/customers/routes.js";
 import { renderPortalPage } from "./modules/customers/portal.js";
+import portalPublicRouter from "./modules/customers/portal-public.js";
+import portalRequestsRouter from "./modules/customers/portal-requests.routes.js";
 import quotesRouter from "./modules/quotes/routes.js";
 import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
 import ordersRouter from "./modules/orders/routes.js";
@@ -40,6 +42,9 @@ app.use("/api/auth", authRouter);
 // Public, no-login quote responses (accept/decline) — reached only via the
 // unguessable public_token, not by a logged-in session.
 app.use("/api/public/quotes", quotesPublicRouter);
+// Public, no-login order requests from "Mina sidor" — same trust model,
+// reached only via the unguessable portal_token.
+app.use("/api/public/portal", portalPublicRouter);
 
 // Fas 8: every other /api route requires a logged-in session.
 // TODO (Fas 8+): once this app has more than a handful of staff accounts,
@@ -48,6 +53,7 @@ app.use("/api", requireAuth);
 
 app.use("/api/users", requireRole("ADMIN"), usersRouter);
 app.use("/api/customers", customersRouter);
+app.use("/api/portal-requests", portalRequestsRouter);
 app.use("/api/quotes", quotesRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/products", productsRouter);

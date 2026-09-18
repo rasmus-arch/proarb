@@ -252,6 +252,41 @@ CREATE TABLE IF NOT EXISTS customer_assortment (
   UNIQUE KEY uq_cust_assortment (customer_id, product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Self-service beställning från "Mina sidor" (kundportalen): kunden väljer
+-- antal ur sitt sortiment och skickar in. Blir INTE automatiskt en riktig
+-- order (portal_token är obevakad/oautentiserad, och orders.created_by är
+-- NOT NULL — kräver en inloggad användare) — en säljare granskar och
+-- konverterar den till en riktig order via /api/customers/portal-requests/
+-- :id/convert, som då blir den som "skapade" ordern i vanlig mening.
+CREATE TABLE IF NOT EXISTS portal_order_requests (
+  id                INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id       INT NOT NULL,
+  requested_by_name VARCHAR(255) NULL,
+  status            ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',
+  order_id          INT NULL,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  handled_at        DATETIME NULL,
+  handled_by        INT NULL,
+  CONSTRAINT fk_por_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_por_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  CONSTRAINT fk_por_user FOREIGN KEY (handled_by) REFERENCES users(id),
+  INDEX idx_por_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Pris/rabatt fryst vid inskick (samma som kunden såg i portalen) — ändras
+-- inte om en standardrabatt justeras innan säljaren hinner konvertera.
+CREATE TABLE IF NOT EXISTS portal_order_request_lines (
+  id                 INT PRIMARY KEY AUTO_INCREMENT,
+  request_id         INT NOT NULL,
+  product_variant_id INT NOT NULL,
+  quantity           DECIMAL(10,2) NOT NULL,
+  unit_price         DECIMAL(10,2) NOT NULL,
+  discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent   DECIMAL(5,2) NOT NULL DEFAULT 25,
+  CONSTRAINT fk_porl_request FOREIGN KEY (request_id) REFERENCES portal_order_requests(id),
+  CONSTRAINT fk_porl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS product_suppliers (
   id             INT PRIMARY KEY AUTO_INCREMENT,
   product_id     INT NOT NULL,

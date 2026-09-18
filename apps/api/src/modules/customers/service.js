@@ -201,7 +201,7 @@ export async function getOrCreatePortalToken(customerId) {
 // over a rule on the product's supplier. Shared by getCustomerByPortalToken
 // and listAssortment below so both the customer-facing "Mina sidor" page
 // and the staff-facing picker in kund-editor.html show the same number.
-const ASSORTMENT_DISCOUNT_SELECT = `
+export const ASSORTMENT_DISCOUNT_SELECT = `
   COALESCE(
     (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
     (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),

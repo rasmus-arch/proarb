@@ -87,8 +87,9 @@ export async function renderPortalPage(req, res) {
   const blocks = products
     .map((p) => {
       if (p.variants.length <= 1) {
+        const variantId = p.variants[0]?.variant_id;
         return `<div style="border-bottom:1px solid #e2e8f0;">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;">
             <div style="display:flex;align-items:flex-start;gap:10px;">
               ${imageHtml(p.image_url)}
               <div>
@@ -96,7 +97,10 @@ export async function renderPortalPage(req, res) {
                 <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
               </div>
             </div>
-            ${priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent)}
+            <div style="display:flex;align-items:center;gap:12px;">
+              ${priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent)}
+              ${variantId ? `<input type="number" min="0" step="1" placeholder="Antal" class="qty-input" data-variant-id="${variantId}" style="width:64px;" />` : ""}
+            </div>
           </div>
         </div>`;
       }
@@ -118,6 +122,7 @@ export async function renderPortalPage(req, res) {
                 <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
                 ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>`}
+                <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" style="width:56px;" /></td>
               </tr>`
               )
               .join("")}
@@ -154,6 +159,11 @@ export async function renderPortalPage(req, res) {
     .empty { color:#64748b; font-size:14px; margin-top:12px; }
     summary::-webkit-details-marker { display: none; }
     details[open] .chevron { transform: rotate(90deg); }
+    .qty-input { border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:14px; text-align:right; }
+    .qty-input:focus { outline:2px solid #0f172a; outline-offset:1px; }
+    .order-btn { background:#0f172a; color:#fff; border:none; border-radius:6px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+    .order-btn:disabled { background:#94a3b8; cursor:default; }
+    .name-input { border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; font-size:14px; width:100%; max-width:280px; box-sizing:border-box; }
   </style>
 </head>
 <body>
@@ -164,13 +174,73 @@ export async function renderPortalPage(req, res) {
 
   <div class="card">
     <h2 style="margin:0;font-size:15px;">Sortiment</h2>
-    <p style="color:#64748b;font-size:13px;margin:4px 0 0;">Priser är exklusive moms.</p>
+    <p style="color:#64748b;font-size:13px;margin:4px 0 0;">Priser är exklusive moms. Ange antal för det du vill beställa nedan.</p>
     ${
       products.length > 0
         ? blocks
         : `<p class="empty">Inget sortiment upplagt ännu — hör av dig så hjälper vi till.</p>`
     }
+    ${
+      products.length > 0
+        ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
+            <label style="display:block;font-size:13px;color:#334155;margin-bottom:6px;">Ditt namn (valfritt, så vi vet vem beställningen är från)</label>
+            <input id="requested-by-name" type="text" class="name-input" placeholder="För- och efternamn" />
+            <p id="order-error" style="display:none;color:#dc2626;font-size:13px;margin:10px 0 0;"></p>
+            <p id="order-success" style="display:none;color:#15803d;font-size:13px;margin:10px 0 0;">Tack! Din beställning är skickad — vi hör av oss.</p>
+            <div style="margin-top:12px;">
+              <button type="button" id="submit-order-btn" class="order-btn">Skicka beställning</button>
+            </div>
+          </div>`
+        : ""
+    }
   </div>
+
+  <script>
+    (function () {
+      var btn = document.getElementById("submit-order-btn");
+      if (!btn) return;
+      var errorEl = document.getElementById("order-error");
+      var successEl = document.getElementById("order-success");
+      btn.addEventListener("click", function () {
+        errorEl.style.display = "none";
+        successEl.style.display = "none";
+        var lines = [];
+        document.querySelectorAll(".qty-input").forEach(function (input) {
+          var qty = Number(input.value);
+          if (qty > 0) lines.push({ productVariantId: Number(input.dataset.variantId), quantity: qty });
+        });
+        if (lines.length === 0) {
+          errorEl.textContent = "Ange antal för minst en produkt.";
+          errorEl.style.display = "block";
+          return;
+        }
+        btn.disabled = true;
+        fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/request`)}, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestedByName: document.getElementById("requested-by-name").value || null,
+            lines: lines,
+          }),
+        })
+          .then(function (res) {
+            if (!res.ok) return res.json().then(function (body) { throw new Error(body.error || "Kunde inte skicka beställningen"); });
+            return res.json();
+          })
+          .then(function () {
+            document.querySelectorAll(".qty-input").forEach(function (input) { input.value = ""; });
+            document.getElementById("requested-by-name").value = "";
+            successEl.style.display = "block";
+            btn.disabled = false;
+          })
+          .catch(function (err) {
+            errorEl.textContent = err.message;
+            errorEl.style.display = "block";
+            btn.disabled = false;
+          });
+      });
+    })();
+  </script>
 </body>
 </html>`);
 }

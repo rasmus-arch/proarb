@@ -12,6 +12,8 @@ function daysSince(dateString) {
 
 const section = document.getElementById("reminders-section");
 const list = document.getElementById("reminders-list");
+const requestsSection = document.getElementById("portal-requests-section");
+const requestsList = document.getElementById("portal-requests-list");
 
 async function loadReminders() {
   const { rows } = await api.get("/quotes/reminders");
@@ -38,4 +40,41 @@ list.addEventListener("click", async (event) => {
   loadReminders();
 });
 
+async function loadPortalRequests() {
+  const { rows } = await api.get("/portal-requests?status=NEW");
+  requestsSection.classList.toggle("hidden", rows.length === 0);
+  requestsList.innerHTML = rows
+    .map(
+      (r) => `
+      <li class="flex items-center justify-between py-2 text-sm" data-request-id="${r.id}">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(r.customer_name)}</span>
+          ${r.requested_by_name ? `<span class="ml-2 text-slate-600">(${escapeHtml(r.requested_by_name)})</span>` : ""}
+          <span class="ml-2 text-xs text-slate-500">${r.line_count} rad${r.line_count === 1 ? "" : "er"} · ${daysSince(r.created_at) === 0 ? "idag" : `${daysSince(r.created_at)} dagar sedan`}</span>
+        </div>
+        <span class="flex gap-2">
+          <button type="button" class="btn-secondary" data-dismiss-request="${r.id}">Avfärda</button>
+          <button type="button" class="btn" data-convert-request="${r.id}">Skapa order</button>
+        </span>
+      </li>`
+    )
+    .join("");
+}
+
+requestsList.addEventListener("click", async (event) => {
+  const convertId = event.target.dataset.convertRequest;
+  const dismissId = event.target.dataset.dismissRequest;
+  if (convertId !== undefined) {
+    const order = await api.post(`/portal-requests/${convertId}/convert`, {});
+    location.href = `/order-editor.html?id=${order.id}`;
+    return;
+  }
+  if (dismissId !== undefined) {
+    if (!confirm("Avfärda beställningsförfrågan utan att skapa en order?")) return;
+    await api.post(`/portal-requests/${dismissId}/dismiss`, {});
+    loadPortalRequests();
+  }
+});
+
 loadReminders();
+loadPortalRequests();
