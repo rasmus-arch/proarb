@@ -125,6 +125,25 @@
         </p>
       </section>
 
+      <!-- Numrering -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Numrering</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Offert- och ordernummer går i följd (t.ex. OFF-0001, ORD-0001). Ändra bara vid t.ex.
+          byte från ett annat system — värdet här är numret som används NÄSTA gång.
+        </p>
+        <div class="mt-3 grid grid-cols-2 gap-3 max-w-xs">
+          <label class="block text-sm">
+            <span class="text-slate-700">Nästa offertnummer</span>
+            <input id="s-next-quote-number" type="number" min="1" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Nästa ordernummer</span>
+            <input id="s-next-order-number" type="number" min="1" class="input mt-1" />
+          </label>
+        </div>
+      </section>
+
       <!-- Email (SMTP) -->
       <section class="mt-4 card">
         <h2 class="text-sm font-medium text-slate-900">E-post (SMTP)</h2>

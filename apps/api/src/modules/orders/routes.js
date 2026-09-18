@@ -96,6 +96,25 @@ router.post("/:id/save-as-template", async (req, res, next) => {
   }
 });
 
+router.patch("/:id/lines", async (req, res, next) => {
+  try {
+    if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
+      return res.status(400).json({ error: "Minst en rad krävs" });
+    }
+    const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines);
+    res.json(order);
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "ORDER_LINES_LOCKED") {
+      return res.status(409).json({ error: "Ordern kan inte längre redigeras (redan utlämnad/fakturerad/avbruten)" });
+    }
+    if (err.message === "INVALID_LINE") {
+      return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning, plus antal och pris" });
+    }
+    next(err);
+  }
+});
+
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });

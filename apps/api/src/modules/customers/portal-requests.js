@@ -1,6 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { createOrder } from "../orders/service.js";
-import { ASSORTMENT_DISCOUNT_SELECT } from "./service.js";
+import { ASSORTMENT_DISCOUNT_SELECT, addContact } from "./service.js";
 
 // Self-service beställning från "Mina sidor" (portal.js): kunden väljer
 // antal ur sitt kurerade sortiment och skickar in. Pris/rabatt räknas
@@ -10,18 +10,29 @@ import { ASSORTMENT_DISCOUNT_SELECT } from "./service.js";
 // den hinner konverteras. product_variant_id valideras samtidigt mot
 // customer_assortment — kunden kan bara beställa det den faktiskt ser.
 
-export async function createPortalOrderRequest(token, { requestedByName, lines }) {
+export async function createPortalOrderRequest(token, { requestedByName, referenceContactId, lines }) {
   const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (!Array.isArray(lines) || lines.length === 0) throw new Error("INVALID_REQUEST");
+
+  // Måste tillhöra samma kund som token pekar på — annars skulle en kund
+  // kunna sätta valfritt contact-id, inklusive en annan kunds kontakt.
+  let contactId = null;
+  if (referenceContactId) {
+    const [[contact]] = await pool.query(
+      `SELECT id FROM customer_contacts WHERE id = ? AND customer_id = ? AND active = 1`,
+      [referenceContactId, customer.id]
+    );
+    contactId = contact?.id ?? null;
+  }
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO portal_order_requests (customer_id, requested_by_name) VALUES (?, ?)`,
-      [customer.id, requestedByName || null]
+      `INSERT INTO portal_order_requests (customer_id, requested_by_name, reference_contact_id) VALUES (?, ?, ?)`,
+      [customer.id, requestedByName || null, contactId]
     );
     const requestId = result.insertId;
 
@@ -79,9 +90,11 @@ export async function listPortalOrderRequests({ status = "NEW" } = {}) {
   const [rows] = await pool.query(
     `SELECT por.id, por.requested_by_name, por.status, por.created_at, por.order_id,
             c.id AS customer_id, c.name AS customer_name,
+            cc.name AS reference_contact_name,
             COUNT(porl.id) AS line_count, SUM(porl.quantity) AS total_quantity
      FROM portal_order_requests por
      JOIN customers c ON c.id = por.customer_id
+     LEFT JOIN customer_contacts cc ON cc.id = por.reference_contact_id
      LEFT JOIN portal_order_request_lines porl ON porl.request_id = por.id
      ${where}
      GROUP BY por.id
@@ -123,6 +136,7 @@ export async function convertPortalOrderRequest(id, userId) {
   const order = await createOrder(
     {
       customerId: request.customer_id,
+      referenceContactId: request.reference_contact_id,
       notes: request.requested_by_name
         ? `Beställning via kundportalen (${request.requested_by_name}).`
         : "Beställning via kundportalen.",
@@ -144,6 +158,17 @@ export async function convertPortalOrderRequest(id, userId) {
   );
 
   return order;
+}
+
+// Kunden kan lägga till en ny hämtbehörig kontakt direkt från "Mina
+// sidor" (t.ex. en nyanställd som inte redan finns i listan) istället för
+// att bara skriva ett fritextnamn — blir en riktig customer_contacts-rad,
+// synlig för personal på kund-editor.html och återanvändbar nästa gång.
+export async function addPortalContact(token, data) {
+  const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+  if (!data?.name?.trim()) throw new Error("NAME_REQUIRED");
+  return addContact(customer.id, { name: data.name.trim(), canPickup: true });
 }
 
 export async function dismissPortalOrderRequest(id, userId) {

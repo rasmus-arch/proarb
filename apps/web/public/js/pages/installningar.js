@@ -15,6 +15,8 @@ const el = {
   portalShowStock: document.getElementById("s-portal-show-stock"),
   inactiveMonths: document.getElementById("s-inactive-months"),
   autoPrint: document.getElementById("s-auto-print"),
+  nextQuoteNumber: document.getElementById("s-next-quote-number"),
+  nextOrderNumber: document.getElementById("s-next-order-number"),
   smtpHost: document.getElementById("s-smtp-host"),
   smtpPort: document.getElementById("s-smtp-port"),
   smtpUsername: document.getElementById("s-smtp-username"),
@@ -56,6 +58,8 @@ function applySettings(settings) {
   el.portalShowStock.checked = Boolean(settings.portal_show_stock);
   el.inactiveMonths.value = settings.inactive_customer_months ?? 6;
   el.autoPrint.checked = Boolean(settings.auto_print_order_slip);
+  el.nextQuoteNumber.value = settings.next_quote_number ?? 1;
+  el.nextOrderNumber.value = settings.next_order_number ?? 1;
   el.smtpHost.value = settings.smtp_host ?? "";
   el.smtpPort.value = settings.smtp_port ?? "";
   el.smtpUsername.value = settings.smtp_username ?? "";
@@ -98,6 +102,8 @@ el.saveBtn.addEventListener("click", async () => {
       portalShowStock: el.portalShowStock.checked,
       inactiveCustomerMonths: Number(el.inactiveMonths.value) || 6,
       autoPrintOrderSlip: el.autoPrint.checked,
+      nextQuoteNumber: Number(el.nextQuoteNumber.value) || 1,
+      nextOrderNumber: Number(el.nextOrderNumber.value) || 1,
       smtpHost: el.smtpHost.value || null,
       smtpPort: el.smtpPort.value ? Number(el.smtpPort.value) : null,
       smtpUsername: el.smtpUsername.value || null,

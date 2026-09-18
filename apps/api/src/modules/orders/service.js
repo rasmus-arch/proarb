@@ -7,8 +7,18 @@ import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fort
 import { sendOrderReadyEmail } from "../integrations/email.js";
 import { getSettings } from "../settings/service.js";
 
-function nextOrderNumber() {
-  return `ORD-${Math.floor(Date.now() / 1000)}`;
+// Sekventiella ordernummer (ORD-0001, ORD-0002, ...) istället för
+// slumpmässiga tidsstämplar. Läses och räknas upp inom SAMMA transaktion
+// som ordern skapas i (connection, inte pool) — UPDATE-radlåset på
+// app_settings förhindrar att två samtidiga ordrar får samma nummer, utan
+// att behöva någon separat lås-mekanism. Nästa nummer att använda kan
+// ändras i Inställningar (t.ex. vid byte från ett annat system).
+async function nextOrderNumber(connection) {
+  await connection.query(`UPDATE app_settings SET next_order_number = next_order_number + 1 WHERE id = 1`);
+  const [[{ next_order_number }]] = await connection.query(
+    `SELECT next_order_number FROM app_settings WHERE id = 1`
+  );
+  return `ORD-${String(next_order_number - 1).padStart(4, "0")}`;
 }
 
 // Unguessable token for the QR code on the ordersedel PDF — same pattern
@@ -202,11 +212,12 @@ export async function createOrder(data, userId) {
   try {
     await connection.beginTransaction();
 
+    const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        nextOrderNumber(),
+        orderNumber,
         data.customerId,
         data.referenceContactId ?? null,
         data.deliveryMethod ?? "PICKUP",
@@ -239,11 +250,12 @@ export async function duplicateOrder(id, userId) {
   try {
     await connection.beginTransaction();
 
+    const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        nextOrderNumber(),
+        orderNumber,
         order.customer_id,
         order.reference_contact_id,
         order.delivery_method,
@@ -275,10 +287,11 @@ export async function convertQuoteToOrder(quoteId, userId) {
   try {
     await connection.beginTransaction();
 
+    const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, quote_id, created_by, pickup_qr_token)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [nextOrderNumber(), quote.customer_id, quote.reference_contact_id, quote.id, userId, generateQrToken()]
+      [orderNumber, quote.customer_id, quote.reference_contact_id, quote.id, userId, generateQrToken()]
     );
     const orderId = result.insertId;
     await insertOrderLines(connection, orderId, quote.lines);
@@ -287,6 +300,34 @@ export async function convertQuoteToOrder(quoteId, userId) {
 
     await connection.commit();
     return getOrder(orderId);
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+// Låter personal justera en redan sparad orders rader (t.ex. dra ner
+// antalet på en restnoterad produkt vid plockning) — bara tillåtet innan
+// PICKUP_BLOCKED_STATUSES nedan har hunnit få stopp, samma gräns som redan
+// styr recordPickup, eftersom lagerrörelser och ev. Fortnox-faktura byggs
+// på radernas belopp först vid DELIVERED. Full-replace, samma resonemang
+// som quotes.updateQuote: enklare och säkrare än att diffa mot befintliga
+// rader.
+export async function updateOrderLines(id, lines) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  if (PICKUP_BLOCKED_STATUSES.includes(order.status)) throw new Error("ORDER_LINES_LOCKED");
+  assertValidLines(lines);
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(`DELETE FROM order_lines WHERE order_id = ?`, [id]);
+    await insertOrderLines(connection, id, lines);
+    await connection.commit();
+    return getOrder(id);
   } catch (err) {
     await connection.rollback();
     throw err;

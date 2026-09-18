@@ -33,6 +33,8 @@ export async function updateSettings(data) {
     portal_show_stock: data.portalShowStock === undefined ? undefined : data.portalShowStock ? 1 : 0,
     inactive_customer_months: data.inactiveCustomerMonths,
     auto_print_order_slip: data.autoPrintOrderSlip === undefined ? undefined : data.autoPrintOrderSlip ? 1 : 0,
+    next_order_number: data.nextOrderNumber,
+    next_quote_number: data.nextQuoteNumber,
     smtp_host: data.smtpHost,
     smtp_port: data.smtpPort,
     smtp_username: data.smtpUsername,

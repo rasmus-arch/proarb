@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- för tyst utskrift (t.ex. Chrome --kiosk-printing) — appen kan inte
   -- tvinga fram helt knapptryckningsfri utskrift på egen hand.
   auto_print_order_slip TINYINT(1) NOT NULL DEFAULT 0,
+  -- Sekventiella offert-/ordernummer (0001, 0002, ...) istället för
+  -- slumpmässiga tidsstämplar. Fältet lagrar NÄSTA nummer att använda —
+  -- ändringsbart i Inställningar om numreringen behöver startas om eller
+  -- hoppa till ett visst värde (t.ex. vid byte från ett annat system).
+  next_order_number     INT NOT NULL DEFAULT 1,
+  next_quote_number      INT NOT NULL DEFAULT 1,
   smtp_host             VARCHAR(255) NULL,
   smtp_port             INT NULL,
   smtp_username         VARCHAR(255) NULL,
@@ -270,15 +276,21 @@ CREATE TABLE IF NOT EXISTS customer_assortment (
 -- konverterar den till en riktig order via /api/customers/portal-requests/
 -- :id/convert, som då blir den som "skapade" ordern i vanlig mening.
 CREATE TABLE IF NOT EXISTS portal_order_requests (
-  id                INT PRIMARY KEY AUTO_INCREMENT,
-  customer_id       INT NOT NULL,
-  requested_by_name VARCHAR(255) NULL,
-  status            ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',
-  order_id          INT NULL,
-  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  handled_at        DATETIME NULL,
-  handled_by        INT NULL,
+  id                    INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id           INT NOT NULL,
+  requested_by_name     VARCHAR(255) NULL,
+  -- Vem kunden anger ska hämta ut beställningen — samma kontakt hamnar som
+  -- referensperson på den riktiga ordern när en säljare konverterar
+  -- förfrågan, så den redan finns med i pickup-listan när ordern väl är
+  -- redo att hämtas ut.
+  reference_contact_id  INT NULL,
+  status                ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',
+  order_id              INT NULL,
+  created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  handled_at            DATETIME NULL,
+  handled_by            INT NULL,
   CONSTRAINT fk_por_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_por_contact FOREIGN KEY (reference_contact_id) REFERENCES customer_contacts(id),
   CONSTRAINT fk_por_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_por_user FOREIGN KEY (handled_by) REFERENCES users(id),
   INDEX idx_por_status (status)

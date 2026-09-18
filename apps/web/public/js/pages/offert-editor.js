@@ -740,6 +740,12 @@ async function init() {
     renderActionButtons(quote);
     applyEditableState();
   } else {
+    // Samma standard (10 dagar) som backend sätter om fältet lämnas tomt —
+    // visas här så säljaren ser det faktiska datumet direkt och kan ändra
+    // det innan spar, istället för ett tomt fält som "magiskt" fylls i.
+    const defaultValidUntil = new Date();
+    defaultValidUntil.setDate(defaultValidUntil.getDate() + 10);
+    el.validUntil.value = defaultValidUntil.toISOString().slice(0, 10);
     applyEditableState();
   }
 

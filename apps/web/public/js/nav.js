@@ -170,7 +170,7 @@ function ensureBugReportDialog() {
 async function init() {
   const res = await fetch("/api/auth/me");
   if (!res.ok) {
-    location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname)}`);
+    location.replace(`/login.html?redirect=${encodeURIComponent(location.pathname + location.search)}`);
     return;
   }
   const { user } = await res.json();

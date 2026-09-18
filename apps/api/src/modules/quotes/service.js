@@ -5,12 +5,29 @@ import { getSettings } from "../settings/service.js";
 import { sendQuoteEmail, sendQuoteReminderEmail } from "../integrations/email.js";
 import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
 
-function nextQuoteNumber() {
-  return `OFF-${Math.floor(Date.now() / 1000)}`;
+// Sekventiella offertnummer (OFF-0001, OFF-0002, ...) istället för
+// slumpmässiga tidsstämplar — samma mönster som nextOrderNumber i
+// orders/service.js: läses/räknas upp inom SAMMA transaktion som offerten
+// skapas i, så UPDATE-radlåset på app_settings förhindrar dubbletter.
+async function nextQuoteNumber(connection) {
+  await connection.query(`UPDATE app_settings SET next_quote_number = next_quote_number + 1 WHERE id = 1`);
+  const [[{ next_quote_number }]] = await connection.query(
+    `SELECT next_quote_number FROM app_settings WHERE id = 1`
+  );
+  return `OFF-${String(next_quote_number - 1).padStart(4, "0")}`;
 }
 
 function newPublicToken() {
   return crypto.randomBytes(24).toString("hex");
+}
+
+// Offerter är giltiga 10 dagar som standard om inget annat anges — säljaren
+// kan alltid ändra datumet innan den skickas.
+const DEFAULT_VALID_DAYS = 10;
+function defaultValidUntil() {
+  const d = new Date();
+  d.setDate(d.getDate() + DEFAULT_VALID_DAYS);
+  return d.toISOString().slice(0, 10);
 }
 
 // unit_price * quantity * (1 - discount%), plus the same for tryck (if
@@ -147,14 +164,15 @@ export async function createQuote(data, userId) {
   try {
     await connection.beginTransaction();
 
+    const quoteNumber = await nextQuoteNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO quotes (quote_number, customer_id, reference_contact_id, valid_until, public_token, notes, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        nextQuoteNumber(),
+        quoteNumber,
         data.customerId,
         data.referenceContactId ?? null,
-        data.validUntil ?? null,
+        data.validUntil ?? defaultValidUntil(),
         newPublicToken(),
         data.notes ?? null,
         userId,

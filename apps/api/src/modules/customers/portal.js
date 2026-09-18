@@ -88,7 +88,7 @@ function stockBadgeHtml(quantityOnHand) {
 
 function imageHtml(imageUrl) {
   return imageUrl
-    ? `<img src="/uploads/${imageUrl}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;flex-shrink:0;" />`
+    ? `<img src="/uploads/${imageUrl}" alt="" data-lightbox style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;flex-shrink:0;cursor:zoom-in;" />`
     : "";
 }
 
@@ -115,7 +115,7 @@ export async function renderPortalPage(req, res) {
   const settings = await getSettings();
   const showStock = Boolean(settings?.portal_show_stock);
 
-  const { customer, products: flatProducts, orders } = result;
+  const { customer, products: flatProducts, orders, contacts } = result;
   const products = groupByProduct(flatProducts);
 
   const blocks = products
@@ -213,6 +213,9 @@ export async function renderPortalPage(req, res) {
     .order-btn { background:#0f172a; color:#fff; border:none; border-radius:6px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; }
     .order-btn:disabled { background:#94a3b8; cursor:default; }
     .name-input { border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; font-size:14px; width:100%; max-width:280px; box-sizing:border-box; }
+    .lightbox-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.85); z-index:50; align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
+    .lightbox-overlay.open { display:flex; }
+    .lightbox-overlay img { max-width:100%; max-height:100%; border-radius:8px; box-shadow:0 20px 50px rgba(0,0,0,0.4); }
   </style>
 </head>
 <body>
@@ -245,6 +248,24 @@ export async function renderPortalPage(req, res) {
         ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
             <label style="display:block;font-size:13px;color:#334155;margin-bottom:6px;">Ditt namn (valfritt, så vi vet vem beställningen är från)</label>
             <input id="requested-by-name" type="text" class="name-input" placeholder="För- och efternamn" />
+
+            <label style="display:block;font-size:13px;color:#334155;margin:14px 0 6px;">Vem ska hämta ut beställningen?</label>
+            <select id="pickup-contact-select" class="name-input">
+              <option value="">— Välj —</option>
+              ${(contacts ?? [])
+                .map(
+                  (c) =>
+                    `<option value="${c.id}">${escapeHtml(c.name)}${c.can_pickup ? " (hämtbehörig)" : ""}</option>`
+                )
+                .join("")}
+              <option value="__new__">+ Lägg till ny person</option>
+            </select>
+            <div id="new-contact-wrap" style="display:none;margin-top:8px;gap:8px;">
+              <input id="new-contact-name" type="text" class="name-input" placeholder="Namn på ny person" style="flex:1;" />
+              <button type="button" id="add-contact-btn" class="order-btn" style="padding:8px 14px;">Lägg till</button>
+            </div>
+            <p id="contact-error" style="display:none;color:#dc2626;font-size:13px;margin:6px 0 0;"></p>
+
             <p id="order-error" style="display:none;color:#dc2626;font-size:13px;margin:10px 0 0;"></p>
             <p id="order-success" style="display:none;color:#15803d;font-size:13px;margin:10px 0 0;">Tack! Din beställning är skickad — vi hör av oss.</p>
             <div style="margin-top:12px;">
@@ -255,12 +276,66 @@ export async function renderPortalPage(req, res) {
     }
   </div>
 
+  <div id="lightbox-overlay" class="lightbox-overlay">
+    <img id="lightbox-img" src="" alt="" />
+  </div>
+
   <script>
     (function () {
       var btn = document.getElementById("submit-order-btn");
       if (!btn) return;
       var errorEl = document.getElementById("order-error");
       var successEl = document.getElementById("order-success");
+      var pickupSelect = document.getElementById("pickup-contact-select");
+      var newContactWrap = document.getElementById("new-contact-wrap");
+      var newContactName = document.getElementById("new-contact-name");
+      var addContactBtn = document.getElementById("add-contact-btn");
+      var contactErrorEl = document.getElementById("contact-error");
+
+      pickupSelect.addEventListener("change", function () {
+        if (pickupSelect.value === "__new__") {
+          newContactWrap.style.display = "flex";
+          newContactName.focus();
+        } else {
+          newContactWrap.style.display = "none";
+        }
+      });
+
+      addContactBtn.addEventListener("click", function () {
+        contactErrorEl.style.display = "none";
+        var name = newContactName.value.trim();
+        if (!name) {
+          contactErrorEl.textContent = "Ange ett namn.";
+          contactErrorEl.style.display = "block";
+          return;
+        }
+        addContactBtn.disabled = true;
+        fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/contacts`)}, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: name }),
+        })
+          .then(function (res) {
+            if (!res.ok) return res.json().then(function (body) { throw new Error(body.error || "Kunde inte lägga till personen"); });
+            return res.json();
+          })
+          .then(function (contact) {
+            var option = document.createElement("option");
+            option.value = String(contact.id);
+            option.textContent = contact.name + " (hämtbehörig)";
+            pickupSelect.insertBefore(option, pickupSelect.querySelector('option[value="__new__"]'));
+            pickupSelect.value = String(contact.id);
+            newContactWrap.style.display = "none";
+            newContactName.value = "";
+            addContactBtn.disabled = false;
+          })
+          .catch(function (err) {
+            contactErrorEl.textContent = err.message;
+            contactErrorEl.style.display = "block";
+            addContactBtn.disabled = false;
+          });
+      });
+
       btn.addEventListener("click", function () {
         errorEl.style.display = "none";
         successEl.style.display = "none";
@@ -274,12 +349,15 @@ export async function renderPortalPage(req, res) {
           errorEl.style.display = "block";
           return;
         }
+        var pickupValue = pickupSelect.value;
+        var referenceContactId = pickupValue && pickupValue !== "__new__" ? Number(pickupValue) : null;
         btn.disabled = true;
         fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/request`)}, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             requestedByName: document.getElementById("requested-by-name").value || null,
+            referenceContactId: referenceContactId,
             lines: lines,
           }),
         })
@@ -290,6 +368,8 @@ export async function renderPortalPage(req, res) {
           .then(function () {
             document.querySelectorAll(".qty-input").forEach(function (input) { input.value = ""; });
             document.getElementById("requested-by-name").value = "";
+            pickupSelect.value = "";
+            newContactWrap.style.display = "none";
             successEl.style.display = "block";
             btn.disabled = false;
           })
@@ -298,6 +378,25 @@ export async function renderPortalPage(req, res) {
             errorEl.style.display = "block";
             btn.disabled = false;
           });
+      });
+    })();
+
+    (function () {
+      var overlay = document.getElementById("lightbox-overlay");
+      var img = document.getElementById("lightbox-img");
+      document.addEventListener("click", function (e) {
+        var target = e.target.closest ? e.target.closest("[data-lightbox]") : null;
+        if (target) {
+          e.preventDefault();
+          e.stopPropagation();
+          img.src = target.src;
+          overlay.classList.add("open");
+          return;
+        }
+        if (e.target === overlay) overlay.classList.remove("open");
+      });
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") overlay.classList.remove("open");
       });
     })();
   </script>

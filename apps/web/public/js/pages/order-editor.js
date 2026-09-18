@@ -8,6 +8,7 @@ const orderId = params.get("id");
 const state = {
   customerId: null,
   customerName: "",
+  status: "NEW",
   lines: [],
   contacts: [],
 };
@@ -153,6 +154,16 @@ function renderTotals() {
 
 const isNewOrder = () => !orderId;
 
+// Rader går att redigera (antal/pris/tryck) inte bara på en helt ny,
+// osparad order, utan också på en redan sparad order så länge inget
+// fysiskt lämnat butiken än (NEW/READY_FOR_PICKUP) — t.ex. för att dra ner
+// antalet på en rad som visar sig vara restnoterad vid plockning, innan
+// ordern markeras redo. Låst så fort ordern är DELIVERED/INVOICED/
+// CANCELLED, eftersom lagerrörelser och ev. faktura redan bygger på de
+// ursprungliga raderna vid det laget.
+const LINE_EDITABLE_STATUSES = ["NEW", "READY_FOR_PICKUP"];
+const canEditLines = () => isNewOrder() || LINE_EDITABLE_STATUSES.includes(state.status);
+
 function renderLines() {
   el.linesEmpty.classList.toggle("hidden", state.lines.length > 0);
 
@@ -160,7 +171,7 @@ function renderLines() {
     .map((line, index) => {
       const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
 
-      if (!isNewOrder()) {
+      if (!canEditLines()) {
         const printSummary = line.printDescription
           ? `<div>${escapeHtml(line.printDescription)}</div><div class="text-xs text-slate-500">${money(line.printPrice || 0)}${Number(line.printDiscountPercent) > 0 ? ` (-${line.printDiscountPercent} %)` : ""}</div>`
           : "";
@@ -720,7 +731,12 @@ function renderActionButtons(order) {
       </label>`
     : "";
 
+  const saveLinesButton = canEditLines()
+    ? `<button type="button" id="save-lines-btn" class="btn">Spara ändringar</button>`
+    : "";
+
   el.actionButtons.innerHTML =
+    saveLinesButton +
     emailCheckbox +
     order.allowed_next_statuses
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
@@ -728,6 +744,35 @@ function renderActionButtons(order) {
     `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>` +
     `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>` +
     `<button type="button" id="print-slip-btn" class="btn-secondary">Skriv ut ordersedel</button>`;
+
+  document.getElementById("save-lines-btn")?.addEventListener("click", async () => {
+    el.formError.classList.add("hidden");
+    if (state.lines.length === 0) {
+      el.formError.textContent = "Lägg till minst en rad.";
+      el.formError.classList.remove("hidden");
+      return;
+    }
+    try {
+      await api.patch(`/orders/${order.id}/lines`, {
+        lines: state.lines.map((l) => ({
+          productVariantId: l.productVariantId,
+          description: l.productVariantId ? null : l.description ?? l.name,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          discountPercent: l.discountPercent,
+          taxRatePercent: l.taxRatePercent,
+          printDescription: l.printDescription || null,
+          printPrice: l.printPrice ?? null,
+          printDiscountPercent: l.printDiscountPercent || 0,
+          sourcing: l.sourcing,
+        })),
+      });
+      location.reload();
+    } catch (err) {
+      el.formError.textContent = err.message;
+      el.formError.classList.remove("hidden");
+    }
+  });
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -862,12 +907,18 @@ el.submitReturnBtn.addEventListener("click", async () => {
 });
 
 function applyReadOnlyState() {
-  const editable = isNewOrder();
-  el.lineSearchWrap.classList.toggle("hidden", !editable);
-  el.saveRow.classList.toggle("hidden", !editable);
-  el.customerChangeBtn.classList.toggle("hidden", !editable);
-  el.referenceSelect.disabled = !editable;
-  el.deliveryMethod.disabled = !editable;
+  const linesEditable = canEditLines();
+  el.lineSearchWrap.classList.toggle("hidden", !linesEditable);
+  el.referenceSelect.disabled = !linesEditable;
+  el.deliveryMethod.disabled = !linesEditable;
+
+  // "Spara" (skapa ny order) är bara för en helt osparad order — en
+  // befintlig sparas via "Spara ändringar" i åtgärdsknapparna istället
+  // (se renderActionButtons), som PATCHar raderna istället för att POSTa
+  // en ny order.
+  const isNew = isNewOrder();
+  el.saveRow.classList.toggle("hidden", !isNew);
+  el.customerChangeBtn.classList.toggle("hidden", !isNew);
 }
 
 async function init() {
@@ -876,6 +927,7 @@ async function init() {
 
   if (orderId) {
     const order = await api.get(`/orders/${orderId}`);
+    state.status = order.status;
     state.lines = order.lines.map((l) => ({
       productVariantId: l.product_variant_id,
       description: l.product_variant_id ? null : l.description,

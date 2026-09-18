@@ -288,7 +288,15 @@ export async function getCustomerByPortalToken(token) {
     [customer.id]
   );
 
-  return { customer, products, orders };
+  // Samma "anställda/hämtbehörighet"-lista som kund-editor.html visar för
+  // personal — kunden väljer bland dem (eller lägger till en ny) för vem
+  // som ska hämta ut beställningen, se createPortalOrderRequest.
+  const [contacts] = await pool.query(
+    `SELECT id, name, can_pickup FROM customer_contacts WHERE customer_id = ? AND active = 1 ORDER BY name ASC`,
+    [customer.id]
+  );
+
+  return { customer, products, orders, contacts };
 }
 
 // --- Sortiment ("Mina sidor") ----------------------------------------------

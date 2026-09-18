@@ -77,6 +77,7 @@ async function loadPortalRequests() {
         <div>
           <span class="font-medium text-slate-900">${escapeHtml(r.customer_name)}</span>
           ${r.requested_by_name ? `<span class="ml-2 text-slate-600">(${escapeHtml(r.requested_by_name)})</span>` : ""}
+          ${r.reference_contact_name ? `<span class="ml-2 text-xs text-slate-500">Hämtas ut av: ${escapeHtml(r.reference_contact_name)}</span>` : ""}
           <span class="ml-2 text-xs text-slate-500">${r.line_count} rad${r.line_count === 1 ? "" : "er"} · ${daysSince(r.created_at) === 0 ? "idag" : `${daysSince(r.created_at)} dagar sedan`}</span>
         </div>
         <span class="flex gap-2">

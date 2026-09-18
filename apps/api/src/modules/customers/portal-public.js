@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createPortalOrderRequest } from "./portal-requests.js";
+import { createPortalOrderRequest, addPortalContact } from "./portal-requests.js";
 
 // The customer-facing side of "beställ från Mina sidor": no login, reached
 // only by knowing the unguessable portal_token — same trust model as the
@@ -11,6 +11,7 @@ router.post("/:token/request", async (req, res, next) => {
   try {
     const result = await createPortalOrderRequest(req.params.token, {
       requestedByName: req.body?.requestedByName,
+      referenceContactId: req.body?.referenceContactId ? Number(req.body.referenceContactId) : null,
       lines: Array.isArray(req.body?.lines) ? req.body.lines : [],
     });
     res.status(201).json(result);
@@ -19,6 +20,17 @@ router.post("/:token/request", async (req, res, next) => {
     if (err.message === "INVALID_REQUEST") {
       return res.status(400).json({ error: "Ange minst ett antal för en produkt i sortimentet" });
     }
+    next(err);
+  }
+});
+
+router.post("/:token/contacts", async (req, res, next) => {
+  try {
+    const contact = await addPortalContact(req.params.token, { name: req.body?.name });
+    res.status(201).json(contact);
+  } catch (err) {
+    if (err.message === "CUSTOMER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NAME_REQUIRED") return res.status(400).json({ error: "Namn krävs" });
     next(err);
   }
 });
