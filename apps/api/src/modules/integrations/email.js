@@ -67,6 +67,34 @@ export async function sendQuoteEmail({
   return dispatch({ settings, to, subject, html });
 }
 
+// Called from "Skicka påminnelse" i påminnelselistan (Översikt) — en
+// riktig uppföljning till kunden om en obesvarad offert, till skillnad
+// från den gamla "Markera skickad"-knappen som bara satte en intern
+// flagga utan att faktiskt skicka något.
+export async function sendQuoteReminderEmail({
+  settings,
+  to,
+  customerName,
+  quoteNumber,
+  publicUrl,
+  totalIncVat,
+  sellerName,
+  sellerLogoUrl,
+  brandColor,
+}) {
+  const html = buildQuoteReminderEmailHtml({
+    customerName,
+    quoteNumber,
+    publicUrl,
+    totalIncVat,
+    sellerName,
+    sellerLogoUrl,
+    brandColor,
+  });
+  const subject = `Påminnelse: Offert ${quoteNumber}${sellerName ? ` från ${sellerName}` : ""}`;
+  return dispatch({ settings, to, subject, html });
+}
+
 // --- HTML templates (real content, ready for dispatch() above) ------------
 
 function escapeHtml(value) {
@@ -168,4 +196,34 @@ function buildQuoteEmailHtml({
     </p>`;
 
   return emailShell({ preheader: `Offert ${quoteNumber} — ${money(totalIncVat)}`, bodyHtml });
+}
+
+function buildQuoteReminderEmailHtml({ customerName, quoteNumber, publicUrl, totalIncVat, sellerName, sellerLogoUrl, brandColor }) {
+  const color = brandColor || "#0f172a";
+  const bodyHtml = `
+    ${sellerLogoUrl ? `<img src="${escapeHtml(sellerLogoUrl)}" alt="${escapeHtml(sellerName ?? "")}" style="max-height:36px;margin-bottom:16px;" />` : ""}
+    <p style="margin:0 0 4px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:${color};">${escapeHtml(sellerName ?? "")}</p>
+    <h1 style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:20px;color:#0f172a;">Påminnelse: Offert ${escapeHtml(quoteNumber)}</h1>
+    <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:14px;color:#334155;line-height:1.6;">
+      Hej ${escapeHtml(customerName ?? "")},<br /><br />
+      Vi ville bara påminna om att ni har en offert som väntar på svar. Klicka på knappen nedan för att se den igen.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      <tr>
+        <td style="border-radius:6px;background:${color};">
+          <a href="${escapeHtml(publicUrl)}" style="display:inline-block;padding:12px 24px;font-family:system-ui,sans-serif;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">Visa offert</a>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f1f5f9;padding-top:12px;font-family:system-ui,sans-serif;font-size:13px;color:#64748b;">
+      <tr>
+        <td>Totalt (inkl. moms)</td>
+        <td align="right" style="font-weight:600;color:#0f172a;">${money(totalIncVat)}</td>
+      </tr>
+    </table>
+    <p style="margin:20px 0 0;font-family:system-ui,sans-serif;font-size:12px;color:#94a3b8;word-break:break-all;">
+      Fungerar knappen inte? Kopiera länken: ${escapeHtml(publicUrl)}
+    </p>`;
+
+  return emailShell({ preheader: `Påminnelse: Offert ${quoteNumber} väntar på svar`, bodyHtml });
 }

@@ -29,17 +29,42 @@ async function loadReminders() {
           <span class="ml-2 text-slate-600">${escapeHtml(q.customer_name)}</span>
           <span class="ml-2 text-xs text-slate-500">${daysSince(q.sent_at)} dagar sedan skickad</span>
         </div>
-        <button type="button" class="btn-secondary" data-mark-sent="${q.id}">Markera skickad</button>
+        <span class="flex items-center gap-2">
+          <span class="hidden text-xs text-red-600" data-reminder-error></span>
+          <button type="button" class="btn-secondary" data-send-reminder="${q.id}">Skicka påminnelse</button>
+        </span>
       </li>`
     )
     .join("");
 }
 
+// Skickar ett riktigt uppföljningsmejl till kunden (samma e-postmotor som
+// "Maila offert till kund") — inte bara en intern flagga som tidigare.
+// Ett misslyckat försök (t.ex. e-post inte konfigurerat ännu) visas inline
+// och raden ligger kvar så det går att försöka igen; en lyckad påminnelse
+// gör att offerten försvinner ur listan av sig själv (se
+// listQuotesNeedingReminder på servern).
 list.addEventListener("click", async (event) => {
-  const id = event.target.dataset.markSent;
+  const id = event.target.dataset.sendReminder;
   if (id === undefined) return;
-  await api.post(`/quotes/${id}/reminder-sent`);
-  loadReminders();
+  const li = event.target.closest("li");
+  const errorEl = li.querySelector("[data-reminder-error]");
+  event.target.disabled = true;
+  errorEl.classList.add("hidden");
+  try {
+    const result = await api.post(`/quotes/${id}/send-reminder`, {});
+    if (result.sent) {
+      loadReminders();
+    } else {
+      errorEl.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+      errorEl.classList.remove("hidden");
+      event.target.disabled = false;
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove("hidden");
+    event.target.disabled = false;
+  }
 });
 
 async function loadPortalRequests() {

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { assertValidLines } from "../../lib/lines.js";
 import { getSettings } from "../settings/service.js";
-import { sendQuoteEmail } from "../integrations/email.js";
+import { sendQuoteEmail, sendQuoteReminderEmail } from "../integrations/email.js";
 import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
 
 function nextQuoteNumber() {
@@ -315,11 +315,10 @@ export async function markViewed(quoteId) {
 }
 
 // ---------------------------------------------------------------------
-// Påminnelser (Fas 7) — no SMTP is wired up, so "reminders" surface as a
-// staff-visible list instead of an actual email. A quote needs one once
-// it's sat unanswered (SENT/VIEWED) for reminder_days_after days and no
-// REMINDER_SENT event has been logged for it yet; staff can mark it
-// handled (recordEvent) once they've followed up by phone/e-mail.
+// Påminnelser (Fas 7): en offert som sitt obesvarad (SENT/VIEWED) i
+// reminder_days_after dagar utan ett loggat REMINDER_SENT-event dyker
+// upp i den här listan (se dashboard.js) med en "Skicka påminnelse"-
+// knapp, se sendQuoteReminder nedan.
 // ---------------------------------------------------------------------
 
 export async function listQuotesNeedingReminder(reminderDaysAfter) {
@@ -339,10 +338,39 @@ export async function listQuotesNeedingReminder(reminderDaysAfter) {
   return rows;
 }
 
-export async function markReminderSent(quoteId) {
-  const [[quote]] = await pool.query(`SELECT id FROM quotes WHERE id = ?`, [quoteId]);
+// Skickar en riktig påminnelse till kunden (samma e-postmotor som "Maila
+// offert till kund") istället för att bara sätta en intern flagga.
+// REMINDER_SENT är vad listQuotesNeedingReminder ovan letar efter för att
+// plocka bort en offert den redan påmint om — en lyckad påminnelse gör
+// alltså att offerten försvinner ur listan av sig själv. Ett misslyckat
+// försök (t.ex. e-post inte konfigurerat än) loggas som REMINDER_FAILED
+// istället och lämnar offerten kvar i listan så den går att försöka igen.
+export async function sendQuoteReminder(id, publicUrl) {
+  const quote = await getQuote(id);
   if (!quote) throw new Error("QUOTE_NOT_FOUND");
-  await recordEvent(quoteId, "REMINDER_SENT");
+  if (!quote.customer_email) throw new Error("NO_CUSTOMER_EMAIL");
+
+  const settings = await getSettings();
+  let result;
+  try {
+    result = await sendQuoteReminderEmail({
+      settings,
+      to: quote.customer_email,
+      customerName: quote.reference_name || quote.customer_name,
+      quoteNumber: quote.quote_number,
+      publicUrl,
+      totalIncVat: quote.totals.total_inc_vat,
+      sellerName: settings?.seller_name,
+      sellerLogoUrl: settings?.seller_logo_path ? `${new URL(publicUrl).origin}/uploads/${settings.seller_logo_path}` : null,
+      brandColor: settings?.brand_color,
+    });
+  } catch (err) {
+    result = { ok: false, reason: err.message };
+  }
+
+  const reason = result.note ?? result.reason;
+  await recordEvent(id, result.ok ? "REMINDER_SENT" : "REMINDER_FAILED", result.ok ? null : reason);
+  return { sent: result.ok, reason };
 }
 
 export async function respondToQuote(token, decision, meta) {

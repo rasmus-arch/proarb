@@ -132,12 +132,18 @@ router.post("/:id/convert-to-order", async (req, res, next) => {
   }
 });
 
-router.post("/:id/reminder-sent", async (req, res, next) => {
+router.post("/:id/send-reminder", async (req, res, next) => {
   try {
-    await quotes.markReminderSent(Number(req.params.id));
-    res.status(204).end();
+    const quote = await quotes.getQuote(Number(req.params.id));
+    if (!quote) return res.status(404).json({ error: "Not found" });
+    const publicUrl = `${req.protocol}://${req.get("host")}/q/${quote.public_token}`;
+    const result = await quotes.sendQuoteReminder(Number(req.params.id), publicUrl);
+    res.json(result);
   } catch (err) {
     if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NO_CUSTOMER_EMAIL") {
+      return res.status(400).json({ error: "Kunden saknar e-postadress" });
+    }
     next(err);
   }
 });
