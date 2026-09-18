@@ -219,7 +219,7 @@ export async function getCustomerByPortalToken(token) {
   if (!customer) return null;
 
   const [products] = await pool.query(
-    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price,
+    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url,
             v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
             ${ASSORTMENT_DISCOUNT_SELECT}
      FROM customer_assortment ca

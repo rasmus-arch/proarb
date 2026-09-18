@@ -37,6 +37,7 @@ function groupByProduct(products) {
         article_number: p.article_number,
         name: p.name,
         base_price: p.base_price,
+        image_url: p.image_url,
         discount_percent: Number(p.discount_percent) || 0,
         variants: [],
       });
@@ -52,6 +53,12 @@ function groupByProduct(products) {
     }
   }
   return [...map.values()];
+}
+
+function imageHtml(imageUrl) {
+  return imageUrl
+    ? `<img src="/uploads/${imageUrl}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;flex-shrink:0;" />`
+    : "";
 }
 
 function priceHtml(price, discountPercent) {
@@ -82,9 +89,12 @@ export async function renderPortalPage(req, res) {
       if (p.variants.length <= 1) {
         return `<div style="border-bottom:1px solid #e2e8f0;">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0;">
-            <div>
-              <div style="font-weight:600;">${escapeHtml(p.name)}</div>
-              <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+              ${imageHtml(p.image_url)}
+              <div>
+                <div style="font-weight:600;">${escapeHtml(p.name)}</div>
+                <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+              </div>
             </div>
             ${priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent)}
           </div>
@@ -116,12 +126,15 @@ export async function renderPortalPage(req, res) {
 
       return `<details style="border-bottom:1px solid #e2e8f0;padding:10px 0;">
           <summary style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;">
-            <span>
-              <span class="chevron" style="display:inline-block;margin-right:8px;color:#94a3b8;transition:transform 0.15s;">▸</span>
-              <span style="font-weight:600;">${escapeHtml(p.name)}</span>
-              <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
-              <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
-            </span>
+            <div style="display:flex;align-items:flex-start;gap:10px;">
+              ${imageHtml(p.image_url)}
+              <span>
+                <span class="chevron" style="display:inline-block;margin-right:8px;color:#94a3b8;transition:transform 0.15s;">▸</span>
+                <span style="font-weight:600;">${escapeHtml(p.name)}</span>
+                <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
+                <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
+              </span>
+            </div>
             ${samePrice ? priceHtml(p.variants[0].price, p.discount_percent) : ""}
           </summary>
           <div style="margin-top:8px;">${variantTable}</div>
