@@ -1,6 +1,7 @@
 -- Minimal reference data so the app is usable right after migrating.
 
-INSERT IGNORE INTO warehouses (id, name) VALUES (1, 'Butik'), (2, 'Centrallager');
+-- Single warehouse only — ProArb doesn't model multiple stock locations.
+INSERT IGNORE INTO warehouses (id, name) VALUES (1, 'Butik');
 
 INSERT IGNORE INTO print_methods (id, name) VALUES
   (1, 'Brodyr'),

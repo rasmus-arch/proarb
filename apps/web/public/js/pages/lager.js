@@ -71,7 +71,6 @@ async function loadSaldo(page = saldoPage) {
           <div class="font-medium text-slate-900">${escapeHtml(r.product_name)}</div>
           <div class="text-xs text-slate-500">${escapeHtml([r.color, r.size, r.sku].filter(Boolean).join(" · "))}</div>
         </td>
-        <td class="py-2 pr-3">${escapeHtml(r.warehouse_name)}</td>
         <td class="py-2 pr-3 text-right ${r.reorder_point !== null && r.quantity_on_hand < r.reorder_point ? "font-semibold text-red-600" : ""}">${r.quantity_on_hand}</td>
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_point ?? "–"}</td>
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_quantity ?? "–"}</td>
@@ -414,22 +413,13 @@ const countRows = document.getElementById("count-rows");
 const countEmpty = document.getElementById("count-empty");
 let currentCountId = null;
 
-async function loadWarehousesIntoSelect() {
-  const { rows } = await api.get("/inventory/warehouses");
-  document.getElementById("new-count-warehouse").innerHTML = rows
-    .map((w) => `<option value="${w.id}">${escapeHtml(w.name)}</option>`)
-    .join("");
-}
-
 async function loadStockCounts() {
-  await loadWarehousesIntoSelect();
   const { rows } = await api.get("/inventory/stock-counts");
   countEmpty.classList.toggle("hidden", rows.length > 0);
   countRows.innerHTML = rows
     .map(
       (c) => `
       <tr class="cursor-pointer hover:bg-slate-50" data-count="${c.id}">
-        <td class="py-2 pr-3 font-medium text-slate-900">${escapeHtml(c.warehouse_name)}</td>
         <td class="py-2 pr-3">${c.status === "IN_PROGRESS" ? "Pågår" : "Avslutad"}</td>
         <td class="py-2 pr-3 text-slate-500">${new Date(c.started_at).toLocaleString("sv-SE")}</td>
         <td class="py-2 pr-3 text-slate-500">${escapeHtml(c.started_by_name ?? "")}</td>
@@ -439,9 +429,7 @@ async function loadStockCounts() {
 }
 
 document.getElementById("new-count-btn").addEventListener("click", async () => {
-  const created = await api.post("/inventory/stock-counts", {
-    warehouseId: Number(document.getElementById("new-count-warehouse").value),
-  });
+  const created = await api.post("/inventory/stock-counts", {});
   openCountDetail(created.id);
 });
 
@@ -477,7 +465,7 @@ async function renderCountDetail() {
   const count = await api.get(`/inventory/stock-counts/${currentCountId}`);
   const inProgress = count.status === "IN_PROGRESS";
 
-  document.getElementById("count-detail-title").textContent = `Inventering – ${count.warehouse_name}`;
+  document.getElementById("count-detail-title").textContent = "Inventering";
   document.getElementById("count-detail-status").textContent = inProgress ? "Pågår" : "Avslutad";
   document.getElementById("count-detail-status").className = `rounded-full px-2 py-0.5 text-xs font-medium ${inProgress ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`;
   document.getElementById("count-scan-area").classList.toggle("hidden", !inProgress);

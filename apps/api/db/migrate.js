@@ -93,6 +93,14 @@ export async function run() {
     "ALTER TABLE order_lines ADD COLUMN print_price DECIMAL(10,2) NULL",
     "ALTER TABLE order_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
     "ALTER TABLE stock_levels ADD INDEX idx_sl_warehouse (warehouse_id)",
+    // Single-warehouse simplification: only remove Centrallager if nothing
+    // actually references it (a real deployment with stock/history there
+    // keeps the row — never silently destroy real data), so this is a
+    // no-op everywhere except a fresh/never-used second warehouse.
+    `DELETE FROM warehouses WHERE name = 'Centrallager'
+       AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_levels)
+       AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_movements)
+       AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_counts)`,
   ];
   for (const statement of alters) {
     try {

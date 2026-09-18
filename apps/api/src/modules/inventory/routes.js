@@ -147,8 +147,10 @@ router.get("/stock-counts", async (req, res, next) => {
 
 router.post("/stock-counts", canAdjustStock, async (req, res, next) => {
   try {
-    if (!req.body?.warehouseId) return res.status(400).json({ error: "warehouseId krävs" });
-    const count = await stockCounts.startStockCount({ warehouseId: req.body.warehouseId, userId: req.user.id });
+    const count = await stockCounts.startStockCount({
+      warehouseId: req.body?.warehouseId ?? inventory.DEFAULT_WAREHOUSE_ID,
+      userId: req.user.id,
+    });
     res.status(201).json(count);
   } catch (err) {
     next(err);
