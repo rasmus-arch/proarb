@@ -1,4 +1,23 @@
 import * as customers from "./service.js";
+import { getSettings } from "../settings/service.js";
+
+// Kept in sync with apps/web/public/js/order-status.js — duplicated rather
+// than shared because this page is server-rendered (plain HTML response,
+// not a browser ES module) while that file is client-side only.
+const ORDER_STATUS_LABELS = {
+  NEW: "Order",
+  READY_FOR_PICKUP: "Redo för utlämning",
+  DELIVERED: "Utlämnad",
+  INVOICED: "Fakturerad",
+  CANCELLED: "Avbruten",
+};
+const ORDER_STATUS_COLORS = {
+  NEW: { bg: "#f1f5f9", fg: "#475569" },
+  READY_FOR_PICKUP: { bg: "#fef3c7", fg: "#b45309" },
+  DELIVERED: { bg: "#dcfce7", fg: "#15803d" },
+  INVOICED: { bg: "#0f172a", fg: "#fff" },
+  CANCELLED: { bg: "#fee2e2", fg: "#dc2626" },
+};
 
 // Kundportal ("Mina sidor", Fas 9): a no-login, read-only page reached only
 // by knowing the unguessable portal_token — a lightweight substitute for
@@ -49,10 +68,22 @@ function groupByProduct(products) {
         size: p.size,
         sku: p.sku,
         price: p.price_override ?? p.base_price,
+        quantity_on_hand: p.quantity_on_hand,
       });
     }
   }
   return [...map.values()];
+}
+
+// NULL/undefined means no stock_levels row exists for this variant yet
+// (never adjusted/counted) — treated the same as 0, not "unknown", so a
+// customer never sees a stale "in stock" claim for something nobody has
+// actually put a number on.
+function stockBadgeHtml(quantityOnHand) {
+  const inStock = Number(quantityOnHand) > 0;
+  return inStock
+    ? `<span style="display:inline-block;border-radius:9999px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">I lager</span>`
+    : `<span style="display:inline-block;border-radius:9999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">Beställningsvara</span>`;
 }
 
 function imageHtml(imageUrl) {
@@ -81,7 +112,10 @@ export async function renderPortalPage(req, res) {
     return;
   }
 
-  const { customer, products: flatProducts } = result;
+  const settings = await getSettings();
+  const showStock = Boolean(settings?.portal_show_stock);
+
+  const { customer, products: flatProducts, orders } = result;
   const products = groupByProduct(flatProducts);
 
   const blocks = products
@@ -95,6 +129,7 @@ export async function renderPortalPage(req, res) {
               <div>
                 <div style="font-weight:600;">${escapeHtml(p.name)}</div>
                 <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+                ${showStock && p.variants[0] ? `<div style="margin-top:4px;">${stockBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : ""}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
@@ -121,6 +156,7 @@ export async function renderPortalPage(req, res) {
               <tr>
                 <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
+                ${showStock ? `<td style="padding:4px 8px;">${stockBadgeHtml(v.quantity_on_hand)}</td>` : ""}
                 ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>`}
                 <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" style="width:56px;" /></td>
               </tr>`
@@ -144,6 +180,19 @@ export async function renderPortalPage(req, res) {
           </summary>
           <div style="margin-top:8px;">${variantTable}</div>
         </details>`;
+    })
+    .join("");
+
+  const orderRows = (orders ?? [])
+    .map((o) => {
+      const color = ORDER_STATUS_COLORS[o.status] ?? ORDER_STATUS_COLORS.NEW;
+      return `<tr>
+          <td style="padding:6px 8px;font-weight:500;">${escapeHtml(o.order_number)}</td>
+          <td style="padding:6px 8px;color:#64748b;">${new Date(o.created_at).toLocaleDateString("sv-SE")}</td>
+          <td style="padding:6px 8px;text-align:right;">
+            <span style="display:inline-block;border-radius:9999px;background:${color.bg};color:${color.fg};font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">${ORDER_STATUS_LABELS[o.status] ?? o.status}</span>
+          </td>
+        </tr>`;
     })
     .join("");
 
@@ -171,6 +220,17 @@ export async function renderPortalPage(req, res) {
     <h1 style="margin:0;font-size:20px;">Mina sidor</h1>
     <p style="color:#64748b;margin:4px 0 0;">${escapeHtml(customer.name)}</p>
   </div>
+
+  ${
+    orderRows
+      ? `<div class="card">
+          <h2 style="margin:0;font-size:15px;">Dina beställningar</h2>
+          <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
+            <tbody>${orderRows}</tbody>
+          </table>
+        </div>`
+      : ""
+  }
 
   <div class="card">
     <h2 style="margin:0;font-size:15px;">Sortiment</h2>

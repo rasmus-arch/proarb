@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
+import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 
 function nextCustomerNumber() {
   // Simple time-based number; good enough until a real sequence/counter
@@ -218,19 +219,29 @@ export async function getCustomerByPortalToken(token) {
   const [[customer]] = await pool.query(`SELECT * FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) return null;
 
+  // quantity_on_hand is only ever shown when Inställningar → Kundportal
+  // turns it on (see portal.js) — fetched unconditionally here since it's
+  // cheap and the caller decides whether to render it.
   const [products] = await pool.query(
     `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url,
             v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
+            sl.quantity_on_hand,
             ${ASSORTMENT_DISCOUNT_SELECT}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
+     LEFT JOIN stock_levels sl ON sl.product_variant_id = v.id AND sl.warehouse_id = ?
      WHERE ca.customer_id = ? AND p.active = 1
      ORDER BY p.name ASC, v.color ASC, v.size ASC`,
-    [customer.id, customer.id, customer.id]
+    [customer.id, customer.id, DEFAULT_WAREHOUSE_ID, customer.id]
   );
 
-  return { customer, products };
+  const [orders] = await pool.query(
+    `SELECT id, order_number, status, created_at FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10`,
+    [customer.id]
+  );
+
+  return { customer, products, orders };
 }
 
 // --- Sortiment ("Mina sidor") ----------------------------------------------

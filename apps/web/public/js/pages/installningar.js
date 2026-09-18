@@ -12,6 +12,7 @@ const el = {
   footer: document.getElementById("s-footer"),
   reminderEnabled: document.getElementById("s-reminder-enabled"),
   reminderDays: document.getElementById("s-reminder-days"),
+  portalShowStock: document.getElementById("s-portal-show-stock"),
   smtpHost: document.getElementById("s-smtp-host"),
   smtpPort: document.getElementById("s-smtp-port"),
   smtpUsername: document.getElementById("s-smtp-username"),
@@ -50,6 +51,7 @@ function applySettings(settings) {
   el.footer.value = settings.quote_footer_note ?? "";
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
+  el.portalShowStock.checked = Boolean(settings.portal_show_stock);
   el.smtpHost.value = settings.smtp_host ?? "";
   el.smtpPort.value = settings.smtp_port ?? "";
   el.smtpUsername.value = settings.smtp_username ?? "";
@@ -89,6 +91,7 @@ el.saveBtn.addEventListener("click", async () => {
       quoteFooterNote: el.footer.value || null,
       reminderEnabled: el.reminderEnabled.checked,
       reminderDaysAfter: Number(el.reminderDays.value) || 5,
+      portalShowStock: el.portalShowStock.checked,
       smtpHost: el.smtpHost.value || null,
       smtpPort: el.smtpPort.value ? Number(el.smtpPort.value) : null,
       smtpUsername: el.smtpUsername.value || null,

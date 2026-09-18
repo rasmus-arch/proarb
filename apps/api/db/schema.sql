@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
   quote_footer_note     VARCHAR(1000) NULL,
   reminder_enabled      TINYINT(1) NOT NULL DEFAULT 0,
   reminder_days_after   INT NOT NULL DEFAULT 5,
+  -- Av som standard: lagersaldot är bara pålitligt att visa för kunder
+  -- efter en fullständig inventering. Slå på i Inställningar när ni är
+  -- klara med den.
+  portal_show_stock     TINYINT(1) NOT NULL DEFAULT 0,
   smtp_host             VARCHAR(255) NULL,
   smtp_port             INT NULL,
   smtp_username         VARCHAR(255) NULL,

@@ -101,6 +101,7 @@ export async function run() {
        AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_levels)
        AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_movements)
        AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_counts)`,
+    "ALTER TABLE app_settings ADD COLUMN portal_show_stock TINYINT(1) NOT NULL DEFAULT 0",
   ];
   for (const statement of alters) {
     try {
