@@ -102,6 +102,8 @@ export async function run() {
        AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_movements)
        AND id NOT IN (SELECT DISTINCT warehouse_id FROM stock_counts)`,
     "ALTER TABLE app_settings ADD COLUMN portal_show_stock TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE app_settings ADD COLUMN inactive_customer_months INT NOT NULL DEFAULT 6",
+    "ALTER TABLE invoices MODIFY type ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE', 'CREDIT_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE'",
   ];
   for (const statement of alters) {
     try {

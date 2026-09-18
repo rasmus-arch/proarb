@@ -13,6 +13,7 @@ const el = {
   reminderEnabled: document.getElementById("s-reminder-enabled"),
   reminderDays: document.getElementById("s-reminder-days"),
   portalShowStock: document.getElementById("s-portal-show-stock"),
+  inactiveMonths: document.getElementById("s-inactive-months"),
   smtpHost: document.getElementById("s-smtp-host"),
   smtpPort: document.getElementById("s-smtp-port"),
   smtpUsername: document.getElementById("s-smtp-username"),
@@ -52,6 +53,7 @@ function applySettings(settings) {
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
   el.portalShowStock.checked = Boolean(settings.portal_show_stock);
+  el.inactiveMonths.value = settings.inactive_customer_months ?? 6;
   el.smtpHost.value = settings.smtp_host ?? "";
   el.smtpPort.value = settings.smtp_port ?? "";
   el.smtpUsername.value = settings.smtp_username ?? "";
@@ -92,6 +94,7 @@ el.saveBtn.addEventListener("click", async () => {
       reminderEnabled: el.reminderEnabled.checked,
       reminderDaysAfter: Number(el.reminderDays.value) || 5,
       portalShowStock: el.portalShowStock.checked,
+      inactiveCustomerMonths: Number(el.inactiveMonths.value) || 6,
       smtpHost: el.smtpHost.value || null,
       smtpPort: el.smtpPort.value ? Number(el.smtpPort.value) : null,
       smtpUsername: el.smtpUsername.value || null,

@@ -34,6 +34,16 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+// Before /:id so "inactive" isn't swallowed as an :id value.
+router.get("/inactive", async (req, res, next) => {
+  try {
+    const months = Number(req.query.months) || 6;
+    res.json({ rows: await customers.listInactiveCustomers(months) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const customer = await customers.getCustomer(Number(req.params.id));

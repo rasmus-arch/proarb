@@ -145,7 +145,45 @@
         <h2 class="text-sm font-medium text-slate-900">Utlämningshistorik</h2>
         <ul id="history-list" class="mt-2 space-y-1 text-sm text-slate-600"></ul>
       </section>
+
+      <!-- Returer -->
+      <section id="returns-section" class="mt-6 hidden card">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-medium text-slate-900">Returer</h2>
+          <button type="button" id="new-return-btn" class="btn-secondary">Registrera retur</button>
+        </div>
+        <ul id="returns-list" class="mt-2 space-y-2 text-sm text-slate-600"></ul>
+      </section>
     </main>
+
+    <!-- Retur-dialog -->
+    <dialog id="return-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Registrera retur</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Ange antal för det som returneras. En kreditfaktura skapas i Fortnox och lagersaldot justeras.
+        </p>
+        <table class="mt-3 w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-500">
+              <th class="py-1 pr-3 font-medium">Produkt</th>
+              <th class="py-1 pr-3 font-medium text-right">Kvar att returnera</th>
+              <th class="py-1 pr-3 font-medium w-24">Antal</th>
+            </tr>
+          </thead>
+          <tbody id="return-rows"></tbody>
+        </table>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Orsak (valfritt)</span>
+          <textarea id="return-reason" rows="2" class="input mt-1"></textarea>
+        </label>
+        <p id="return-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-return-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="submit-return-btn" class="btn">Registrera retur</button>
+        </div>
+      </div>
+    </dialog>
 
     <!-- Fritextrad dialog -->
     <dialog id="fritext-dialog" class="w-full max-w-md rounded-lg p-0 backdrop:bg-slate-900/40">

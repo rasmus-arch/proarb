@@ -9,6 +9,13 @@ if (!customerId) {
 
 const el = {
   title: document.getElementById("page-title"),
+  statsSection: document.getElementById("stats-section"),
+  statYear: document.getElementById("stat-year"),
+  statAllTime: document.getElementById("stat-all-time"),
+  statLastOrder: document.getElementById("stat-last-order"),
+  statPendingQuotes: document.getElementById("stat-pending-quotes"),
+  templateRows: document.getElementById("template-rows"),
+  templatesEmpty: document.getElementById("templates-empty"),
   name: document.getElementById("f-name"),
   org: document.getElementById("f-org"),
   email: document.getElementById("f-email"),
@@ -57,6 +64,10 @@ function escapeHtml(value) {
   const div = document.createElement("div");
   div.textContent = value ?? "";
   return div.innerHTML;
+}
+
+function money(value) {
+  return `${Number(value).toLocaleString("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} kr`;
 }
 
 function formatBytes(bytes) {
@@ -131,6 +142,14 @@ async function loadCustomer() {
   renderContacts(customer.contacts);
   renderLogos(customer.logos);
 
+  el.statsSection.classList.remove("hidden");
+  el.statYear.textContent = money(customer.stats.total_purchased_this_year);
+  el.statAllTime.textContent = money(customer.stats.total_purchased_all_time);
+  el.statLastOrder.textContent = customer.stats.last_order_at
+    ? new Date(customer.stats.last_order_at).toLocaleDateString("sv-SE")
+    : "–";
+  el.statPendingQuotes.textContent = String(customer.stats.pending_quotes);
+
   const { rows: suppliers } = await api.get("/suppliers");
   el.discountSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
@@ -139,7 +158,44 @@ async function loadCustomer() {
 
   const { rows: assortment } = await api.get(`/customers/${customerId}/assortment`);
   renderAssortment(assortment);
+
+  await loadTemplates();
 }
+
+async function loadTemplates() {
+  const { rows } = await api.get(`/order-templates?customerId=${customerId}`);
+  el.templatesEmpty.classList.toggle("hidden", rows.length > 0);
+  el.templateRows.innerHTML = rows
+    .map(
+      (t) => `
+      <li class="flex items-center justify-between py-2 text-sm" data-template-id="${t.id}">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(t.name)}</span>
+          <span class="ml-2 text-xs text-slate-500">${t.line_count} rad${t.line_count === 1 ? "" : "er"}</span>
+        </div>
+        <span class="flex gap-2">
+          <button type="button" class="text-red-600 underline text-xs" data-delete-template="${t.id}">Ta bort</button>
+          <button type="button" class="btn-secondary" data-use-template="${t.id}">Skapa order</button>
+        </span>
+      </li>`
+    )
+    .join("");
+}
+
+el.templateRows.addEventListener("click", async (event) => {
+  const useId = event.target.dataset.useTemplate;
+  const deleteId = event.target.dataset.deleteTemplate;
+  if (useId !== undefined) {
+    const order = await api.post(`/order-templates/${useId}/create-order`, {});
+    location.href = `/order-editor.html?id=${order.id}`;
+    return;
+  }
+  if (deleteId !== undefined) {
+    if (!confirm("Ta bort mallen? Detta går inte att ångra.")) return;
+    await api.delete(`/order-templates/${deleteId}`);
+    loadTemplates();
+  }
+});
 
 function renderAssortment(rows) {
   el.assortmentEmpty.classList.toggle("hidden", rows.length > 0);

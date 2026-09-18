@@ -71,6 +71,15 @@ const el = {
   pickupBtn: document.getElementById("pickup-btn"),
   historySection: document.getElementById("history-section"),
   historyList: document.getElementById("history-list"),
+  returnsSection: document.getElementById("returns-section"),
+  returnsList: document.getElementById("returns-list"),
+  newReturnBtn: document.getElementById("new-return-btn"),
+  returnDialog: document.getElementById("return-dialog"),
+  returnRows: document.getElementById("return-rows"),
+  returnReason: document.getElementById("return-reason"),
+  returnError: document.getElementById("return-error"),
+  cancelReturnBtn: document.getElementById("cancel-return-btn"),
+  submitReturnBtn: document.getElementById("submit-return-btn"),
 };
 
 function escapeHtml(value) {
@@ -628,7 +637,8 @@ function renderActionButtons(order) {
     order.allowed_next_statuses
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
       .join("") +
-    `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>`;
+    `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>` +
+    `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>`;
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -641,6 +651,17 @@ function renderActionButtons(order) {
     try {
       const duplicate = await api.post(`/orders/${order.id}/duplicate`, {});
       location.href = `/order-editor.html?id=${duplicate.id}`;
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("save-template-btn").addEventListener("click", async () => {
+    const name = prompt('Namn på mallen (t.ex. "Vinteruniform 2026"):');
+    if (!name?.trim()) return;
+    try {
+      await api.post(`/orders/${order.id}/save-as-template`, { name: name.trim() });
+      alert("Mallen sparades — hittas under kundens sida.");
     } catch (err) {
       alert(err.message);
     }
@@ -666,6 +687,86 @@ el.pickupBtn.addEventListener("click", async () => {
   } catch (err) {
     el.pickupError.textContent = err.message;
     el.pickupError.classList.remove("hidden");
+  }
+});
+
+// --- Returer ---------------------------------------------------------------
+
+const RETURNABLE_ORDER_STATUSES = ["DELIVERED", "INVOICED"];
+
+async function loadReturns() {
+  const { rows: returns } = await api.get(`/orders/${orderId}/returns`);
+  if (returns.length === 0) {
+    el.returnsList.innerHTML = `<li class="text-slate-500">Inga returer registrerade.</li>`;
+    return;
+  }
+  el.returnsList.innerHTML = returns
+    .map((r) => {
+      const lines = r.lines
+        .map((l) => `<div>${l.quantity} × ${escapeHtml(l.product_name)}${l.color || l.size ? ` (${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))})` : ""}</div>`)
+        .join("");
+      return `
+        <li class="rounded-md border border-slate-200 p-2">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-slate-900">${new Date(r.created_at).toLocaleString("sv-SE")}</span>
+            <span class="text-slate-500">Krediterat: ${money(r.total_credited)}</span>
+          </div>
+          ${r.reason ? `<div class="mt-1 text-slate-600">${escapeHtml(r.reason)}</div>` : ""}
+          <div class="mt-1 text-slate-600">${lines}</div>
+        </li>`;
+    })
+    .join("");
+}
+
+el.newReturnBtn.addEventListener("click", async () => {
+  el.returnError.classList.add("hidden");
+  el.returnReason.value = "";
+  const { rows: lines } = await api.get(`/orders/${orderId}/returnable-lines`);
+  const returnable = lines.filter((l) => l.returnable_qty > 0);
+  if (returnable.length === 0) {
+    el.returnRows.innerHTML = "";
+    el.returnError.textContent = "Inget kvar att returnera på den här ordern.";
+    el.returnError.classList.remove("hidden");
+    el.returnDialog.showModal();
+    return;
+  }
+  el.returnRows.innerHTML = returnable
+    .map(
+      (l) => `
+      <tr data-order-line-id="${l.order_line_id}">
+        <td class="py-1 pr-3">${escapeHtml(l.product_name)}${l.color || l.size ? `<div class="text-xs text-slate-500">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</div>` : ""}</td>
+        <td class="py-1 pr-3 text-right">${l.returnable_qty}</td>
+        <td class="py-1 pr-3"><input type="number" min="0" max="${l.returnable_qty}" step="1" class="input" value="0" /></td>
+      </tr>`
+    )
+    .join("");
+  el.returnDialog.showModal();
+});
+
+el.cancelReturnBtn.addEventListener("click", () => el.returnDialog.close());
+
+el.submitReturnBtn.addEventListener("click", async () => {
+  el.returnError.classList.add("hidden");
+  const returnLines = [...el.returnRows.querySelectorAll("tr[data-order-line-id]")]
+    .map((row) => ({
+      orderLineId: Number(row.dataset.orderLineId),
+      quantity: Number(row.querySelector("input").value),
+    }))
+    .filter((l) => l.quantity > 0);
+
+  if (returnLines.length === 0) {
+    el.returnError.textContent = "Ange antal för minst en rad.";
+    el.returnError.classList.remove("hidden");
+    return;
+  }
+
+  try {
+    await api.post(`/orders/${orderId}/returns`, { reason: el.returnReason.value || null, lines: returnLines });
+    el.returnDialog.close();
+    location.reload();
+  } catch (err) {
+    el.returnError.textContent = err.message;
+    el.returnError.classList.remove("hidden");
   }
 });
 
@@ -719,6 +820,12 @@ async function init() {
             `<li>${new Date(p.picked_up_at).toLocaleString("sv-SE")} – hämtat av ${escapeHtml(p.picked_up_by_contact_name ?? p.picked_up_by_name ?? "okänd")}</li>`
         )
         .join("");
+    }
+
+    if (RETURNABLE_ORDER_STATUSES.includes(order.status) || order.has_returns) {
+      el.returnsSection.classList.remove("hidden");
+      el.newReturnBtn.classList.toggle("hidden", !RETURNABLE_ORDER_STATUSES.includes(order.status));
+      await loadReturns();
     }
   }
 

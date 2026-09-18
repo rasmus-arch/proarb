@@ -1,5 +1,7 @@
 import { Router } from "express";
 import * as orders from "./service.js";
+import { saveOrderAsTemplate } from "./templates.js";
+import { getReturnableLines, listOrderReturns, createOrderReturn } from "./returns.js";
 
 // Fas 3: direktskapande av order, statusflöde och utlämning mot behörig
 // kontakt. "Offert -> order" ligger i quotes/routes.js (convert-to-order).
@@ -55,6 +57,18 @@ router.post("/:id/duplicate", async (req, res, next) => {
   }
 });
 
+router.post("/:id/save-as-template", async (req, res, next) => {
+  try {
+    if (!req.body?.name) return res.status(400).json({ error: "name krävs" });
+    const template = await saveOrderAsTemplate(Number(req.params.id), req.body.name, req.user.id);
+    res.status(201).json(template);
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NAME_REQUIRED") return res.status(400).json({ error: "name krävs" });
+    next(err);
+  }
+});
+
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });
@@ -86,6 +100,47 @@ router.post("/:id/pickup", async (req, res, next) => {
     }
     if (err.message === "PICKUP_IDENTITY_REQUIRED") {
       return res.status(400).json({ error: "Välj en hämtberättigad kontakt eller ange namn" });
+    }
+    next(err);
+  }
+});
+
+router.get("/:id/returnable-lines", async (req, res, next) => {
+  try {
+    res.json({ rows: await getReturnableLines(Number(req.params.id)) });
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
+router.get("/:id/returns", async (req, res, next) => {
+  try {
+    res.json({ rows: await listOrderReturns(Number(req.params.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/returns", async (req, res, next) => {
+  try {
+    if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
+      return res.status(400).json({ error: "lines krävs" });
+    }
+    const order = await createOrderReturn(
+      Number(req.params.id),
+      { reason: req.body.reason, lines: req.body.lines },
+      req.user.id
+    );
+    res.status(201).json(order);
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "ORDER_NOT_RETURNABLE") {
+      return res.status(409).json({ error: "Ordern måste vara utlämnad eller fakturerad för att kunna returneras" });
+    }
+    if (err.message === "INVALID_RETURN") return res.status(400).json({ error: "Ogiltig retur" });
+    if (err.message === "QUANTITY_EXCEEDS_DELIVERED") {
+      return res.status(400).json({ error: "Antalet överstiger vad som levererats/redan returnerats" });
     }
     next(err);
   }

@@ -13,6 +13,7 @@ import portalRequestsRouter from "./modules/customers/portal-requests.routes.js"
 import quotesRouter from "./modules/quotes/routes.js";
 import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
 import ordersRouter from "./modules/orders/routes.js";
+import orderTemplatesRouter from "./modules/orders/templates.routes.js";
 import productsRouter from "./modules/products/routes.js";
 import categoriesRouter from "./modules/catalog/categories.routes.js";
 import brandsRouter from "./modules/catalog/brands.routes.js";
@@ -56,6 +57,7 @@ app.use("/api/customers", customersRouter);
 app.use("/api/portal-requests", portalRequestsRouter);
 app.use("/api/quotes", quotesRouter);
 app.use("/api/orders", ordersRouter);
+app.use("/api/order-templates", orderTemplatesRouter);
 app.use("/api/products", productsRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/brands", brandsRouter);

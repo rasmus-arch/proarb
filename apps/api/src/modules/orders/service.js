@@ -140,11 +140,16 @@ export async function getOrder(id) {
      WHERE op.order_id = ? ORDER BY op.picked_up_at ASC`,
     [id]
   );
+  const [[{ has_returns }]] = await pool.query(
+    `SELECT COUNT(*) AS has_returns FROM order_returns WHERE order_id = ?`,
+    [id]
+  );
 
   return {
     ...order,
     lines,
     pickups,
+    has_returns: has_returns > 0,
     totals: summarizeTotals(lines),
     can_pickup: !PICKUP_BLOCKED_STATUSES.includes(order.status),
     allowed_next_statuses: ALLOWED_TRANSITIONS[order.status] ?? [],

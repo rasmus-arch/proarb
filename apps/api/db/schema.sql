@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- efter en fullständig inventering. Slå på i Inställningar när ni är
   -- klara med den.
   portal_show_stock     TINYINT(1) NOT NULL DEFAULT 0,
+  inactive_customer_months INT NOT NULL DEFAULT 6,
   smtp_host             VARCHAR(255) NULL,
   smtp_port             INT NULL,
   smtp_username         VARCHAR(255) NULL,
@@ -645,7 +646,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   id             INT PRIMARY KEY AUTO_INCREMENT,
   order_id       INT NULL,
   sale_id        INT NULL,
-  type           ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE',
+  type           ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE', 'CREDIT_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE',
   invoice_number VARCHAR(50) NULL,
   external_ref   VARCHAR(100) NULL,
   status         VARCHAR(30) NOT NULL DEFAULT 'PENDING',
@@ -658,6 +659,69 @@ CREATE TABLE IF NOT EXISTS invoices (
   CONSTRAINT fk_invoices_sale FOREIGN KEY (sale_id) REFERENCES sales(id),
   INDEX idx_invoices_order (order_id),
   INDEX idx_invoices_sale (sale_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Retur (hel eller delvis) av en redan utlämnad/fakturerad order. Fryser
+-- pris/rabatt från order_lines vid returtillfället (samma princip som
+-- portal_order_request_lines) — en senare prisändring på produkten ska
+-- aldrig ändra vad som redan krediterats. Varje retur skapar en
+-- CREDIT_INVOICE-rad i invoices (se orders/returns.js).
+CREATE TABLE IF NOT EXISTS order_returns (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  order_id   INT NOT NULL,
+  reason     VARCHAR(500) NULL,
+  created_by INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_or_order FOREIGN KEY (order_id) REFERENCES orders(id),
+  CONSTRAINT fk_or_user FOREIGN KEY (created_by) REFERENCES users(id),
+  INDEX idx_or_order (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS order_return_lines (
+  id               INT PRIMARY KEY AUTO_INCREMENT,
+  return_id        INT NOT NULL,
+  order_line_id    INT NOT NULL,
+  quantity         DECIMAL(10,2) NOT NULL,
+  unit_price       DECIMAL(10,2) NOT NULL,
+  discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 25,
+  print_price            DECIMAL(10,2) NULL,
+  print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  CONSTRAINT fk_orl_return FOREIGN KEY (return_id) REFERENCES order_returns(id),
+  CONSTRAINT fk_orl_line FOREIGN KEY (order_line_id) REFERENCES order_lines(id),
+  INDEX idx_orl_return (return_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sparad radmall per kund ("Program") — inte en kopia av en specifik
+-- tidigare order utan en namngiven, återanvändbar uppsättning rader man
+-- kan skapa en ny order från när som helst (t.ex. "Vinteruniform 2026").
+CREATE TABLE IF NOT EXISTS order_templates (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id INT NOT NULL,
+  name        VARCHAR(255) NOT NULL,
+  created_by  INT NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ot_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  CONSTRAINT fk_ot_user FOREIGN KEY (created_by) REFERENCES users(id),
+  INDEX idx_ot_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS order_template_lines (
+  id                      INT PRIMARY KEY AUTO_INCREMENT,
+  template_id             INT NOT NULL,
+  product_variant_id      INT NULL,
+  description             VARCHAR(255) NULL,
+  quantity                DECIMAL(10,2) NOT NULL,
+  unit_price              DECIMAL(10,2) NOT NULL,
+  discount_percent        DECIMAL(5,2) NOT NULL DEFAULT 0,
+  tax_rate_percent        DECIMAL(5,2) NULL,
+  print_description       VARCHAR(255) NULL,
+  print_price             DECIMAL(10,2) NULL,
+  print_discount_percent  DECIMAL(5,2) NOT NULL DEFAULT 0,
+  sort_order              INT NOT NULL DEFAULT 0,
+  CONSTRAINT fk_otl_template FOREIGN KEY (template_id) REFERENCES order_templates(id),
+  CONSTRAINT fk_otl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
+  INDEX idx_otl_template (template_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Fas 9: kunder som köpt systemet kan rapportera buggar/problem direkt i

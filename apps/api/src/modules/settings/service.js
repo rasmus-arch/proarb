@@ -27,6 +27,7 @@ export async function updateSettings(data) {
     reminder_enabled: data.reminderEnabled === undefined ? undefined : data.reminderEnabled ? 1 : 0,
     reminder_days_after: data.reminderDaysAfter,
     portal_show_stock: data.portalShowStock === undefined ? undefined : data.portalShowStock ? 1 : 0,
+    inactive_customer_months: data.inactiveCustomerMonths,
     smtp_host: data.smtpHost,
     smtp_port: data.smtpPort,
     smtp_username: data.smtpUsername,

@@ -14,6 +14,8 @@ const section = document.getElementById("reminders-section");
 const list = document.getElementById("reminders-list");
 const requestsSection = document.getElementById("portal-requests-section");
 const requestsList = document.getElementById("portal-requests-list");
+const inactiveSection = document.getElementById("inactive-customers-section");
+const inactiveList = document.getElementById("inactive-customers-list");
 
 async function loadReminders() {
   const { rows } = await api.get("/quotes/reminders");
@@ -76,5 +78,22 @@ requestsList.addEventListener("click", async (event) => {
   }
 });
 
+async function loadInactiveCustomers() {
+  const settings = await api.get("/settings");
+  const months = settings.inactive_customer_months ?? 6;
+  const { rows } = await api.get(`/customers/inactive?months=${months}`);
+  inactiveSection.classList.toggle("hidden", rows.length === 0);
+  inactiveList.innerHTML = rows
+    .map(
+      (c) => `
+      <li class="flex items-center justify-between py-2 text-sm">
+        <a href="/kund-editor.html?id=${c.id}" class="font-medium text-blue-700 underline">${escapeHtml(c.name)}</a>
+        <span class="text-xs text-slate-500">Senaste beställning ${new Date(c.last_order_at).toLocaleDateString("sv-SE")}</span>
+      </li>`
+    )
+    .join("");
+}
+
 loadReminders();
 loadPortalRequests();
+loadInactiveCustomers();

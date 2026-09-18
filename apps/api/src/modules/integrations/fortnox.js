@@ -44,6 +44,18 @@ export async function createCashInvoice(/* { settings, amount, reference } */ { 
   throw new Error("Fortnox cash invoice creation not implemented yet");
 }
 
+// Fortnox "kreditfaktura" — credits back a previously sent customer
+// invoice when an order is returned (whole or partial). Called from
+// orders/returns.js.
+// TODO (Fas 7, after test environment exists): POST to Fortnox's
+// /3/invoices endpoint with Credit: true (or /3/invoices/{DocumentNumber}/
+// credit if crediting a specific existing invoice), then return
+// { ok: true, invoiceNumber, externalRef }.
+export async function createCreditInvoice(/* { settings, customerId, amount, orderId } */ { settings } = {}) {
+  if (!isFortnoxConfigured(settings)) return notConfigured();
+  throw new Error("Fortnox credit invoice creation not implemented yet");
+}
+
 // Fortnox "send invoice" action — emails an already-created invoice (see
 // createCustomerInvoice above) to the customer from Fortnox. Called when
 // an order is marked "Fakturerad".

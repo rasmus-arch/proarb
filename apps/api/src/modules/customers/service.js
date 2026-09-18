@@ -30,6 +30,52 @@ export async function listCustomers({ search = "", page = 1, pageSize = 25 }) {
   return { rows, total, page, pageSize };
 }
 
+// Quick "customer 360" context for staff opening the card — cheap to
+// compute (aggregates over this one customer's own rows) so it's always
+// included rather than a separate on-demand call.
+async function getCustomerStats(id) {
+  const [[totals]] = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' THEN
+         ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
+         + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+       ELSE 0 END), 0) AS total_purchased_all_time,
+       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' AND YEAR(o.created_at) = YEAR(CURDATE()) THEN
+         ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
+         + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+       ELSE 0 END), 0) AS total_purchased_this_year,
+       MAX(CASE WHEN o.status <> 'CANCELLED' THEN o.created_at ELSE NULL END) AS last_order_at
+     FROM orders o
+     LEFT JOIN order_lines ol ON ol.order_id = o.id
+     WHERE o.customer_id = ?`,
+    [id]
+  );
+
+  const [[{ pending_quotes }]] = await pool.query(
+    `SELECT COUNT(*) AS pending_quotes FROM quotes WHERE customer_id = ? AND status IN ('DRAFT', 'SENT', 'VIEWED')`,
+    [id]
+  );
+
+  return { ...totals, pending_quotes };
+}
+
+// Customers who HAVE ordered before but have gone quiet — a cold-lead
+// list to prompt a check-in call, not "customers we've never sold to"
+// (a brand-new lead with zero orders isn't a churn risk).
+export async function listInactiveCustomers(months) {
+  const [rows] = await pool.query(
+    `SELECT c.id, c.name, MAX(o.created_at) AS last_order_at
+     FROM customers c
+     JOIN orders o ON o.customer_id = c.id AND o.status <> 'CANCELLED'
+     WHERE c.active = 1
+     GROUP BY c.id
+     HAVING last_order_at < DATE_SUB(NOW(), INTERVAL ? MONTH)
+     ORDER BY last_order_at ASC`,
+    [months]
+  );
+  return rows;
+}
+
 export async function getCustomer(id) {
   const [[customer]] = await pool.query(`SELECT * FROM customers WHERE id = ?`, [id]);
   if (!customer) return null;
@@ -43,8 +89,9 @@ export async function getCustomer(id) {
      FROM customer_logos WHERE customer_id = ? ORDER BY created_at DESC`,
     [id]
   );
+  const stats = await getCustomerStats(id);
 
-  return { ...customer, contacts, logos };
+  return { ...customer, contacts, logos, stats };
 }
 
 export async function createCustomer(data) {
