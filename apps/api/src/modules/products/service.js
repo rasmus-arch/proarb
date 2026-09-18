@@ -36,7 +36,7 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
 
   const [rows] = await pool.query(
     `SELECT p.id, p.article_number, p.name, p.base_price, p.active,
-            v.id AS variant_id, v.sku, v.barcode, v.color, v.size
+            v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override
      FROM products p
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE p.id IN (?)

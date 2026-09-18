@@ -64,7 +64,14 @@ function groupByProduct(rows) {
       map.set(r.id, { id: r.id, article_number: r.article_number, name: r.name, base_price: r.base_price, variants: [] });
     }
     if (r.variant_id) {
-      map.get(r.id).variants.push({ variant_id: r.variant_id, color: r.color, size: r.size, sku: r.sku, barcode: r.barcode });
+      map.get(r.id).variants.push({
+        variant_id: r.variant_id,
+        color: r.color,
+        size: r.size,
+        sku: r.sku,
+        barcode: r.barcode,
+        price: r.price_override ?? r.base_price,
+      });
     }
   }
   return [...map.values()];
@@ -77,6 +84,13 @@ function renderRows(rows) {
     .map((p) => {
       const single = p.variants.length <= 1;
       const v = p.variants[0] ?? {};
+      // Variants can each carry their own price_override — if every variant
+      // still resolves to the same price, show it once on the main row
+      // instead of repeating (or hiding) it; only show "–" + a per-row price
+      // in the expanded table when they actually differ.
+      const samePrice = !single && p.variants.every((variant) => Number(variant.price) === Number(p.variants[0].price));
+      const mainRowPrice = single ? v.price ?? p.base_price : samePrice ? p.variants[0].price : null;
+
       const badge = !single
         ? `<button type="button" class="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200" data-toggle="${p.id}">
              <span data-chevron>▸</span> ${p.variants.length} varianter
@@ -91,7 +105,7 @@ function renderRows(rows) {
         <td class="py-2 pr-4">${single ? escapeHtml(v.size) : "–"}</td>
         <td class="py-2 pr-4">${single ? escapeHtml(v.sku) : "–"}</td>
         <td class="py-2 pr-4">${single ? escapeHtml(v.barcode) : "–"}</td>
-        <td class="py-2 pr-4 text-right">${formatPrice(p.base_price)} kr</td>
+        <td class="py-2 pr-4 text-right">${mainRowPrice === null ? "–" : `${formatPrice(mainRowPrice)} kr`}</td>
         <td class="py-2 pr-4 text-right whitespace-nowrap">
           <button type="button" class="text-blue-700 underline" data-edit="${p.id}">Redigera</button>
           <button type="button" class="ml-2 text-red-600 underline" data-delete="${p.id}">Ta bort</button>
@@ -111,6 +125,7 @@ function renderRows(rows) {
                       <td class="py-1 pr-4">${escapeHtml([variant.color, variant.size].filter(Boolean).join(" / ") || "–")}</td>
                       <td class="py-1 pr-4">${escapeHtml(variant.sku)}</td>
                       <td class="py-1 pr-4">${escapeHtml(variant.barcode)}</td>
+                      ${samePrice ? "" : `<td class="py-1 pr-4 text-right">${formatPrice(variant.price)} kr</td>`}
                     </tr>`
                     )
                     .join("")}

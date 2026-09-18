@@ -91,6 +91,14 @@ export async function renderPortalPage(req, res) {
         </div>`;
       }
 
+      // Every variant of a product shares the same discount rule (it's a
+      // product/supplier-level rule, never per-variant) — so if the resolved
+      // price also happens to match across all variants, showing it once on
+      // the summary row instead of repeating it on every line is both
+      // correct and less noisy. Only the per-variant table drops the price
+      // column in that case; nothing about the discount itself changes.
+      const samePrice = p.variants.every((v) => Number(v.price) === Number(p.variants[0].price));
+
       const variantTable = `<table style="width:100%;border-collapse:collapse;margin:0 0 10px;font-size:13px;">
           <tbody>
             ${p.variants
@@ -99,7 +107,7 @@ export async function renderPortalPage(req, res) {
               <tr>
                 <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
-                <td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>
+                ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>`}
               </tr>`
               )
               .join("")}
@@ -107,10 +115,14 @@ export async function renderPortalPage(req, res) {
         </table>`;
 
       return `<details style="border-bottom:1px solid #e2e8f0;padding:10px 0;">
-          <summary style="cursor:pointer;list-style:none;">
-            <span style="font-weight:600;">${escapeHtml(p.name)}</span>
-            <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
-            <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
+          <summary style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;">
+            <span>
+              <span class="chevron" style="display:inline-block;margin-right:8px;color:#94a3b8;transition:transform 0.15s;">▸</span>
+              <span style="font-weight:600;">${escapeHtml(p.name)}</span>
+              <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
+              <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
+            </span>
+            ${samePrice ? priceHtml(p.variants[0].price, p.discount_percent) : ""}
           </summary>
           <div style="margin-top:8px;">${variantTable}</div>
         </details>`;
@@ -128,8 +140,7 @@ export async function renderPortalPage(req, res) {
     .card { max-width: 720px; margin: 0 auto 16px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:24px; }
     .empty { color:#64748b; font-size:14px; margin-top:12px; }
     summary::-webkit-details-marker { display: none; }
-    summary::before { content: "▸"; display: inline-block; margin-right: 8px; color: #94a3b8; transition: transform 0.15s; }
-    details[open] summary::before { transform: rotate(90deg); }
+    details[open] .chevron { transform: rotate(90deg); }
   </style>
 </head>
 <body>
