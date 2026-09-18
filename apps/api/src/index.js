@@ -14,6 +14,7 @@ import quotesRouter from "./modules/quotes/routes.js";
 import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
 import ordersRouter from "./modules/orders/routes.js";
 import orderTemplatesRouter from "./modules/orders/templates.routes.js";
+import { handleQrScan } from "./modules/orders/qr-public.js";
 import productsRouter from "./modules/products/routes.js";
 import categoriesRouter from "./modules/catalog/categories.routes.js";
 import brandsRouter from "./modules/catalog/brands.routes.js";
@@ -75,6 +76,10 @@ app.get("/q/:token/pdf", renderPublicQuotePdf);
 // Kundportal (Fas 7): no-login, read-only link listing a customer's own
 // offerter/ordrar (see PLAN.md §7).
 app.get("/portal/:token", renderPortalPage);
+
+// QR-koden på ordersedelns PDF (Fas: ordersedel/plocklista). No-login,
+// scoped to exactly one action (NEW -> READY_FOR_PICKUP) — see qr-public.js.
+app.get("/qr/:token", handleQrScan);
 
 // Uploaded logo/print-artwork files (customer logos, seller logo).
 app.use("/uploads", express.static(uploadsRoot));

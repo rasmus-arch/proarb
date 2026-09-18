@@ -2,6 +2,10 @@ import { Router } from "express";
 import * as orders from "./service.js";
 import { saveOrderAsTemplate } from "./templates.js";
 import { getReturnableLines, listOrderReturns, createOrderReturn } from "./returns.js";
+import { generateOrderSlipPdf } from "./pdf.js";
+import { getSettings } from "../settings/service.js";
+import { pool } from "../../lib/db.js";
+import crypto from "node:crypto";
 
 // Fas 3: direktskapande av order, statusflöde och utlämning mot behörig
 // kontakt. "Offert -> order" ligger i quotes/routes.js (convert-to-order).
@@ -42,6 +46,29 @@ router.get("/:id", async (req, res, next) => {
     const order = await orders.getOrder(Number(req.params.id));
     if (!order) return res.status(404).json({ error: "Not found" });
     res.json(order);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/:id/pdf", async (req, res, next) => {
+  try {
+    const order = await orders.getOrder(Number(req.params.id));
+    if (!order) return res.status(404).json({ error: "Not found" });
+
+    // Orders created before pickup_qr_token existed don't have one yet —
+    // backfill lazily so every order can always print a working QR.
+    if (!order.pickup_qr_token) {
+      order.pickup_qr_token = crypto.randomBytes(24).toString("hex");
+      await pool.query(`UPDATE orders SET pickup_qr_token = ? WHERE id = ?`, [order.pickup_qr_token, order.id]);
+    }
+
+    const qrUrl = `${req.protocol}://${req.get("host")}/qr/${order.pickup_qr_token}`;
+    const settings = await getSettings();
+    const pdf = await generateOrderSlipPdf(order, { qrUrl, settings });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${order.order_number}.pdf"`);
+    res.send(pdf);
   } catch (err) {
     next(err);
   }

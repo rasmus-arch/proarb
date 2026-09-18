@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- klara med den.
   portal_show_stock     TINYINT(1) NOT NULL DEFAULT 0,
   inactive_customer_months INT NOT NULL DEFAULT 6,
+  -- Öppnar ordersedelns PDF och triggar webbläsarens utskriftsdialog
+  -- automatiskt när en ny order sparas. Kräver ändå att någon klickar
+  -- "Skriv ut" i dialogen om inte den datorns webbläsare är konfigurerad
+  -- för tyst utskrift (t.ex. Chrome --kiosk-printing) — appen kan inte
+  -- tvinga fram helt knapptryckningsfri utskrift på egen hand.
+  auto_print_order_slip TINYINT(1) NOT NULL DEFAULT 0,
   smtp_host             VARCHAR(255) NULL,
   smtp_port             INT NULL,
   smtp_username         VARCHAR(255) NULL,
@@ -401,6 +407,12 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_method      ENUM('PICKUP','SHIPPING') NOT NULL DEFAULT 'PICKUP',
   created_by           INT NOT NULL,
   notes                TEXT NULL,
+  -- QR-koden på ordersedelns PDF (se orders/pdf.js). Unguessable token,
+  -- samma mönster som customers.portal_token — scanning den (ingen
+  -- inloggning) kan bara flytta ordern NEW -> READY_FOR_PICKUP, aldrig
+  -- något annat. Slutar fungera (redirect till proarb.se) så fort ordern
+  -- lämnat NEW, oavsett om det skedde via scan eller manuellt i appen.
+  pickup_qr_token      VARCHAR(64) NULL UNIQUE,
   created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id),

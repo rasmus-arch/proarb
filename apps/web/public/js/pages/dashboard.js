@@ -79,7 +79,7 @@ requestsList.addEventListener("click", async (event) => {
 });
 
 async function loadInactiveCustomers() {
-  const settings = await api.get("/settings");
+  const settings = await api.get("/settings/branding");
   const months = settings.inactive_customer_months ?? 6;
   const { rows } = await api.get(`/customers/inactive?months=${months}`);
   inactiveSection.classList.toggle("hidden", rows.length === 0);

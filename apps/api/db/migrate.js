@@ -104,6 +104,8 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN portal_show_stock TINYINT(1) NOT NULL DEFAULT 0",
     "ALTER TABLE app_settings ADD COLUMN inactive_customer_months INT NOT NULL DEFAULT 6",
     "ALTER TABLE invoices MODIFY type ENUM('CUSTOMER_INVOICE', 'CASH_INVOICE', 'CREDIT_INVOICE') NOT NULL DEFAULT 'CUSTOMER_INVOICE'",
+    "ALTER TABLE app_settings ADD COLUMN auto_print_order_slip TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN pickup_qr_token VARCHAR(64) NULL UNIQUE",
   ];
   for (const statement of alters) {
     try {

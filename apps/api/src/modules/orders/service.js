@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
@@ -8,6 +9,14 @@ import { getSettings } from "../settings/service.js";
 
 function nextOrderNumber() {
   return `ORD-${Math.floor(Date.now() / 1000)}`;
+}
+
+// Unguessable token for the QR code on the ordersedel PDF — same pattern
+// as customers.portal_token. Generated for every new order so the PDF can
+// always print a working QR (updateOrderStatus/getOrder don't need to know
+// about it at all; it's only ever read/consumed via qr-public.js).
+function generateQrToken() {
+  return crypto.randomBytes(24).toString("hex");
 }
 
 // unit_price * quantity * (1 - discount%), plus the same for tryck (if
@@ -194,8 +203,8 @@ export async function createOrder(data, userId) {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         nextOrderNumber(),
         data.customerId,
@@ -203,6 +212,7 @@ export async function createOrder(data, userId) {
         data.deliveryMethod ?? "PICKUP",
         data.notes ?? null,
         userId,
+        generateQrToken(),
       ]
     );
     const orderId = result.insertId;
@@ -230,9 +240,17 @@ export async function duplicateOrder(id, userId) {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nextOrderNumber(), order.customer_id, order.reference_contact_id, order.delivery_method, order.notes, userId]
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nextOrderNumber(),
+        order.customer_id,
+        order.reference_contact_id,
+        order.delivery_method,
+        order.notes,
+        userId,
+        generateQrToken(),
+      ]
     );
     const orderId = result.insertId;
     await insertOrderLines(connection, orderId, order.lines);
@@ -258,9 +276,9 @@ export async function convertQuoteToOrder(quoteId, userId) {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, quote_id, created_by)
-       VALUES (?, ?, ?, ?, ?)`,
-      [nextOrderNumber(), quote.customer_id, quote.reference_contact_id, quote.id, userId]
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, quote_id, created_by, pickup_qr_token)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [nextOrderNumber(), quote.customer_id, quote.reference_contact_id, quote.id, userId, generateQrToken()]
     );
     const orderId = result.insertId;
     await insertOrderLines(connection, orderId, quote.lines);

@@ -92,6 +92,23 @@ function money(value) {
   return `${Number(value).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
 }
 
+// Opens the ordersedel PDF in its own tab and triggers that tab's print
+// dialog once it's loaded — a new tab (not a hidden iframe) so it isn't
+// killed by this page's own navigation right afterward. Popup-blocked or
+// blocked by a slow load just leaves the PDF tab open for a manual print.
+function printOrderSlip(orderId) {
+  const win = window.open(`/api/orders/${orderId}/pdf`, "_blank");
+  if (!win) return;
+  win.addEventListener("load", () => {
+    try {
+      win.print();
+    } catch {
+      // Printing straight from the PDF viewer isn't always allowed —
+      // the tab stays open either way so staff can print manually.
+    }
+  });
+}
+
 function lineTotal(line) {
   const productTotal = Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
   const printTotal = line.printPrice
@@ -602,6 +619,12 @@ el.saveBtn.addEventListener("click", async () => {
 
   try {
     const created = await api.post("/orders", payload);
+    try {
+      const { auto_print_order_slip } = await api.get("/settings/branding");
+      if (auto_print_order_slip) printOrderSlip(created.id);
+    } catch {
+      // Best-effort only — never block getting to the new order over this.
+    }
     location.href = `/order-editor.html?id=${created.id}`;
   } catch (err) {
     el.formError.textContent = err.message;
@@ -638,7 +661,8 @@ function renderActionButtons(order) {
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
       .join("") +
     `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>` +
-    `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>`;
+    `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>` +
+    `<button type="button" id="print-slip-btn" class="btn-secondary">Skriv ut ordersedel</button>`;
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -655,6 +679,8 @@ function renderActionButtons(order) {
       alert(err.message);
     }
   });
+
+  document.getElementById("print-slip-btn").addEventListener("click", () => printOrderSlip(order.id));
 
   document.getElementById("save-template-btn").addEventListener("click", async () => {
     const name = prompt('Namn på mallen (t.ex. "Vinteruniform 2026"):');

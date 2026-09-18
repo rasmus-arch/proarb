@@ -7,9 +7,13 @@ export async function getSettings() {
 
 // Small, non-sensitive subset of getSettings() — shown in the nav header
 // (nav.js) to every logged-in role, unlike the full settings page which is
-// ADMIN-only.
+// ADMIN-only. Also carries the couple of behavior flags every role's own
+// pages need to read (inaktivitetslistan, auto-utskrift) — none of them
+// are sensitive, unlike SMTP/Fortnox credentials in getSettings().
 export async function getBranding() {
-  const [[branding]] = await pool.query(`SELECT seller_name, seller_logo_path FROM app_settings WHERE id = 1`);
+  const [[branding]] = await pool.query(
+    `SELECT seller_name, seller_logo_path, inactive_customer_months, auto_print_order_slip FROM app_settings WHERE id = 1`
+  );
   return branding;
 }
 
@@ -28,6 +32,7 @@ export async function updateSettings(data) {
     reminder_days_after: data.reminderDaysAfter,
     portal_show_stock: data.portalShowStock === undefined ? undefined : data.portalShowStock ? 1 : 0,
     inactive_customer_months: data.inactiveCustomerMonths,
+    auto_print_order_slip: data.autoPrintOrderSlip === undefined ? undefined : data.autoPrintOrderSlip ? 1 : 0,
     smtp_host: data.smtpHost,
     smtp_port: data.smtpPort,
     smtp_username: data.smtpUsername,
