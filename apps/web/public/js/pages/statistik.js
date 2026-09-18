@@ -10,7 +10,14 @@ const el = {
   topProductsRows: document.getElementById("top-products-rows"),
   topCategoriesRows: document.getElementById("top-categories-rows"),
   topCustomersRows: document.getElementById("top-customers-rows"),
+  pipelineCount: document.getElementById("pipeline-count"),
+  pipelineValue: document.getElementById("pipeline-value"),
+  pipelineOldest: document.getElementById("pipeline-oldest"),
+  pipelineRows: document.getElementById("pipeline-rows"),
+  pipelineEmpty: document.getElementById("pipeline-empty"),
 };
+
+const QUOTE_STATUS_LABELS = { SENT: "Skickad", VIEWED: "Visad" };
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -90,8 +97,29 @@ async function loadTopCustomers() {
       .join("") || `<tr><td colspan="3" class="py-3 text-center text-slate-500">Ingen försäljning i perioden.</td></tr>`;
 }
 
+async function loadPipeline() {
+  const pipeline = await api.get("/stats/open-quote-pipeline");
+  el.pipelineCount.textContent = String(pipeline.quote_count);
+  el.pipelineValue.textContent = money(pipeline.total_value);
+  el.pipelineOldest.textContent = pipeline.quote_count > 0 ? `${pipeline.oldest_days_open} dagar` : "–";
+
+  el.pipelineEmpty.classList.toggle("hidden", pipeline.quotes.length > 0);
+  el.pipelineRows.innerHTML = pipeline.quotes
+    .map(
+      (q) => `
+      <tr>
+        <td class="py-1.5 pr-3"><a href="/offert-editor.html?id=${q.id}" class="text-blue-700 underline">${escapeHtml(q.quote_number)}</a></td>
+        <td class="py-1.5 pr-3 text-slate-900">${escapeHtml(q.customer_name)}</td>
+        <td class="py-1.5 pr-3 text-slate-600">${QUOTE_STATUS_LABELS[q.status] ?? q.status}</td>
+        <td class="py-1.5 pr-3 text-right">${money(q.total_value)}</td>
+        <td class="py-1.5 text-right text-slate-500">${q.days_open}</td>
+      </tr>`
+    )
+    .join("");
+}
+
 async function loadAll() {
-  await Promise.all([loadSummary(), loadTopProducts(), loadTopCategories(), loadTopCustomers()]);
+  await Promise.all([loadSummary(), loadTopProducts(), loadTopCategories(), loadTopCustomers(), loadPipeline()]);
 }
 
 el.from.addEventListener("change", loadAll);

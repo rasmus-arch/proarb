@@ -36,6 +36,14 @@ const el = {
   cancelFritextBtn: document.getElementById("cancel-fritext-btn"),
   addProductBtn: document.getElementById("add-product-btn"),
   addSizerunBtnOpen: document.getElementById("add-sizerun-btn-open"),
+  addKitBtnOpen: document.getElementById("add-kit-btn-open"),
+  kitDialog: document.getElementById("kit-dialog"),
+  kitSelect: document.getElementById("kit-select"),
+  kitPreviewWrap: document.getElementById("kit-preview-wrap"),
+  kitPreviewRows: document.getElementById("kit-preview-rows"),
+  kitError: document.getElementById("kit-error"),
+  cancelKitBtn: document.getElementById("cancel-kit-btn"),
+  addKitBtn: document.getElementById("add-kit-btn"),
   sizerunDialog: document.getElementById("sizerun-dialog"),
   sizerunSearch: document.getElementById("sizerun-search"),
   sizerunSearchResults: document.getElementById("sizerun-search-results"),
@@ -430,6 +438,77 @@ el.addSizerunBtn.addEventListener("click", () => {
     return;
   }
   el.sizerunDialog.close();
+  renderLines();
+});
+
+// --- Produktpaket: välj ett färdigt paket, lägg till alla rader på en
+// gång istället för en sökning per produkt -------------------------------
+
+let kitCache = null;
+let selectedKit = null;
+
+function kitLineToOrderLine(l) {
+  return {
+    productVariantId: l.variant_id,
+    name: l.name,
+    colorSize: [l.color, l.size, l.sku].filter(Boolean).join(" · "),
+    quantity: Number(l.kit_quantity) || 1,
+    unitPrice: Number(l.price_override ?? l.base_price),
+    discountPercent: Number(l.suggested_discount_percent ?? 0),
+    printDescription: "",
+    printPrice: null,
+    printDiscountPercent: 0,
+    taxRatePercent: Number(l.tax_rate_percent),
+    costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
+  };
+}
+
+el.addKitBtnOpen.addEventListener("click", async () => {
+  el.kitError.classList.add("hidden");
+  el.kitPreviewWrap.classList.add("hidden");
+  el.addKitBtn.disabled = true;
+  selectedKit = null;
+  if (!kitCache) {
+    kitCache = (await api.get("/kits")).rows;
+  }
+  el.kitSelect.innerHTML =
+    `<option value="">— Välj paket —</option>` +
+    kitCache.map((k) => `<option value="${k.id}">${escapeHtml(k.name)} (${k.line_count} produkter)</option>`).join("");
+  el.kitSelect.value = "";
+  el.kitDialog.showModal();
+});
+
+el.cancelKitBtn.addEventListener("click", () => el.kitDialog.close());
+
+el.kitSelect.addEventListener("change", async () => {
+  const id = el.kitSelect.value;
+  if (!id) {
+    el.kitPreviewWrap.classList.add("hidden");
+    el.addKitBtn.disabled = true;
+    return;
+  }
+  const customerParam = state.customerId ? `?customerId=${state.customerId}` : "";
+  selectedKit = await api.get(`/kits/${id}${customerParam}`);
+  el.kitPreviewRows.innerHTML = selectedKit.lines
+    .map(
+      (l) => `
+      <tr>
+        <td class="py-1 pr-3">${escapeHtml(l.name)}<div class="text-xs text-slate-500">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</div></td>
+        <td class="py-1 pr-3 text-right">${l.kit_quantity}</td>
+        <td class="py-1 pr-3 text-right">${money(l.price_override ?? l.base_price)}</td>
+      </tr>`
+    )
+    .join("");
+  el.kitPreviewWrap.classList.remove("hidden");
+  el.addKitBtn.disabled = false;
+});
+
+el.addKitBtn.addEventListener("click", () => {
+  if (!selectedKit) return;
+  for (const l of selectedKit.lines) {
+    state.lines.push(kitLineToOrderLine(l));
+  }
+  el.kitDialog.close();
   renderLines();
 });
 

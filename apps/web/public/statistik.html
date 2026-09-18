@@ -48,6 +48,41 @@
         * Vissa produkter saknar inköpspris och räknas inte med i marginalen.
       </p>
 
+      <!-- Öppen offertpipeline: ögonblicksläge, inte kopplat till datumfiltret ovan -->
+      <section class="mt-6 card">
+        <h2 class="text-sm font-medium text-slate-900">Öppen offertpipeline</h2>
+        <p class="mt-1 text-sm text-slate-600">Offerter som väntar på kundsvar just nu — oberoende av perioden ovan.</p>
+        <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <p class="text-xs text-slate-500">Öppna offerter</p>
+            <p id="pipeline-count" class="mt-0.5 text-xl font-semibold text-slate-900">–</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-500">Totalt värde (ex moms)</p>
+            <p id="pipeline-value" class="mt-0.5 text-xl font-semibold text-slate-900">–</p>
+          </div>
+          <div>
+            <p class="text-xs text-slate-500">Äldst obesvarad</p>
+            <p id="pipeline-oldest" class="mt-0.5 text-xl font-semibold text-slate-900">–</p>
+          </div>
+        </div>
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-1.5 pr-3 font-medium">Offert</th>
+                <th class="py-1.5 pr-3 font-medium">Kund</th>
+                <th class="py-1.5 pr-3 font-medium">Status</th>
+                <th class="py-1.5 pr-3 font-medium text-right">Värde</th>
+                <th class="py-1.5 font-medium text-right">Dagar öppen</th>
+              </tr>
+            </thead>
+            <tbody id="pipeline-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="pipeline-empty" class="py-4 text-center text-sm text-slate-500">Inga öppna offerter just nu.</p>
+        </div>
+      </section>
+
       <div class="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <section class="card">
           <h2 class="text-sm font-medium text-slate-900">Bästsäljande produkter</h2>

@@ -112,6 +112,54 @@ export async function getTopCategories(rangeInput, limit = 20) {
   }));
 }
 
+// Öppen offertpipeline: värdet av allt som just nu väntar på kundsvar.
+// DRAFT räknas inte in (inte ens skickad än) — bara SENT/VIEWED, precis som
+// "canRespond" på den publika offertsidan. Till skillnad från resten av
+// statistiksidan har det här ingen datumperiod: det är ett ögonblicksläge
+// av vad som är på gång just nu, inte historik.
+const OPEN_QUOTE_STATUSES = ["SENT", "VIEWED"];
+
+export async function getOpenQuotePipeline() {
+  const [rows] = await pool.query(
+    `SELECT q.id, q.quote_number, q.status, q.sent_at, c.name AS customer_name,
+            COALESCE(SUM(ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)), 0) AS total_value
+     FROM quotes q
+     JOIN customers c ON c.id = q.customer_id
+     LEFT JOIN quote_lines ql ON ql.quote_id = q.id
+     WHERE q.status IN (?)
+     GROUP BY q.id, q.quote_number, q.status, q.sent_at, c.name
+     ORDER BY q.sent_at ASC`,
+    [OPEN_QUOTE_STATUSES]
+  );
+
+  const quotes = rows.map((r) => ({
+    id: r.id,
+    quote_number: r.quote_number,
+    status: r.status,
+    customer_name: r.customer_name,
+    total_value: round2(Number(r.total_value)),
+    days_open: r.sent_at ? Math.floor((Date.now() - new Date(r.sent_at).getTime()) / 86400000) : 0,
+  }));
+
+  const totalValue = quotes.reduce((sum, q) => sum + q.total_value, 0);
+  const byStatus = new Map();
+  for (const q of quotes) {
+    const entry = byStatus.get(q.status) ?? { status: q.status, quote_count: 0, total_value: 0 };
+    entry.quote_count += 1;
+    entry.total_value += q.total_value;
+    byStatus.set(q.status, entry);
+  }
+
+  return {
+    quote_count: quotes.length,
+    total_value: round2(totalValue),
+    average_value: quotes.length > 0 ? round2(totalValue / quotes.length) : 0,
+    oldest_days_open: quotes.length > 0 ? Math.max(...quotes.map((q) => q.days_open)) : 0,
+    by_status: [...byStatus.values()].map((e) => ({ ...e, total_value: round2(e.total_value) })),
+    quotes: quotes.sort((a, b) => b.total_value - a.total_value),
+  };
+}
+
 export async function getTopCustomers(rangeInput, limit = 20) {
   const range = defaultRange(rangeInput);
   const [rows] = await pool.query(

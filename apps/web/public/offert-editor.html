@@ -61,6 +61,7 @@
           <button type="button" id="add-fritext-btn" class="btn-secondary whitespace-nowrap">+ Fritextrad</button>
           <button type="button" id="add-product-btn" class="btn-secondary whitespace-nowrap">+ Ny produkt</button>
           <button type="button" id="add-sizerun-btn-open" class="btn-secondary whitespace-nowrap">+ Storleksserie</button>
+          <button type="button" id="add-kit-btn-open" class="btn-secondary whitespace-nowrap">+ Paket</button>
         </div>
 
         <div class="mt-3 overflow-x-auto">
@@ -191,6 +192,38 @@
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" id="cancel-sizerun-btn" class="btn-secondary">Avbryt</button>
           <button type="button" id="add-sizerun-btn" class="btn" disabled>Lägg till rader</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Produktpaket dialog: välj ett färdigt paket, förhandsgranska raderna,
+         lägg till alla på en gång -->
+    <dialog id="kit-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Produktpaket</h2>
+        <p class="mt-1 text-sm text-slate-600">Lägg till alla produkter i ett paket på en gång.</p>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Paket</span>
+          <select id="kit-select" class="input mt-1">
+            <option value="">— Välj paket —</option>
+          </select>
+        </label>
+        <div id="kit-preview-wrap" class="mt-3 hidden max-h-72 overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-1 pr-3 font-medium">Produkt</th>
+                <th class="py-1 pr-3 font-medium text-right">Antal</th>
+                <th class="py-1 pr-3 font-medium text-right">à-pris</th>
+              </tr>
+            </thead>
+            <tbody id="kit-preview-rows"></tbody>
+          </table>
+        </div>
+        <p id="kit-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-kit-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="add-kit-btn" class="btn" disabled>Lägg till paket</button>
         </div>
       </div>
     </dialog>

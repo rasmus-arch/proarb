@@ -310,6 +310,29 @@ CREATE TABLE IF NOT EXISTS product_suppliers (
   UNIQUE KEY uq_product_supplier (product_id, supplier_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Produktpaket ("Kit"): en generisk, återanvändbar kombination av
+-- produkter (t.ex. "Nyanställd-kit") — till skillnad från order_templates
+-- (som är en sparad kopia av en SPECIFIK kunds tidigare order) hör ett
+-- paket inte till någon kund alls. "Lägg till paket" i en offert/order
+-- expanderar det bara till vanliga, redigerbara rader — paketet i sig
+-- lagras aldrig som en rad.
+CREATE TABLE IF NOT EXISTS product_kits (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  name       VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS product_kit_lines (
+  id                 INT PRIMARY KEY AUTO_INCREMENT,
+  kit_id             INT NOT NULL,
+  product_variant_id INT NOT NULL,
+  quantity           DECIMAL(10,2) NOT NULL DEFAULT 1,
+  sort_order         INT NOT NULL DEFAULT 0,
+  CONSTRAINT fk_pkl_kit FOREIGN KEY (kit_id) REFERENCES product_kits(id),
+  CONSTRAINT fk_pkl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
+  INDEX idx_pkl_kit (kit_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Customer-specific pricing (negotiated prices).
 CREATE TABLE IF NOT EXISTS price_list_items (
   id                 INT PRIMARY KEY AUTO_INCREMENT,

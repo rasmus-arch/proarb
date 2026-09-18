@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Produktpaket</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="produktpaket">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-3xl px-4 py-8">
+      <div class="flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-semibold text-slate-900">Produktpaket</h1>
+          <p class="mt-1 text-sm text-slate-600">
+            Färdiga kombinationer av produkter (t.ex. "Nyanställd-kit") — går att lägga till i valfri
+            offert eller order med ett klick, oavsett kund.
+          </p>
+        </div>
+        <button type="button" id="new-kit-btn" class="btn">Nytt paket</button>
+      </div>
+
+      <section class="mt-6 card">
+        <ul id="kit-rows" class="divide-y divide-slate-100"></ul>
+        <p id="kits-empty" class="py-6 text-center text-sm text-slate-500">Inga produktpaket ännu.</p>
+      </section>
+    </main>
+
+    <!-- Skapa/redigera paket -->
+    <dialog id="kit-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 id="kit-dialog-title" class="text-lg font-medium text-slate-900">Nytt paket</h2>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Namn *</span>
+          <input id="kit-name" class="input mt-1" placeholder="t.ex. Nyanställd-kit" />
+        </label>
+
+        <div class="relative mt-3">
+          <input id="kit-line-search" type="text" placeholder="Sök produkt att lägga till…" class="input" autocomplete="off" />
+          <div id="kit-line-results" class="absolute z-10 mt-1 w-full divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden"></div>
+        </div>
+
+        <div class="mt-3 max-h-64 overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-1 pr-3 font-medium">Produkt</th>
+                <th class="py-1 pr-3 font-medium w-20">Antal</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="kit-line-rows"></tbody>
+          </table>
+          <p id="kit-lines-empty" class="py-3 text-center text-sm text-slate-500">Inga produkter tillagda ännu.</p>
+        </div>
+
+        <p id="kit-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-kit-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="save-kit-btn" class="btn">Spara paket</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/produktpaket.js"></script>
+  </body>
+</html>

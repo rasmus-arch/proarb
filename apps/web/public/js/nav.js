@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/ordrar.html", label: "Ordrar", key: "ordrar" },
   { href: "/lager.html", label: "Lager", key: "lager" },
   { href: "/produkter.html", label: "Produkter", key: "produkter" },
+  { href: "/produktpaket.html", label: "Produktpaket", key: "produktpaket" },
   { href: "/statistik.html", label: "Statistik", key: "statistik" },
   { href: "/installningar.html", label: "Inställningar", key: "installningar", roles: ["ADMIN"] },
 ];

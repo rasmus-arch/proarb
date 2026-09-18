@@ -42,4 +42,12 @@ router.get("/top-customers", async (req, res, next) => {
   }
 });
 
+router.get("/open-quote-pipeline", async (req, res, next) => {
+  try {
+    res.json(await stats.getOpenQuotePipeline());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

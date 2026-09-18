@@ -3,6 +3,7 @@ import { pool } from "../../lib/db.js";
 import { assertValidLines } from "../../lib/lines.js";
 import { getSettings } from "../settings/service.js";
 import { sendQuoteEmail } from "../integrations/email.js";
+import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
 
 function nextQuoteNumber() {
   return `OFF-${Math.floor(Date.now() / 1000)}`;
@@ -353,4 +354,125 @@ export async function respondToQuote(token, decision, meta) {
   await pool.query(`UPDATE quotes SET status = ?, responded_at = NOW() WHERE id = ?`, [status, quote.id]);
   await recordEvent(quote.id, status, meta ?? null);
   return getQuote(quote.id);
+}
+
+// "Andra kunder gillade också" — visas på den publika offertsidan. Räknar
+// fram vilka produkter som oftast dyker upp i SAMMA riktiga order som
+// produkterna redan i den här offerten (co-occurrence i order_lines — en
+// faktisk beställning är ett starkare signal än andra öppna offerter).
+// Medvetet INGEN koppling till kundens eget kurerade sortiment
+// (customer_assortment) här, till skillnad från portalbeställningen —
+// hela poängen med den här listan är att visa kunden något den inte redan
+// har valt ut, inte begränsa till det den redan ser.
+export async function getSuggestedProducts(quoteId, limit = 3) {
+  const [ownProducts] = await pool.query(
+    `SELECT DISTINCT v.product_id
+     FROM quote_lines ql
+     JOIN product_variants v ON v.id = ql.product_variant_id
+     WHERE ql.quote_id = ?`,
+    [quoteId]
+  );
+  const productIds = ownProducts.map((r) => r.product_id);
+  if (productIds.length === 0) return [];
+
+  const [[{ customer_id: customerId }]] = await pool.query(`SELECT customer_id FROM quotes WHERE id = ?`, [quoteId]);
+
+  const ownPlaceholders = productIds.map(() => "?").join(",");
+  const [suggestions] = await pool.query(
+    `SELECT p.id AS product_id, p.name, p.image_url, p.base_price, p.tax_rate_percent,
+            COUNT(*) AS score,
+            ${ASSORTMENT_DISCOUNT_SELECT}
+     FROM order_lines ol1
+     JOIN product_variants v1 ON v1.id = ol1.product_variant_id AND v1.product_id IN (${ownPlaceholders})
+     JOIN order_lines ol2 ON ol2.order_id = ol1.order_id AND ol2.id <> ol1.id
+     JOIN product_variants v2 ON v2.id = ol2.product_variant_id
+     JOIN products p ON p.id = v2.product_id AND p.active = 1 AND p.id NOT IN (${ownPlaceholders})
+     GROUP BY p.id, p.name, p.image_url, p.base_price, p.tax_rate_percent
+     ORDER BY score DESC
+     LIMIT ?`,
+    [customerId, customerId, ...productIds, ...productIds, limit]
+  );
+  if (suggestions.length === 0) return [];
+
+  const suggestedIds = suggestions.map((s) => s.product_id);
+  const idPlaceholders = suggestedIds.map(() => "?").join(",");
+  const [variants] = await pool.query(
+    `SELECT id, product_id, color, size, price_override
+     FROM product_variants WHERE product_id IN (${idPlaceholders}) AND active = 1
+     ORDER BY color ASC, size ASC`,
+    suggestedIds
+  );
+
+  return suggestions.map((s) => ({
+    product_id: s.product_id,
+    name: s.name,
+    image_url: s.image_url,
+    tax_rate_percent: s.tax_rate_percent,
+    discount_percent: Number(s.discount_percent) || 0,
+    variants: variants
+      .filter((v) => v.product_id === s.product_id)
+      .map((v) => ({
+        id: v.id,
+        color: v.color,
+        size: v.size,
+        price: round2(Number(v.price_override ?? s.base_price) * (1 - (Number(s.discount_percent) || 0) / 100)),
+      })),
+  }));
+}
+
+// Lägger till en föreslagen produkt i offerten direkt från den publika
+// sidan (ingen inloggning — samma tillitsmodell som accept/decline, se
+// public.js). Pris/rabatt räknas alltid fram server-side här, precis som
+// portalbeställningen — klienten skickar bara vilken variant och hur
+// många, aldrig ett pris. Tillåtet medan offerten fortfarande väntar på
+// svar (SENT/VIEWED); en redan accepterad/avböjd/konverterad offert är
+// stängd för ändringar, precis som för accept/decline själva.
+export async function addSuggestedLineToQuote(token, { productVariantId, quantity }) {
+  const quote = await getQuoteByToken(token);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+  if (!["SENT", "VIEWED"].includes(quote.status)) throw new Error("QUOTE_NOT_OPEN");
+
+  const qty = Number(quantity);
+  if (!(qty > 0) || !productVariantId) throw new Error("INVALID_LINE");
+
+  const [[priced]] = await pool.query(
+    `SELECT v.id AS variant_id, v.color, v.size, v.price_override,
+            p.name, p.base_price, p.tax_rate_percent,
+            ${ASSORTMENT_DISCOUNT_SELECT}
+     FROM product_variants v
+     JOIN products p ON p.id = v.product_id
+     WHERE v.id = ? AND v.active = 1 AND p.active = 1`,
+    [quote.customer_id, quote.customer_id, productVariantId]
+  );
+  if (!priced) throw new Error("INVALID_LINE");
+
+  // Samma variant redan på offerten -> bumpa bara antalet (som vid
+  // omscanning i order-editor) istället för en duplicerad rad.
+  const existing = quote.lines.find((l) => l.product_variant_id === priced.variant_id);
+  if (existing) {
+    await pool.query(`UPDATE quote_lines SET quantity = quantity + ? WHERE id = ?`, [qty, existing.id]);
+  } else {
+    const [[{ maxSort }]] = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), -1) AS maxSort FROM quote_lines WHERE quote_id = ?`,
+      [quote.id]
+    );
+    await pool.query(
+      `INSERT INTO quote_lines (quote_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        quote.id,
+        priced.variant_id,
+        qty,
+        Number(priced.price_override ?? priced.base_price),
+        Number(priced.discount_percent) || 0,
+        Number(priced.tax_rate_percent),
+        maxSort + 1,
+      ]
+    );
+  }
+
+  const variantLabel = [priced.color, priced.size].filter(Boolean).join(" / ");
+  await recordEvent(quote.id, "LINE_ADDED_BY_CUSTOMER", `${qty} × ${priced.name}${variantLabel ? ` (${variantLabel})` : ""}`);
+
+  return getQuoteByToken(token);
 }

@@ -49,6 +49,7 @@ export async function renderPublicQuotePage(req, res) {
   const settings = await getSettings();
   const brandColor = settings?.brand_color || FALLBACK_BRAND_COLOR;
   const canRespond = ["SENT", "VIEWED"].includes(quote.status);
+  const suggestions = canRespond ? await quotes.getSuggestedProducts(quote.id) : [];
 
   const rowsHtml = quote.lines
     .map(
@@ -72,6 +73,39 @@ export async function renderPublicQuotePage(req, res) {
       </tr>`
     )
     .join("");
+
+  const suggestionsHtml =
+    suggestions.length > 0
+      ? `
+    <div style="margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;">
+      <h2 style="margin:0 0 10px;font-size:15px;">Andra kunder gillade också</h2>
+      <div style="display:grid;gap:10px;">
+        ${suggestions
+          .map(
+            (s, i) => `
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;flex-wrap:wrap;">
+            ${
+              s.image_url
+                ? `<img src="/uploads/${s.image_url}" alt="" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;" />`
+                : ""
+            }
+            <div style="flex:1;min-width:120px;font-weight:600;color:#0f172a;">${escapeHtml(s.name)}</div>
+            <select id="suggestion-variant-${i}" style="border:1px solid #cbd5e1;border-radius:6px;padding:6px 8px;font-size:13px;">
+              ${s.variants
+                .map(
+                  (v) =>
+                    `<option value="${v.id}">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "Standard")} — ${money(v.price)}</option>`
+                )
+                .join("")}
+            </select>
+            <button type="button" class="btn btn-secondary" style="border:1px solid #cbd5e1;color:#0f172a;" data-add-suggestion="${i}">Lägg till</button>
+          </div>`
+          )
+          .join("")}
+      </div>
+      <p id="suggestion-message" style="margin-top:8px;font-size:13px;"></p>
+    </div>`
+      : "";
 
   res.send(`<!doctype html>
 <html lang="sv">
@@ -113,6 +147,8 @@ export async function renderPublicQuotePage(req, res) {
       <div style="font-weight:700;font-size:16px;margin-top:4px;">Totalt: ${money(quote.totals.total_inc_vat)}</div>
     </div>
 
+    ${suggestionsHtml}
+
     ${quote.notes ? `<p style="margin-top:16px;color:#475569;white-space:pre-wrap;">${escapeHtml(quote.notes)}</p>` : ""}
 
     <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
@@ -145,6 +181,27 @@ export async function renderPublicQuotePage(req, res) {
     }
     document.getElementById('accept-btn')?.addEventListener('click', () => respond('accept'));
     document.getElementById('decline-btn')?.addEventListener('click', () => respond('decline'));
+
+    document.querySelectorAll('[data-add-suggestion]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const select = document.getElementById('suggestion-variant-' + btn.dataset.addSuggestion);
+        const msg = document.getElementById('suggestion-message');
+        btn.disabled = true;
+        const res = await fetch('/api/public/quotes/' + token + '/suggested-lines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productVariantId: Number(select.value), quantity: 1 }),
+        });
+        if (res.ok) {
+          location.reload();
+        } else {
+          const body = await res.json().catch(() => ({}));
+          msg.textContent = body.error || 'Något gick fel.';
+          msg.style.color = '#dc2626';
+          btn.disabled = false;
+        }
+      });
+    });
   </script>
 </body>
 </html>`);
@@ -176,6 +233,18 @@ router.post("/:token/accept", async (req, res, next) => {
     }
     res.json({ status: quote.status });
   } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:token/suggested-lines", async (req, res, next) => {
+  try {
+    const quote = await quotes.addSuggestedLineToQuote(req.params.token, req.body ?? {});
+    res.status(201).json(quote);
+  } catch (err) {
+    if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "QUOTE_NOT_OPEN") return res.status(409).json({ error: "Offerten kan inte längre ändras" });
+    if (err.message === "INVALID_LINE") return res.status(400).json({ error: "Ogiltig rad" });
     next(err);
   }
 });
