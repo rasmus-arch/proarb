@@ -170,11 +170,13 @@ VALUES
 -- Ordrar — olika statusar, en fullt levererad med utlämning
 -- ---------------------------------------------------------------------------
 
--- Order 1: konverterad från offert 1, fortfarande i produktion (fyller tryckkön)
+-- Order 1: konverterad från offert 1, tryckordern (raden) är fortfarande i
+-- produktion — ordern i sig har ingen egen produktionsstatus (se schema.sql),
+-- bara NEW tills den är redo för utlämning.
 INSERT IGNORE INTO orders
   (id, order_number, customer_id, reference_contact_id, quote_id, status, delivery_method, created_by)
 VALUES
-  (1, 'ORD-DEMO-1', 1, 1, 1, 'IN_PRODUCTION', 'PICKUP', 2);
+  (1, 'ORD-DEMO-1', 1, 1, 1, 'NEW', 'PICKUP', 2);
 
 INSERT IGNORE INTO order_lines
   (id, order_id, product_variant_id, quantity, unit_price, print_method_id, print_description, sort_order, print_status)
@@ -189,11 +191,14 @@ INSERT IGNORE INTO orders
 VALUES
   (2, 'ORD-DEMO-2', 1, 1, NULL, 'DELIVERED', 'PICKUP', 2, DATE_SUB(NOW(), INTERVAL 15 DAY));
 
+-- delivered_qty sätts till quantity eftersom ordern redan är DELIVERED
+-- (samma sak som orders/service.js gör vid en riktig utlämning) — annars
+-- skulle returflödet tro att inget levererats än.
 INSERT IGNORE INTO order_lines
-  (id, order_id, product_variant_id, quantity, unit_price, print_method_id, print_description, sort_order, print_status)
+  (id, order_id, product_variant_id, quantity, delivered_qty, unit_price, print_method_id, print_description, sort_order, print_status)
 VALUES
-  (3, 2, 1, 5, 89.00, 1, 'Logga bröst, vit', 0, 'READY'),
-  (4, 2, 6, 5, 320.00, 2, 'Logga rygg', 1, 'READY');
+  (3, 2, 1, 5, 5, 89.00, 1, 'Logga bröst, vit', 0, 'READY'),
+  (4, 2, 6, 5, 5, 320.00, 2, 'Logga rygg', 1, 'READY');
 
 INSERT IGNORE INTO order_pickups
   (id, order_id, picked_up_by_contact_id, picked_up_at, verified_by_user_id)
@@ -211,11 +216,11 @@ INSERT IGNORE INTO order_lines
 VALUES
   (5, 3, 6, 20, 320.00, 2, 'Logga rygg', 0, 'READY');
 
--- Order 4: direktorder utan tryck (rena arbetsbyxor), nyss bekräftad
+-- Order 4: direktorder utan tryck (rena arbetsbyxor), nyss lagd
 INSERT IGNORE INTO orders
   (id, order_number, customer_id, reference_contact_id, quote_id, status, delivery_method, created_by, created_at)
 VALUES
-  (4, 'ORD-DEMO-4', 1, 3, NULL, 'CONFIRMED', 'SHIPPING', 2, DATE_SUB(NOW(), INTERVAL 1 DAY));
+  (4, 'ORD-DEMO-4', 1, 3, NULL, 'NEW', 'SHIPPING', 2, DATE_SUB(NOW(), INTERVAL 1 DAY));
 
 INSERT IGNORE INTO order_lines
   (id, order_id, product_variant_id, quantity, unit_price, sort_order)
@@ -237,3 +242,60 @@ VALUES (1, 1, 8, 10, 79.00);
 
 INSERT IGNORE INTO payments (id, sale_id, method, amount)
 VALUES (1, 1, 'CARD', 987.50);
+
+-- ---------------------------------------------------------------------------
+-- Sortiment & stående rabatt — så "Mina sidor" inte är tom i en demo
+-- ---------------------------------------------------------------------------
+
+INSERT IGNORE INTO customer_assortment (id, customer_id, product_id)
+VALUES
+  (1, 1, 1), (2, 1, 2), (3, 1, 4),
+  (4, 2, 1), (5, 2, 3), (6, 2, 4),
+  (7, 3, 1), (8, 3, 4), (9, 3, 5);
+
+INSERT IGNORE INTO customer_discounts (id, customer_id, supplier_id, discount_percent)
+VALUES (1, 1, 1, 10.00);
+
+-- ---------------------------------------------------------------------------
+-- Produktpaket ("Kit") — expanderas till vanliga rader i offert/order
+-- ---------------------------------------------------------------------------
+
+INSERT IGNORE INTO product_kits (id, name)
+VALUES (1, 'Nyanställd-kit');
+
+INSERT IGNORE INTO product_kit_lines (id, kit_id, product_variant_id, quantity, sort_order)
+VALUES
+  (1, 1, 1, 1, 0),
+  (2, 1, 3, 1, 1),
+  (3, 1, 8, 1, 2);
+
+-- ---------------------------------------------------------------------------
+-- Beställningsförfrågan från kundportalen — obehandlad, syns på dashboarden
+-- ---------------------------------------------------------------------------
+
+INSERT IGNORE INTO portal_order_requests
+  (id, customer_id, requested_by_name, reference_contact_id, status, created_at)
+VALUES
+  (1, 2, 'Erik Lindqvist', 2, 'NEW', DATE_SUB(NOW(), INTERVAL 6 HOUR));
+
+INSERT IGNORE INTO portal_order_request_lines
+  (id, request_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent)
+VALUES
+  (1, 1, 2, 10, 89.00, 0, 25),
+  (2, 1, 8, 10, 79.00, 0, 25);
+
+-- ---------------------------------------------------------------------------
+-- Retur mot en redan levererad order (ORD-DEMO-2), med tillhörande
+-- kreditfaktura
+-- ---------------------------------------------------------------------------
+
+INSERT IGNORE INTO order_returns (id, order_id, reason, created_by, created_at)
+VALUES (1, 2, 'Fel storlek, kunden bytte till annan variant i butik.', 3, DATE_SUB(NOW(), INTERVAL 8 DAY));
+
+INSERT IGNORE INTO order_return_lines
+  (id, return_id, order_line_id, quantity, unit_price, discount_percent, tax_rate_percent, print_price, print_discount_percent)
+VALUES
+  (1, 1, 3, 1, 89.00, 0, 25, NULL, 0);
+
+INSERT IGNORE INTO invoices (id, order_id, type, amount, status, created_at)
+VALUES (1, 2, 'CREDIT_INVOICE', 111.25, 'PENDING', DATE_SUB(NOW(), INTERVAL 8 DAY));
