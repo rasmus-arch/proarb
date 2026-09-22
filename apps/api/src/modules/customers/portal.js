@@ -44,6 +44,17 @@ function money(value) {
   return `${Number(value).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
 }
 
+// Ger en ljus, transparent ton av märkesfärgen till bakgrundstoningen utan
+// att behöva känna till exakt vilken hex-färg säljaren valt.
+function hexToRgba(hex, alpha) {
+  const clean = String(hex ?? "").replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return `rgba(15, 23, 42, ${alpha})`;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // Flat rows (one per variant) -> one block per product, so a product with
 // many colors/sizes reads as one product with N variants instead of N
 // near-identical rows.
@@ -114,6 +125,13 @@ export async function renderPortalPage(req, res) {
 
   const settings = await getSettings();
   const showStock = Boolean(settings?.portal_show_stock);
+  const brandColor = settings?.brand_color || "#0f172a";
+  const sellerName = settings?.seller_name || "ProArb";
+  // Samma logga/fallback-mönster som nav.js i själva systemet, så
+  // portalen känns som samma varumärke istället för ett anonymt formulär.
+  const logoHtml = settings?.seller_logo_path
+    ? `<img src="/uploads/${settings.seller_logo_path}" alt="${escapeHtml(sellerName)}" style="height:52px;width:auto;max-width:240px;margin:0 auto;display:block;" />`
+    : `<div style="font-size:20px;font-weight:700;color:${brandColor};">${escapeHtml(sellerName)}</div>`;
 
   const { customer, products: flatProducts, orders, contacts } = result;
   const products = groupByProduct(flatProducts);
@@ -203,31 +221,37 @@ export async function renderPortalPage(req, res) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mina sidor – ${escapeHtml(customer.name)}</title>
   <style>
-    body { font-family: system-ui, sans-serif; background:#f8fafc; color:#0f172a; margin:0; padding:24px 16px; }
-    .card { max-width: 720px; margin: 0 auto 16px; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:24px; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(180deg, ${hexToRgba(brandColor, 0.08)} 0%, #f8fafc 260px);
+      color:#0f172a; margin:0; padding:24px 16px;
+    }
+    .card { max-width: 720px; margin: 0 auto 16px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:24px; box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 4px 16px rgba(15,23,42,0.04); }
     .empty { color:#64748b; font-size:14px; margin-top:12px; }
     summary::-webkit-details-marker { display: none; }
     details[open] .chevron { transform: rotate(90deg); }
     .qty-input { border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:14px; text-align:right; }
-    .qty-input:focus { outline:2px solid #0f172a; outline-offset:1px; }
-    .order-btn { background:#0f172a; color:#fff; border:none; border-radius:6px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; }
+    .qty-input:focus { outline:2px solid ${brandColor}; outline-offset:1px; }
+    .order-btn { background:${brandColor}; color:#fff; border:none; border-radius:6px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; }
     .order-btn:disabled { background:#94a3b8; cursor:default; }
     .name-input { border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; font-size:14px; width:100%; max-width:280px; box-sizing:border-box; }
     .lightbox-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.85); z-index:50; align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
     .lightbox-overlay.open { display:flex; }
     .lightbox-overlay img { max-width:100%; max-height:100%; border-radius:8px; box-shadow:0 20px 50px rgba(0,0,0,0.4); }
+    .section-heading { margin:0; font-size:15px; border-left:3px solid ${brandColor}; padding-left:10px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1 style="margin:0;font-size:20px;">Mina sidor</h1>
-    <p style="color:#64748b;margin:4px 0 0;">${escapeHtml(customer.name)}</p>
+  <div class="card" style="text-align:center;padding:32px 24px 28px;border-top:4px solid ${brandColor};">
+    ${logoHtml}
+    <p style="color:#94a3b8;margin:10px 0 0;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;font-weight:600;">Mina sidor</p>
+    <h1 style="margin:2px 0 0;font-size:22px;">${escapeHtml(customer.name)}</h1>
   </div>
 
   ${
     orderRows
       ? `<div class="card">
-          <h2 style="margin:0;font-size:15px;">Dina beställningar</h2>
+          <h2 class="section-heading">Dina beställningar</h2>
           <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
             <tbody>${orderRows}</tbody>
           </table>
@@ -236,7 +260,7 @@ export async function renderPortalPage(req, res) {
   }
 
   <div class="card">
-    <h2 style="margin:0;font-size:15px;">Sortiment</h2>
+    <h2 class="section-heading">Sortiment</h2>
     <p style="color:#64748b;font-size:13px;margin:4px 0 0;">Priser är exklusive moms. Ange antal för det du vill beställa nedan.</p>
     ${
       products.length > 0
