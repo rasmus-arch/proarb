@@ -84,6 +84,26 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
       doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text(sellerName, 40, 50);
     }
 
+    // Säljarens kontaktuppgifter under loggan/namnet — hoppas över helt om
+    // inget är ifyllt under Inställningar, istället för att lämna tomma
+    // rader i brevhuvudet.
+    const contactAddressLine = [
+      settings?.seller_address,
+      [settings?.seller_postal_code, settings?.seller_city].filter(Boolean).join(" "),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const contactDetailsLine = [settings?.seller_phone, settings?.seller_email].filter(Boolean).join(" · ");
+    if (contactAddressLine || contactDetailsLine) {
+      doc.font("Helvetica").fontSize(8).fillColor("#475569");
+      let contactY = logoBuffer ? 94 : 76;
+      if (contactAddressLine) {
+        doc.text(contactAddressLine, 40, contactY, { width: 260 });
+        contactY += 11;
+      }
+      if (contactDetailsLine) doc.text(contactDetailsLine, 40, contactY, { width: 260 });
+    }
+
     doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text("FÖLJESEDEL", 320, 40, {
       width: 215,
       align: "right",
@@ -99,7 +119,7 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
       align: "right",
     });
 
-    let y = 110;
+    let y = 128;
     doc.moveTo(40, y).lineTo(TABLE_RIGHT_EDGE, y).strokeColor("#e2e8f0").stroke();
     y += 12;
 
@@ -114,7 +134,7 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
       y += 13;
     }
 
-    let y2 = 124 + 14;
+    let y2 = 140 + 14;
     doc.font("Helvetica-Bold").fontSize(9).fillColor(brandColor).text("Hämtas ut av", 320, y2 - 14);
     doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
     doc.text(order.reference_name || "Ej angivet", 320, y2, { width: 175 });
@@ -142,7 +162,7 @@ function drawProductTable(doc, order, startY, brandColor) {
   y += 24;
 
   doc.font("Helvetica").fontSize(9).fillColor("#0f172a");
-  for (const line of order.lines) {
+  order.lines.forEach((line, i) => {
     const variantText = [line.color, line.size].filter(Boolean).join(" / ") || "–";
     const printText = line.print_description || "–";
     const rowHeight =
@@ -159,12 +179,17 @@ function drawProductTable(doc, order, startY, brandColor) {
     for (const col of CHECK_COLS) drawCheckbox(doc, col.x, y);
 
     y += rowHeight;
+    // Tunn skiljelinje mellan raderna för läsbarhet på listor med flera
+    // produkter — inte efter sista raden, som redan avslutas av tabellen.
+    if (i < order.lines.length - 1) {
+      doc.moveTo(40, y - 5).lineTo(TABLE_RIGHT_EDGE, y - 5).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+    }
     if (y > 680) {
       doc.addPage();
       y = 40;
       drawTableHeader(doc, y, brandColor);
       y += 24;
     }
-  }
+  });
   return y;
 }
