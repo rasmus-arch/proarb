@@ -16,6 +16,8 @@ const requestsSection = document.getElementById("portal-requests-section");
 const requestsList = document.getElementById("portal-requests-list");
 const inactiveSection = document.getElementById("inactive-customers-section");
 const inactiveList = document.getElementById("inactive-customers-list");
+const lowStockSection = document.getElementById("low-stock-section");
+const lowStockList = document.getElementById("low-stock-list");
 
 async function loadReminders() {
   const { rows } = await api.get("/quotes/reminders");
@@ -157,6 +159,27 @@ inactiveList.addEventListener("click", async (event) => {
   }
 });
 
+async function loadLowStock() {
+  const { rows, total } = await api.get("/inventory/stock-levels?lowStockOnly=true&pageSize=8");
+  lowStockSection.classList.toggle("hidden", rows.length === 0);
+  lowStockList.innerHTML = rows
+    .map(
+      (r) => `
+      <li class="flex items-center justify-between py-2 text-sm">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(r.product_name)}</span>
+          <span class="ml-2 text-slate-500">${escapeHtml([r.color, r.size].filter(Boolean).join(" / "))}</span>
+        </div>
+        <span class="text-xs text-amber-600">Saldo ${r.quantity_on_hand} / min ${r.reorder_point}</span>
+      </li>`
+    )
+    .join("");
+  if (total > rows.length) {
+    lowStockList.innerHTML += `<li class="py-2 text-xs text-slate-500">+ ${total - rows.length} till — se Lager → Inköpsförslag.</li>`;
+  }
+}
+
 loadReminders();
 loadPortalRequests();
 loadInactiveCustomers();
+loadLowStock();
