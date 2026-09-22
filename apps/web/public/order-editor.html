@@ -78,6 +78,7 @@
           <button type="button" id="add-product-btn" class="btn-secondary whitespace-nowrap">+ Ny produkt</button>
           <button type="button" id="add-sizerun-btn-open" class="btn-secondary whitespace-nowrap">+ Storleksserie</button>
           <button type="button" id="add-kit-btn-open" class="btn-secondary whitespace-nowrap">+ Paket</button>
+          <button type="button" id="add-employee-btn-open" class="btn-secondary whitespace-nowrap">+ Från anställd</button>
         </div>
 
         <div class="mt-3 overflow-x-auto">
@@ -290,6 +291,39 @@
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" id="cancel-kit-btn" class="btn-secondary">Avbryt</button>
           <button type="button" id="add-kit-btn" class="btn" disabled>Lägg till paket</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Från anställd dialog: välj en av kundens anställda, förhandsgranska
+         raderna utifrån sparade storlekar, lägg till alla på en gång -->
+    <dialog id="employee-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-medium text-slate-900">Från anställd</h2>
+        <p class="mt-1 text-sm text-slate-600">Lägg till rader utifrån en anställds sparade storlekar.</p>
+        <label class="mt-3 block text-sm">
+          <span class="text-slate-700">Anställd</span>
+          <select id="employee-select" class="input mt-1">
+            <option value="">— Välj anställd —</option>
+          </select>
+        </label>
+        <div id="employee-preview-wrap" class="mt-3 hidden max-h-72 overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-left text-slate-500">
+                <th class="py-1 pr-3 font-medium">Produkt</th>
+                <th class="py-1 pr-3 font-medium">Storlek</th>
+                <th class="py-1 pr-3 font-medium text-right">à-pris</th>
+              </tr>
+            </thead>
+            <tbody id="employee-preview-rows"></tbody>
+          </table>
+          <p id="employee-unmatched-note" class="mt-2 hidden text-xs text-amber-600"></p>
+        </div>
+        <p id="employee-dialog-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex justify-end gap-2">
+          <button type="button" id="cancel-employee-btn" class="btn-secondary">Avbryt</button>
+          <button type="button" id="add-employee-btn" class="btn" disabled>Lägg till rader</button>
         </div>
       </div>
     </dialog>

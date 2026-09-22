@@ -381,3 +381,162 @@ export async function addDiscount(customerId, { supplierId, productId, discountP
 export async function removeDiscount(customerId, discountId) {
   await pool.query(`DELETE FROM customer_discounts WHERE id = ? AND customer_id = ?`, [discountId, customerId]);
 }
+
+// --- Anställda & storlekar -------------------------------------------------
+// Personalförteckning per kund (skiljer sig från customer_contacts, se
+// schema.sql) med sparade storlekar per plagg, så en ny order kan fyllas i
+// utifrån "samma som förra året" istället för att fråga kunden på nytt.
+
+export async function listEmployees(customerId) {
+  const [employees] = await pool.query(
+    `SELECT * FROM customer_employees WHERE customer_id = ? AND active = 1 ORDER BY name ASC`,
+    [customerId]
+  );
+  if (employees.length === 0) return [];
+
+  const [sizes] = await pool.query(
+    `SELECT ces.id, ces.employee_id, ces.product_id, ces.size, ces.color,
+            p.name AS product_name, p.article_number
+     FROM customer_employee_sizes ces
+     JOIN products p ON p.id = ces.product_id
+     WHERE ces.employee_id IN (?)
+     ORDER BY p.name ASC`,
+    [employees.map((e) => e.id)]
+  );
+  const sizesByEmployee = new Map();
+  for (const s of sizes) {
+    if (!sizesByEmployee.has(s.employee_id)) sizesByEmployee.set(s.employee_id, []);
+    sizesByEmployee.get(s.employee_id).push(s);
+  }
+  return employees.map((e) => ({ ...e, sizes: sizesByEmployee.get(e.id) ?? [] }));
+}
+
+export async function addEmployee(customerId, data) {
+  if (!data?.name?.trim()) throw new Error("NAME_REQUIRED");
+  const [result] = await pool.query(
+    `INSERT INTO customer_employees (customer_id, name, notes) VALUES (?, ?, ?)`,
+    [customerId, data.name.trim(), data.notes ?? null]
+  );
+  return { id: result.insertId, customer_id: customerId, name: data.name.trim(), notes: data.notes ?? null, active: 1, sizes: [] };
+}
+
+export async function updateEmployee(customerId, employeeId, data) {
+  const fields = { name: data.name, notes: data.notes };
+  const entries = Object.entries(fields).filter(([, value]) => value !== undefined);
+  if (entries.length > 0) {
+    const setClause = entries.map(([column]) => `${column} = ?`).join(", ");
+    const values = entries.map(([, value]) => value);
+    await pool.query(`UPDATE customer_employees SET ${setClause} WHERE id = ? AND customer_id = ?`, [
+      ...values,
+      employeeId,
+      customerId,
+    ]);
+  }
+}
+
+export async function deactivateEmployee(customerId, employeeId) {
+  await pool.query(`UPDATE customer_employees SET active = 0 WHERE id = ? AND customer_id = ?`, [
+    employeeId,
+    customerId,
+  ]);
+}
+
+// En rad per (anställd, produkt) — sätt storleken igen på en produkt som
+// redan har en sparad storlek uppdaterar bara den istället för att skapa en
+// duplicerad rad (unique key på employee_id+product_id).
+export async function setEmployeeSize(customerId, employeeId, { productId, size, color }) {
+  const [[employee]] = await pool.query(
+    `SELECT id FROM customer_employees WHERE id = ? AND customer_id = ?`,
+    [employeeId, customerId]
+  );
+  if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
+  if (!productId) throw new Error("PRODUCT_REQUIRED");
+
+  await pool.query(
+    `INSERT INTO customer_employee_sizes (employee_id, product_id, size, color)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE size = VALUES(size), color = VALUES(color)`,
+    [employeeId, productId, size ?? null, color ?? null]
+  );
+
+  const [[row]] = await pool.query(
+    `SELECT ces.id, ces.employee_id, ces.product_id, ces.size, ces.color, p.name AS product_name, p.article_number
+     FROM customer_employee_sizes ces JOIN products p ON p.id = ces.product_id
+     WHERE ces.employee_id = ? AND ces.product_id = ?`,
+    [employeeId, productId]
+  );
+  return row;
+}
+
+export async function removeEmployeeSize(customerId, employeeId, sizeId) {
+  await pool.query(
+    `DELETE ces FROM customer_employee_sizes ces
+     JOIN customer_employees ce ON ce.id = ces.employee_id
+     WHERE ces.id = ? AND ces.employee_id = ? AND ce.customer_id = ?`,
+    [sizeId, employeeId, customerId]
+  );
+}
+
+// Matchar en anställds sparade storlekar mot en faktisk aktiv variant just
+// nu (storleken sparas som fritext, se schema.sql) — samma radform som
+// products/service.js searchVariants/kits.js getKit så frontendens
+// "variant -> radobjekt"-mappning funkar oförändrad. En sparad storlek utan
+// någon matchande aktiv variant (t.ex. utgången storlek) kommer tillbaka i
+// unmatched istället för att tystas ner, så säljaren ser att den behöver
+// läggas till för hand.
+export async function resolveEmployeeOrderLines(customerId, employeeId) {
+  const [[employee]] = await pool.query(
+    `SELECT id, name FROM customer_employees WHERE id = ? AND customer_id = ?`,
+    [employeeId, customerId]
+  );
+  if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
+
+  const [sizes] = await pool.query(
+    `SELECT ces.id AS size_id, ces.product_id, ces.size, ces.color,
+            p.name AS product_name, p.tax_rate_percent, p.cost_price, p.supplier_id, p.base_price,
+            COALESCE(
+              (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
+              (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
+              0
+            ) AS suggested_discount_percent
+     FROM customer_employee_sizes ces
+     JOIN products p ON p.id = ces.product_id
+     WHERE ces.employee_id = ?
+     ORDER BY p.name ASC`,
+    [customerId, customerId, employeeId]
+  );
+  if (sizes.length === 0) return { employee, lines: [], unmatched: [] };
+
+  const productIds = [...new Set(sizes.map((s) => s.product_id))];
+  const [variants] = await pool.query(
+    `SELECT id AS variant_id, product_id, sku, barcode, color, size, price_override
+     FROM product_variants WHERE product_id IN (?) AND active = 1`,
+    [productIds]
+  );
+
+  const lines = [];
+  const unmatched = [];
+  for (const s of sizes) {
+    const candidates = variants.filter((v) => v.product_id === s.product_id);
+    const match =
+      candidates.find((v) => (!s.size || v.size === s.size) && (!s.color || v.color === s.color)) ??
+      (s.size ? candidates.find((v) => v.size === s.size) : null);
+    if (!match) {
+      unmatched.push({ size_id: s.size_id, product_name: s.product_name, size: s.size, color: s.color });
+      continue;
+    }
+    lines.push({
+      variant_id: match.variant_id,
+      name: s.product_name,
+      color: match.color,
+      size: match.size,
+      sku: match.sku,
+      price_override: match.price_override,
+      base_price: s.base_price,
+      cost_price: s.cost_price,
+      tax_rate_percent: s.tax_rate_percent,
+      suggested_discount_percent: Number(s.suggested_discount_percent),
+    });
+  }
+  return { employee, lines, unmatched };
+}

@@ -269,6 +269,39 @@ CREATE TABLE IF NOT EXISTS customer_assortment (
   UNIQUE KEY uq_cust_assortment (customer_id, product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- En kunds anställda, för att hålla koll på vilka storlekar var och en
+-- behöver — skiljer sig från customer_contacts (referens-/hämtpersoner,
+-- ofta bara ett fåtal) genom att vara en fullständig personalförteckning
+-- kopplad till uniformsstorlekar, ofta betydligt fler personer.
+CREATE TABLE IF NOT EXISTS customer_employees (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id INT NOT NULL,
+  name        VARCHAR(255) NOT NULL,
+  notes       VARCHAR(500) NULL,
+  active      TINYINT(1) NOT NULL DEFAULT 1,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cust_employees_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  INDEX idx_cust_employees_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- En storlek (+ ev. färg) per produkt för en given anställd. Fritext på
+-- storlek/färg istället för en låst product_variant_id, så en sparad
+-- storlek överlever även om varianten senare tas bort/ändras ur
+-- sortimentet — vid orderläggning matchas den mot en aktiv variant just
+-- då (se orders/service.js resolveEmployeeSizeLines).
+CREATE TABLE IF NOT EXISTS customer_employee_sizes (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  employee_id INT NOT NULL,
+  product_id  INT NOT NULL,
+  size        VARCHAR(30) NULL,
+  color       VARCHAR(80) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cust_emp_sizes_employee FOREIGN KEY (employee_id) REFERENCES customer_employees(id),
+  CONSTRAINT fk_cust_emp_sizes_product FOREIGN KEY (product_id) REFERENCES products(id),
+  UNIQUE KEY uq_cust_emp_sizes (employee_id, product_id),
+  INDEX idx_cust_emp_sizes_employee (employee_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Self-service beställning från "Mina sidor" (kundportalen): kunden väljer
 -- antal ur sitt sortiment och skickar in. Blir INTE automatiskt en riktig
 -- order (portal_token är obevakad/oautentiserad, och orders.created_by är

@@ -221,4 +221,71 @@ router.delete("/:id/assortment/:productId", async (req, res, next) => {
   }
 });
 
+// Anställda & storlekar (uniformsprogram) — se service.js.
+router.get("/:id/employees", async (req, res, next) => {
+  try {
+    res.json({ rows: await customers.listEmployees(Number(req.params.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/employees", async (req, res, next) => {
+  try {
+    const employee = await customers.addEmployee(Number(req.params.id), req.body ?? {});
+    res.status(201).json(employee);
+  } catch (err) {
+    if (err.message === "NAME_REQUIRED") return res.status(400).json({ error: "Namn krävs" });
+    next(err);
+  }
+});
+
+router.patch("/:id/employees/:employeeId", async (req, res, next) => {
+  try {
+    await customers.updateEmployee(Number(req.params.id), Number(req.params.employeeId), req.body ?? {});
+    res.json({ rows: await customers.listEmployees(Number(req.params.id)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/:id/employees/:employeeId", async (req, res, next) => {
+  try {
+    await customers.deactivateEmployee(Number(req.params.id), Number(req.params.employeeId));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/employees/:employeeId/sizes", async (req, res, next) => {
+  try {
+    const size = await customers.setEmployeeSize(Number(req.params.id), Number(req.params.employeeId), req.body ?? {});
+    res.status(201).json(size);
+  } catch (err) {
+    if (err.message === "EMPLOYEE_NOT_FOUND") return res.status(404).json({ error: "Anställd hittades inte" });
+    if (err.message === "PRODUCT_REQUIRED") return res.status(400).json({ error: "Produkt krävs" });
+    next(err);
+  }
+});
+
+router.get("/:id/employees/:employeeId/order-lines", async (req, res, next) => {
+  try {
+    const result = await customers.resolveEmployeeOrderLines(Number(req.params.id), Number(req.params.employeeId));
+    res.json(result);
+  } catch (err) {
+    if (err.message === "EMPLOYEE_NOT_FOUND") return res.status(404).json({ error: "Anställd hittades inte" });
+    next(err);
+  }
+});
+
+router.delete("/:id/employees/:employeeId/sizes/:sizeId", async (req, res, next) => {
+  try {
+    await customers.removeEmployeeSize(Number(req.params.id), Number(req.params.employeeId), Number(req.params.sizeId));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

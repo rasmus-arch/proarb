@@ -51,6 +51,15 @@ const el = {
   kitError: document.getElementById("kit-error"),
   cancelKitBtn: document.getElementById("cancel-kit-btn"),
   addKitBtn: document.getElementById("add-kit-btn"),
+  addEmployeeBtnOpen: document.getElementById("add-employee-btn-open"),
+  employeeDialog: document.getElementById("employee-dialog"),
+  employeeSelect: document.getElementById("employee-select"),
+  employeePreviewWrap: document.getElementById("employee-preview-wrap"),
+  employeePreviewRows: document.getElementById("employee-preview-rows"),
+  employeeUnmatchedNote: document.getElementById("employee-unmatched-note"),
+  employeeDialogError: document.getElementById("employee-dialog-error"),
+  cancelEmployeeBtn: document.getElementById("cancel-employee-btn"),
+  addEmployeeBtn: document.getElementById("add-employee-btn"),
   sizerunDialog: document.getElementById("sizerun-dialog"),
   sizerunSearch: document.getElementById("sizerun-search"),
   sizerunSearchResults: document.getElementById("sizerun-search-results"),
@@ -567,6 +576,73 @@ el.addKitBtn.addEventListener("click", () => {
     state.lines.push(line);
   }
   el.kitDialog.close();
+  renderLines();
+});
+
+// --- Från anställd: lägg till rader utifrån en anställds sparade
+// storlekar (se kund-editor.js "Personal & storlekar") ---------------------
+
+let selectedEmployeeLines = null;
+
+el.addEmployeeBtnOpen.addEventListener("click", async () => {
+  el.employeeDialogError.classList.add("hidden");
+  el.employeePreviewWrap.classList.add("hidden");
+  el.addEmployeeBtn.disabled = true;
+  selectedEmployeeLines = null;
+  if (!state.customerId) {
+    el.employeeDialogError.textContent = "Välj en kund för ordern först.";
+    el.employeeDialogError.classList.remove("hidden");
+    el.employeeSelect.innerHTML = `<option value="">— Välj anställd —</option>`;
+    el.employeeDialog.showModal();
+    return;
+  }
+  const { rows } = await api.get(`/customers/${state.customerId}/employees`);
+  el.employeeSelect.innerHTML =
+    `<option value="">— Välj anställd —</option>` +
+    rows.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${e.sizes.length} storlek${e.sizes.length === 1 ? "" : "ar"})</option>`).join("");
+  el.employeeSelect.value = "";
+  el.employeeDialog.showModal();
+});
+
+el.cancelEmployeeBtn.addEventListener("click", () => el.employeeDialog.close());
+
+el.employeeSelect.addEventListener("change", async () => {
+  const id = el.employeeSelect.value;
+  el.employeeUnmatchedNote.classList.add("hidden");
+  if (!id) {
+    el.employeePreviewWrap.classList.add("hidden");
+    el.addEmployeeBtn.disabled = true;
+    return;
+  }
+  const result = await api.get(`/customers/${state.customerId}/employees/${id}/order-lines`);
+  selectedEmployeeLines = result.lines;
+  el.employeePreviewRows.innerHTML = result.lines
+    .map(
+      (l) => `
+      <tr>
+        <td class="py-1 pr-3">${escapeHtml(l.name)}</td>
+        <td class="py-1 pr-3">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</td>
+        <td class="py-1 pr-3 text-right">${money(l.price_override ?? l.base_price)}</td>
+      </tr>`
+    )
+    .join("");
+  if (result.unmatched.length > 0) {
+    el.employeeUnmatchedNote.textContent =
+      `Hittade ingen aktuell variant för: ` +
+      result.unmatched.map((u) => `${u.product_name} (${[u.size, u.color].filter(Boolean).join(" / ") || "storlek saknas"})`).join(", ") +
+      ` — lägg till för hand vid behov.`;
+    el.employeeUnmatchedNote.classList.remove("hidden");
+  }
+  el.employeePreviewWrap.classList.remove("hidden");
+  el.addEmployeeBtn.disabled = result.lines.length === 0;
+});
+
+el.addEmployeeBtn.addEventListener("click", () => {
+  if (!selectedEmployeeLines || selectedEmployeeLines.length === 0) return;
+  for (const l of selectedEmployeeLines) {
+    state.lines.push(variantToLine(l));
+  }
+  el.employeeDialog.close();
   renderLines();
 });
 

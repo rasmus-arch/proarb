@@ -58,6 +58,10 @@ const el = {
   assortmentResults: document.getElementById("assortment-results"),
   assortmentList: document.getElementById("assortment-list"),
   assortmentEmpty: document.getElementById("assortment-empty"),
+  newEmployeeForm: document.getElementById("new-employee-form"),
+  newEmployeeName: document.getElementById("new-employee-name"),
+  employeeList: document.getElementById("employee-list"),
+  employeesEmpty: document.getElementById("employees-empty"),
 };
 
 function escapeHtml(value) {
@@ -158,6 +162,9 @@ async function loadCustomer() {
 
   const { rows: assortment } = await api.get(`/customers/${customerId}/assortment`);
   renderAssortment(assortment);
+
+  const { rows: employees } = await api.get(`/customers/${customerId}/employees`);
+  renderEmployees(employees);
 
   await loadTemplates();
 }
@@ -447,6 +454,134 @@ el.assortmentList.addEventListener("click", async (event) => {
   if (productId === undefined) return;
   await api.delete(`/customers/${customerId}/assortment/${productId}`);
   loadCustomer();
+});
+
+// --- Personal & storlekar (uniformsprogram) -------------------------------
+
+function renderEmployees(employees) {
+  el.employeesEmpty.classList.toggle("hidden", employees.length > 0);
+  el.employeeList.innerHTML = employees
+    .map((e) => {
+      const sizeRows = e.sizes
+        .map(
+          (s) => `
+        <li class="flex items-center justify-between py-1">
+          <span>${escapeHtml(s.product_name)} <span class="text-slate-500">— ${escapeHtml(s.size ?? "")}${s.color ? ` / ${escapeHtml(s.color)}` : ""}</span></span>
+          <button type="button" class="text-slate-400 hover:text-red-600" data-remove-size="${s.id}" data-employee-id="${e.id}">✕</button>
+        </li>`
+        )
+        .join("");
+      return `
+      <div class="rounded-md border border-slate-200 p-3" data-employee-row="${e.id}">
+        <div class="flex items-center justify-between">
+          <span class="font-medium text-slate-900">${escapeHtml(e.name)}</span>
+          <button type="button" class="text-slate-400 hover:text-red-600" data-remove-employee="${e.id}">✕</button>
+        </div>
+        <ul class="mt-1 divide-y divide-slate-100 text-sm">${sizeRows}</ul>
+        ${e.sizes.length === 0 ? '<p class="mt-1 text-xs text-slate-500">Inga storlekar sparade ännu.</p>' : ""}
+
+        <div class="relative mt-2 flex flex-wrap items-end gap-2">
+          <div class="relative">
+            <input type="text" class="input emp-product-search w-44" placeholder="Sök produkt…" autocomplete="off" data-employee-id="${e.id}" />
+            <div class="emp-product-results absolute z-10 mt-1 w-56 divide-y divide-slate-100 rounded-md border border-slate-200 bg-white text-sm shadow-md empty:hidden" data-employee-id="${e.id}"></div>
+          </div>
+          <input type="text" class="input w-20 emp-size-input" placeholder="Storlek" data-employee-id="${e.id}" />
+          <input type="text" class="input w-24 emp-color-input" placeholder="Färg" data-employee-id="${e.id}" />
+          <button type="button" class="btn-secondary emp-add-size-btn" data-employee-id="${e.id}">Lägg till</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+el.newEmployeeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = el.newEmployeeName.value.trim();
+  if (!name) return;
+  await api.post(`/customers/${customerId}/employees`, { name });
+  el.newEmployeeName.value = "";
+  const { rows: employees } = await api.get(`/customers/${customerId}/employees`);
+  renderEmployees(employees);
+});
+
+el.employeeList.addEventListener("click", async (event) => {
+  const removeEmployeeId = event.target.dataset.removeEmployee;
+  if (removeEmployeeId !== undefined) {
+    if (!confirm("Ta bort den anställda? Sparade storlekar tas bort samtidigt.")) return;
+    await api.delete(`/customers/${customerId}/employees/${removeEmployeeId}`);
+    const { rows: employees } = await api.get(`/customers/${customerId}/employees`);
+    renderEmployees(employees);
+    return;
+  }
+
+  const removeSizeEmployeeId = event.target.dataset.employeeId;
+  const removeSizeId = event.target.dataset.removeSize;
+  if (removeSizeId !== undefined) {
+    await api.delete(`/customers/${customerId}/employees/${removeSizeEmployeeId}/sizes/${removeSizeId}`);
+    const { rows: employees } = await api.get(`/customers/${customerId}/employees`);
+    renderEmployees(employees);
+    return;
+  }
+
+  const product = event.target.closest("button[data-product-id]");
+  if (product) {
+    const employeeId = product.closest("[data-employee-id]").dataset.employeeId;
+    const searchInput = el.employeeList.querySelector(`.emp-product-search[data-employee-id="${employeeId}"]`);
+    searchInput.value = product.dataset.productName;
+    searchInput.dataset.selectedProductId = product.dataset.productId;
+    el.employeeList.querySelector(`.emp-product-results[data-employee-id="${employeeId}"]`).innerHTML = "";
+    return;
+  }
+
+  const addSizeBtn = event.target.closest(".emp-add-size-btn");
+  if (addSizeBtn) {
+    const employeeId = addSizeBtn.dataset.employeeId;
+    const searchInput = el.employeeList.querySelector(`.emp-product-search[data-employee-id="${employeeId}"]`);
+    const sizeInput = el.employeeList.querySelector(`.emp-size-input[data-employee-id="${employeeId}"]`);
+    const colorInput = el.employeeList.querySelector(`.emp-color-input[data-employee-id="${employeeId}"]`);
+    const productId = searchInput.dataset.selectedProductId;
+    if (!productId) {
+      alert("Sök och välj en produkt först.");
+      return;
+    }
+    await api.post(`/customers/${customerId}/employees/${employeeId}/sizes`, {
+      productId: Number(productId),
+      size: sizeInput.value.trim() || null,
+      color: colorInput.value.trim() || null,
+    });
+    const { rows: employees } = await api.get(`/customers/${customerId}/employees`);
+    renderEmployees(employees);
+  }
+});
+
+let empProductSearchTimer;
+el.employeeList.addEventListener("input", (event) => {
+  if (!event.target.classList.contains("emp-product-search")) return;
+  const employeeId = event.target.dataset.employeeId;
+  delete event.target.dataset.selectedProductId;
+  clearTimeout(empProductSearchTimer);
+  const q = event.target.value.trim();
+  const resultsEl = el.employeeList.querySelector(`.emp-product-results[data-employee-id="${employeeId}"]`);
+  if (!q) {
+    resultsEl.innerHTML = "";
+    return;
+  }
+  empProductSearchTimer = setTimeout(async () => {
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}&limit=20`);
+    const byProduct = new Map();
+    for (const v of rows) {
+      if (!byProduct.has(v.product_id)) byProduct.set(v.product_id, v);
+    }
+    resultsEl.innerHTML = [...byProduct.values()]
+      .map(
+        (p) => `
+      <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${p.product_id}" data-product-name="${escapeHtml(p.name)}">
+        <div class="font-medium text-slate-900">${escapeHtml(p.name)}</div>
+        <div class="text-xs text-slate-500">${escapeHtml(p.sku ?? "")}</div>
+      </button>`
+      )
+      .join("");
+  }, 200);
 });
 
 // --- Kundportal ----------------------------------------------------------

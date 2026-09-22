@@ -187,6 +187,28 @@
         <p id="assortment-empty" class="py-4 text-center text-sm text-slate-500">Inget sortiment upplagt ännu.</p>
       </section>
 
+      <!-- Personal & storlekar (uniformsprogram) -->
+      <section class="mt-4 card">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-medium text-slate-900">Personal &amp; storlekar</h2>
+        </div>
+        <p class="mt-1 text-sm text-slate-600">
+          Spara vilka storlekar varje anställd behöver i olika plagg, så nästa order kan fyllas i
+          direkt istället för att fråga kunden på nytt.
+        </p>
+
+        <form id="new-employee-form" class="mt-3 flex flex-wrap items-end gap-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Namn på anställd</span>
+            <input id="new-employee-name" required class="input mt-1" placeholder="För- och efternamn" />
+          </label>
+          <button type="submit" class="btn-secondary">Lägg till</button>
+        </form>
+
+        <div id="employee-list" class="mt-3 flex flex-col gap-3"></div>
+        <p id="employees-empty" class="py-4 text-center text-sm text-slate-500">Inga anställda tillagda ännu.</p>
+      </section>
+
       <!-- Mallar (Program) -->
       <section class="mt-4 card">
         <h2 class="text-sm font-medium text-slate-900">Mallar</h2>
