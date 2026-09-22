@@ -71,26 +71,31 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    // Loggan får en egen, rejäl box uppe till vänster (istället för att
+    // som förr klämmas in på en enda textrad) — fit bevarar bildens
+    // proportioner så en bred eller smal logga aldrig blir skev.
     if (logoBuffer) {
       try {
-        doc.image(logoBuffer, 40, 36, { height: 28 });
+        doc.image(logoBuffer, 40, 36, { fit: [180, 54], align: "left", valign: "top" });
       } catch {
-        doc.font("Helvetica-Bold").fontSize(11).fillColor(brandColor).text(sellerName, 40, 40);
+        doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text(sellerName, 40, 50);
       }
     } else {
-      doc.font("Helvetica-Bold").fontSize(11).fillColor(brandColor).text(sellerName, 40, 40);
+      doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text(sellerName, 40, 50);
     }
 
-    doc.font("Helvetica-Bold").fontSize(16).fillColor(brandColor).text("FÖLJESEDEL", 40, 72);
-
-    doc.fontSize(10).fillColor("#0f172a");
-    doc.text(`Ordernr: ${order.order_number}`, 380, 40, { width: 155, align: "right" });
-    doc.text(`Datum: ${new Date(order.created_at).toLocaleDateString("sv-SE")}`, 380, 55, {
-      width: 155,
+    doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text("FÖLJESEDEL", 320, 40, {
+      width: 215,
       align: "right",
     });
-    doc.text(order.delivery_method === "SHIPPING" ? "Frakt" : "Avhämtning i butik", 380, 70, {
-      width: 155,
+    doc.fontSize(10).fillColor("#0f172a");
+    doc.text(`Ordernr: ${order.order_number}`, 320, 64, { width: 215, align: "right" });
+    doc.text(`Datum: ${new Date(order.created_at).toLocaleDateString("sv-SE")}`, 320, 78, {
+      width: 215,
+      align: "right",
+    });
+    doc.text(order.delivery_method === "SHIPPING" ? "Frakt" : "Avhämtning i butik", 320, 92, {
+      width: 215,
       align: "right",
     });
 
