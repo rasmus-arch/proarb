@@ -44,6 +44,18 @@ router.get("/inactive", async (req, res, next) => {
   }
 });
 
+router.post("/:id/send-inactive-reminder", async (req, res, next) => {
+  try {
+    const months = Number(req.query.months) || 6;
+    const result = await customers.sendInactiveCustomerReminder(Number(req.params.id), months);
+    res.json(result);
+  } catch (err) {
+    if (err.message === "CUSTOMER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NO_CUSTOMER_EMAIL") return res.status(400).json({ error: "Kunden saknar e-postadress" });
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const customer = await customers.getCustomer(Number(req.params.id));

@@ -39,6 +39,20 @@ export async function sendOrderReadyEmail({ settings, to, customerName, orderNum
   return dispatch({ settings, to, subject: `Order ${orderNumber} är redo för avhämtning`, html });
 }
 
+// Called from "Skicka påminnelse" på Översikt → Inaktiva kunder — en
+// proaktiv "dags att fylla på?"-hälsning istället för att bara lista
+// kunden passivt, samma tanke som quote-reminders men riktad mot en
+// kund som inte alls hört av sig på länge snarare än en obesvarad offert.
+export async function sendInactiveCustomerReminderEmail({ settings, to, customerName, months, sellerName }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Dags att fylla på?",
+    body: `<p>Hej ${escapeHtml(customerName)},</p>
+      <p>Det var ett tag sedan er senaste beställning hos oss${sellerName ? ` på ${escapeHtml(sellerName)}` : ""} — närmare bestämt ${months} månader.
+      Behöver ni fylla på med arbetskläder eller profilkläder inför säsongen? Hör gärna av er så hjälper vi till.</p>`,
+  });
+  return dispatch({ settings, to, subject: "Dags att fylla på?", html });
+}
+
 // Called from "Maila offert till kund" in offert-editor.html — sends the
 // customer a link to the public quote page (/q/:token).
 export async function sendQuoteEmail({

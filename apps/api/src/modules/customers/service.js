@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { getSettings } from "../settings/service.js";
+import { sendInactiveCustomerReminderEmail } from "../integrations/email.js";
 
 function nextCustomerNumber() {
   // Simple time-based number; good enough until a real sequence/counter
@@ -74,6 +76,32 @@ export async function listInactiveCustomers(months) {
     [months]
   );
   return rows;
+}
+
+// "Skicka påminnelse" på Översikt → Inaktiva kunder: gör den passiva
+// listan proaktiv, samma "riktigt utskick istället för bara en intern
+// flagga"-princip som quotes.sendQuoteReminder. Ett misslyckat försök
+// (t.ex. e-post inte konfigurerat) kastas vidare till anroparen istället
+// för att tystas ner, så knappen kan visa varför det inte gick.
+export async function sendInactiveCustomerReminder(customerId, months) {
+  const [[customer]] = await pool.query(`SELECT id, name, email FROM customers WHERE id = ?`, [customerId]);
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+  if (!customer.email) throw new Error("NO_CUSTOMER_EMAIL");
+
+  const settings = await getSettings();
+  let result;
+  try {
+    result = await sendInactiveCustomerReminderEmail({
+      settings,
+      to: customer.email,
+      customerName: customer.name,
+      months,
+      sellerName: settings?.seller_name,
+    });
+  } catch (err) {
+    result = { ok: false, reason: err.message };
+  }
+  return { sent: result.ok, reason: result.note ?? result.reason };
 }
 
 export async function getCustomer(id) {

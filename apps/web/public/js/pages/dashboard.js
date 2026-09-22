@@ -104,21 +104,58 @@ requestsList.addEventListener("click", async (event) => {
   }
 });
 
+let inactiveMonths = 6;
+
 async function loadInactiveCustomers() {
   const settings = await api.get("/settings/branding");
-  const months = settings.inactive_customer_months ?? 6;
-  const { rows } = await api.get(`/customers/inactive?months=${months}`);
+  inactiveMonths = settings.inactive_customer_months ?? 6;
+  const { rows } = await api.get(`/customers/inactive?months=${inactiveMonths}`);
   inactiveSection.classList.toggle("hidden", rows.length === 0);
   inactiveList.innerHTML = rows
     .map(
       (c) => `
-      <li class="flex items-center justify-between py-2 text-sm">
-        <a href="/kund-editor.html?id=${c.id}" class="font-medium text-blue-700 underline">${escapeHtml(c.name)}</a>
-        <span class="text-xs text-slate-500">Senaste beställning ${new Date(c.last_order_at).toLocaleDateString("sv-SE")}</span>
+      <li class="flex items-center justify-between py-2 text-sm" data-customer-id="${c.id}">
+        <div>
+          <a href="/kund-editor.html?id=${c.id}" class="font-medium text-blue-700 underline">${escapeHtml(c.name)}</a>
+          <span class="ml-2 text-xs text-slate-500">Senaste beställning ${new Date(c.last_order_at).toLocaleDateString("sv-SE")}</span>
+        </div>
+        <span class="flex items-center gap-2">
+          <span class="hidden text-xs text-red-600" data-inactive-reminder-error></span>
+          <button type="button" class="btn-secondary" data-send-inactive-reminder="${c.id}">Skicka påminnelse</button>
+        </span>
       </li>`
     )
     .join("");
 }
+
+// Gör den passiva listan proaktiv — en riktig "dags att fylla på?"-mejl
+// till kunden istället för att bara flagga den internt, samma
+// "raden ligger kvar om det misslyckas, försvinner inte av sig själv om
+// det lyckas"-mönster som offert-påminnelserna ovan (skillnaden är att en
+// inaktiv kund inte har något event-baserat "redan påmind"-tillstånd att
+// försvinna ur, så knappen går att klicka igen om man vill).
+inactiveList.addEventListener("click", async (event) => {
+  const id = event.target.dataset.sendInactiveReminder;
+  if (id === undefined) return;
+  const li = event.target.closest("li");
+  const errorEl = li.querySelector("[data-inactive-reminder-error]");
+  event.target.disabled = true;
+  errorEl.classList.add("hidden");
+  try {
+    const result = await api.post(`/customers/${id}/send-inactive-reminder?months=${inactiveMonths}`, {});
+    if (result.sent) {
+      event.target.textContent = "Skickad!";
+    } else {
+      errorEl.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+      errorEl.classList.remove("hidden");
+      event.target.disabled = false;
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove("hidden");
+    event.target.disabled = false;
+  }
+});
 
 loadReminders();
 loadPortalRequests();
