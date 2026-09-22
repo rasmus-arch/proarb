@@ -20,12 +20,31 @@ async function preferredSuppliersByProduct(productIds) {
   return map;
 }
 
+// Vad som redan är beställt men inte mottaget (ORDERED/PARTIALLY_RECEIVED)
+// per variant — utan den här skulle inköpsförslaget kunna säga "köp mer"
+// för något som redan är på väg in.
+async function alreadyOnOrderByVariant() {
+  const [rows] = await pool.query(
+    `SELECT pol.product_variant_id, SUM(pol.quantity - pol.received_qty) AS on_order_qty
+     FROM purchase_order_lines pol
+     JOIN purchase_orders po ON po.id = pol.purchase_order_id
+     WHERE po.status != 'RECEIVED'
+     GROUP BY pol.product_variant_id
+     HAVING on_order_qty > 0`
+  );
+  return new Map(rows.map((r) => [r.product_variant_id, Number(r.on_order_qty)]));
+}
+
 // Two sources, both grouped by supplier per the user's spec:
 //  1. Order-driven: rader på ordrar som inte är klara där man antingen
 //     valt "beställ ändå" (sourcing = PURCHASE) eller där lagersaldot
 //     inte räcker till hela raden.
 //  2. Lågt-lager-driven: produkter under sitt satta minsta lagersaldo,
 //     inte kopplade till en specifik order.
+// Båda källorna dras av mot redan utestående inköpsorder (samma pott per
+// variant, order-driven prioriterat i orderdatumordning eftersom det är
+// ett löfte till en specifik kund) så en vara som redan är beställd inte
+// föreslås beställas en gång till.
 export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_ID } = {}) {
   const [orderRows] = await pool.query(
     `SELECT ol.id AS order_line_id, ol.order_id, o.order_number, ol.product_variant_id, ol.quantity, ol.sourcing,
@@ -58,6 +77,17 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
 
   const productIds = [...new Set([...orderRows, ...restockRows].map((r) => r.product_id))];
   const suppliers = await preferredSuppliersByProduct(productIds);
+  const onOrder = await alreadyOnOrderByVariant();
+
+  // Äter av den utestående poolen för en variant och returnerar hur mycket
+  // som redan är täckt — FIFO över anropsordningen (order-driven rader
+  // före restock-driven, i den ordning de bearbetas nedan).
+  function coveredByOnOrder(variantId, qty) {
+    const remaining = onOrder.get(variantId) ?? 0;
+    const covered = Math.min(remaining, qty);
+    if (covered > 0) onOrder.set(variantId, remaining - covered);
+    return covered;
+  }
 
   const bySupplier = new Map();
   function bucket(productId) {
@@ -77,6 +107,8 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   const orderGroups = new Map(); // supplierKey -> orderId -> lines[]
   for (const row of orderRows) {
     const missingQty = Math.max(0, Number(row.quantity) - Number(row.stock_on_hand));
+    const neededQty = row.sourcing === "PURCHASE" ? Number(row.quantity) : missingQty;
+    const alreadyOnOrderQty = coveredByOnOrder(row.product_variant_id, neededQty);
     const supplierBucket = bucket(row.product_id);
     let orderGroup = supplierBucket.order_driven.find((g) => g.order_id === row.order_id);
     if (!orderGroup) {
@@ -92,7 +124,8 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
       size: row.size,
       ordered_qty: Number(row.quantity),
       stock_on_hand: Number(row.stock_on_hand),
-      suggested_qty: row.sourcing === "PURCHASE" ? Number(row.quantity) : missingQty,
+      already_on_order_qty: alreadyOnOrderQty,
+      suggested_qty: neededQty - alreadyOnOrderQty,
       forced: row.sourcing === "PURCHASE",
     });
   }
@@ -100,6 +133,12 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   for (const row of restockRows) {
     const supplierBucket = bucket(row.product_id);
     const deficit = Number(row.reorder_point) - Number(row.quantity_on_hand);
+    const neededQty = row.reorder_quantity ? Number(row.reorder_quantity) : Math.ceil(deficit);
+    const alreadyOnOrderQty = coveredByOnOrder(row.product_variant_id, neededQty);
+    const suggestedQty = neededQty - alreadyOnOrderQty;
+    // Redan fullt täckt av en utestående inköpsorder — inget att göra just
+    // nu, så den behöver inte flagga sig som ett förslag.
+    if (suggestedQty <= 0) continue;
     supplierBucket.restock_driven.push({
       product_variant_id: row.product_variant_id,
       product_name: row.product_name,
@@ -109,7 +148,8 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
       warehouse_name: row.warehouse_name,
       quantity_on_hand: Number(row.quantity_on_hand),
       reorder_point: Number(row.reorder_point),
-      suggested_qty: row.reorder_quantity ? Number(row.reorder_quantity) : Math.ceil(deficit),
+      already_on_order_qty: alreadyOnOrderQty,
+      suggested_qty: suggestedQty,
     });
   }
 

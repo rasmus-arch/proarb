@@ -600,16 +600,20 @@ async function loadSuggestions() {
 
   suggestionsContainer.innerHTML = bySupplier
     .map((group) => {
+      // En rad vars behov redan täcks helt av en utestående inköpsorder
+      // (suggested_qty <= 0) visas inte — inget att göra just nu.
       const orderRows = group.order_driven
         .flatMap((g) =>
-          g.lines.map(
-            (l) => `
+          g.lines
+            .filter((l) => l.suggested_qty > 0)
+            .map(
+              (l) => `
             <tr>
               <td class="py-1.5 pr-2">${escapeHtml(l.product_name)} <span class="text-slate-500">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</span></td>
               <td class="py-1.5 pr-2 text-slate-500">${escapeHtml(g.order_number)} (${escapeHtml(g.customer_name)})</td>
-              <td class="py-1.5 pr-2 text-right">${l.suggested_qty}${l.forced ? ' <span class="text-xs text-amber-600">beställ ändå</span>' : ""}</td>
+              <td class="py-1.5 pr-2 text-right">${l.suggested_qty}${l.forced ? ' <span class="text-xs text-amber-600">beställ ändå</span>' : ""}${l.already_on_order_qty > 0 ? ` <span class="text-xs text-slate-400">(${l.already_on_order_qty} redan beställd)</span>` : ""}</td>
             </tr>`
-          )
+            )
         )
         .join("");
 
@@ -619,7 +623,7 @@ async function loadSuggestions() {
           <tr>
             <td class="py-1.5 pr-2">${escapeHtml(r.product_name)} <span class="text-slate-500">${escapeHtml([r.color, r.size].filter(Boolean).join(" / "))}</span></td>
             <td class="py-1.5 pr-2 text-slate-500">Saldo ${r.quantity_on_hand} / min ${r.reorder_point}</td>
-            <td class="py-1.5 pr-2 text-right">${r.suggested_qty}</td>
+            <td class="py-1.5 pr-2 text-right">${r.suggested_qty}${r.already_on_order_qty > 0 ? ` <span class="text-xs text-slate-400">(${r.already_on_order_qty} redan beställd)</span>` : ""}</td>
           </tr>`
         )
         .join("");
@@ -658,15 +662,17 @@ suggestionsContainer.addEventListener("click", (event) => {
 
   const lines = [
     ...group.order_driven.flatMap((g) =>
-      g.lines.map((l) => ({
-        product_variant_id: l.product_variant_id,
-        product_name: l.product_name,
-        color: l.color,
-        size: l.size,
-        sku: l.sku,
-        quantity: l.suggested_qty,
-        costPrice: 0,
-      }))
+      g.lines
+        .filter((l) => l.suggested_qty > 0)
+        .map((l) => ({
+          product_variant_id: l.product_variant_id,
+          product_name: l.product_name,
+          color: l.color,
+          size: l.size,
+          sku: l.sku,
+          quantity: l.suggested_qty,
+          costPrice: 0,
+        }))
     ),
     ...group.restock_driven.map((r) => ({
       product_variant_id: r.product_variant_id,
