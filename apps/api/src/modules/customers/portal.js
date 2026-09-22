@@ -210,6 +210,9 @@ export async function renderPortalPage(req, res) {
           <td style="padding:6px 8px;text-align:right;">
             <span style="display:inline-block;border-radius:9999px;background:${color.bg};color:${color.fg};font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">${ORDER_STATUS_LABELS[o.status] ?? o.status}</span>
           </td>
+          <td style="padding:6px 8px;text-align:right;">
+            <button type="button" class="reorder-btn" data-order-id="${o.id}" style="background:none;border:1px solid #cbd5e1;border-radius:6px;padding:4px 10px;font-size:12px;color:#334155;cursor:pointer;white-space:nowrap;">Beställ igen</button>
+          </td>
         </tr>`;
     })
     .join("");
@@ -255,6 +258,7 @@ export async function renderPortalPage(req, res) {
           <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
             <tbody>${orderRows}</tbody>
           </table>
+          <p id="reorder-message" style="display:none;margin:10px 0 0;font-size:13px;"></p>
         </div>`
       : ""
   }
@@ -402,6 +406,41 @@ export async function renderPortalPage(req, res) {
             errorEl.style.display = "block";
             btn.disabled = false;
           });
+      });
+    })();
+
+    (function () {
+      var messageEl = document.getElementById("reorder-message");
+      document.querySelectorAll(".reorder-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (messageEl) {
+            messageEl.style.display = "none";
+          }
+          btn.disabled = true;
+          fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/orders/`)} + btn.dataset.orderId + "/reorder", {
+            method: "POST",
+          })
+            .then(function (res) {
+              if (!res.ok) return res.json().then(function (body) { throw new Error(body.error || "Kunde inte återbeställa"); });
+              return res.json();
+            })
+            .then(function () {
+              if (messageEl) {
+                messageEl.textContent = "Tack! Vi har fått din återbeställning och hör av oss.";
+                messageEl.style.color = "#15803d";
+                messageEl.style.display = "block";
+              }
+              btn.disabled = false;
+            })
+            .catch(function (err) {
+              if (messageEl) {
+                messageEl.textContent = err.message;
+                messageEl.style.color = "#dc2626";
+                messageEl.style.display = "block";
+              }
+              btn.disabled = false;
+            });
+        });
       });
     })();
 

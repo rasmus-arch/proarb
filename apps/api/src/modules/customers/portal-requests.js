@@ -84,6 +84,81 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
   }
 }
 
+// "Beställ igen" (Mina sidor): kunden väljer en av sina tidigare ordrar och
+// får en ny beställningsförfrågan skapad med samma rader — omprisad mot
+// dagens pris/rabatt (aldrig den gamla ordersummans frysta pris, som kan
+// vara inaktuellt) istället för att kräva att produkterna fortfarande
+// ligger i det kurerade sortimentet. Samma granskningssteg som en vanlig
+// portalbeställning — blir inte en riktig order förrän en säljare
+// konverterar den. Fritextrader (produktvariant saknas) kan inte
+// återbeställas den här vägen och hoppas bara över.
+export async function reorderFromOrder(token, orderId) {
+  const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+
+  const [[order]] = await pool.query(`SELECT id FROM orders WHERE id = ? AND customer_id = ?`, [
+    orderId,
+    customer.id,
+  ]);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+
+  const [orderLines] = await pool.query(
+    `SELECT product_variant_id, quantity FROM order_lines WHERE order_id = ? AND product_variant_id IS NOT NULL`,
+    [orderId]
+  );
+  if (orderLines.length === 0) throw new Error("NO_REORDERABLE_LINES");
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [result] = await connection.query(
+      `INSERT INTO portal_order_requests (customer_id, requested_by_name) VALUES (?, ?)`,
+      [customer.id, "Återbeställning"]
+    );
+    const requestId = result.insertId;
+
+    let linesInserted = 0;
+    for (const line of orderLines) {
+      const [[priced]] = await connection.query(
+        `SELECT v.id AS variant_id, v.price_override, p.base_price, p.tax_rate_percent,
+                ${ASSORTMENT_DISCOUNT_SELECT}
+         FROM product_variants v JOIN products p ON p.id = v.product_id
+         WHERE v.id = ? AND v.active = 1 AND p.active = 1`,
+        [customer.id, customer.id, line.product_variant_id]
+      );
+      // Varianten är utgången/inaktiverad sedan förra ordern — hoppas
+      // över istället för att stoppa hela återbeställningen.
+      if (!priced) continue;
+
+      await connection.query(
+        `INSERT INTO portal_order_request_lines
+           (request_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          requestId,
+          priced.variant_id,
+          line.quantity,
+          Number(priced.price_override ?? priced.base_price),
+          Number(priced.discount_percent) || 0,
+          Number(priced.tax_rate_percent),
+        ]
+      );
+      linesInserted++;
+    }
+
+    if (linesInserted === 0) throw new Error("NO_REORDERABLE_LINES");
+
+    await connection.commit();
+    return { id: requestId, lineCount: linesInserted };
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function listPortalOrderRequests({ status = "NEW" } = {}) {
   const where = status ? "WHERE por.status = ?" : "";
   const params = status ? [status] : [];
