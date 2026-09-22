@@ -15,6 +15,9 @@ const el = {
   pipelineOldest: document.getElementById("pipeline-oldest"),
   pipelineRows: document.getElementById("pipeline-rows"),
   pipelineEmpty: document.getElementById("pipeline-empty"),
+  trendHeaderRow: document.getElementById("trend-header-row"),
+  trendRows: document.getElementById("trend-rows"),
+  trendEmpty: document.getElementById("trend-empty"),
 };
 
 const QUOTE_STATUS_LABELS = { SENT: "Skickad", VIEWED: "Visad" };
@@ -118,9 +121,68 @@ async function loadPipeline() {
     .join("");
 }
 
+const TREND_TOP_CATEGORIES = 5;
+const MONTH_LABEL = new Intl.DateTimeFormat("sv-SE", { month: "short", year: "2-digit" });
+
+// Pivoterar de platta (månad, kategori, omsättning)-raderna till en
+// tabell: en rad per månad, en kolumn per topp-kategori (resten slås ihop
+// till "Övrigt") — enklast möjliga v1 av säsongstrenden, se
+// stats/service.js getMonthlyCategoryTrend för det skriftliga förslaget
+// om vidareutveckling (årsjämförelse, säsongsindex m.m.).
+async function loadTrend() {
+  const { rows } = await api.get("/stats/monthly-trend?months=12");
+  el.trendEmpty.classList.toggle("hidden", rows.length > 0);
+  if (rows.length === 0) {
+    el.trendHeaderRow.innerHTML = "";
+    el.trendRows.innerHTML = "";
+    return;
+  }
+
+  const revenueByCategory = new Map();
+  for (const r of rows) {
+    revenueByCategory.set(r.category_name, (revenueByCategory.get(r.category_name) ?? 0) + r.revenue_ex_vat);
+  }
+  const topCategories = [...revenueByCategory.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TREND_TOP_CATEGORIES)
+    .map(([name]) => name);
+  const hasOther = revenueByCategory.size > topCategories.length;
+
+  const months = [...new Set(rows.map((r) => r.month))].sort();
+  const cell = new Map(); // "month|column" -> revenue
+  for (const r of rows) {
+    const column = topCategories.includes(r.category_name) ? r.category_name : "Övrigt";
+    const key = `${r.month}|${column}`;
+    cell.set(key, (cell.get(key) ?? 0) + r.revenue_ex_vat);
+  }
+
+  const columns = hasOther ? [...topCategories, "Övrigt"] : topCategories;
+
+  el.trendHeaderRow.innerHTML =
+    `<th class="py-1.5 pr-2 font-medium">Månad</th>` +
+    columns.map((c) => `<th class="py-1.5 pr-2 font-medium text-right">${escapeHtml(c)}</th>`).join("") +
+    `<th class="py-1.5 font-medium text-right">Totalt</th>`;
+
+  el.trendRows.innerHTML = months
+    .map((month) => {
+      const [y, m] = month.split("-");
+      const label = MONTH_LABEL.format(new Date(Number(y), Number(m) - 1, 1));
+      const values = columns.map((c) => cell.get(`${month}|${c}`) ?? 0);
+      const total = values.reduce((sum, v) => sum + v, 0);
+      return `<tr>
+        <td class="py-1.5 pr-2 text-slate-900">${label}</td>
+        ${values.map((v) => `<td class="py-1.5 pr-2 text-right text-slate-600">${v > 0 ? money(v) : "–"}</td>`).join("")}
+        <td class="py-1.5 text-right font-medium text-slate-900">${money(total)}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
 async function loadAll() {
   await Promise.all([loadSummary(), loadTopProducts(), loadTopCategories(), loadTopCustomers(), loadPipeline()]);
 }
+
+loadTrend();
 
 el.from.addEventListener("change", loadAll);
 el.to.addEventListener("change", loadAll);

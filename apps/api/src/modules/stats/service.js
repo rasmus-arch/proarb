@@ -112,6 +112,45 @@ export async function getTopCategories(rangeInput, limit = 20) {
   }));
 }
 
+// Säsongstrend: samma sale_source som allt annat på statistiksidan, men
+// grupperat per månad OCH kategori istället för en enda periodsumma — ger
+// en första bild av när på året olika produktgrupper säljer, som underlag
+// för att lägga inköp i tid inför en säsong. Ett enkelt v1 (se PLAN.md-
+// diskussionen): ingen jämförelse mot föregående år än, bara de senaste N
+// månaderna i rad.
+export async function getMonthlyCategoryTrend(months = 12) {
+  const to = new Date().toISOString().slice(0, 10);
+  const fromDate = new Date();
+  fromDate.setMonth(fromDate.getMonth() - (months - 1));
+  fromDate.setDate(1);
+  const from = fromDate.toISOString().slice(0, 10);
+
+  const [rows] = await pool.query(
+    `${SALE_SOURCE_CTE}
+     SELECT DATE_FORMAT(ss.created_at, '%Y-%m') AS month,
+            COALESCE(pc.id, 0) AS category_id, COALESCE(pc.name, 'Okategoriserad') AS category_name,
+            SUM(ss.quantity) AS total_qty,
+            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
+     FROM sale_source ss
+     JOIN product_variants v ON v.id = ss.product_variant_id
+     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_categories pc ON pc.id = p.category_id
+     GROUP BY month, COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
+     ORDER BY month ASC`,
+    [from, to, from, to]
+  );
+
+  return {
+    from,
+    to,
+    rows: rows.map((r) => ({
+      ...r,
+      total_qty: Number(r.total_qty),
+      revenue_ex_vat: round2(Number(r.revenue_ex_vat)),
+    })),
+  };
+}
+
 // Öppen offertpipeline: värdet av allt som just nu väntar på kundsvar.
 // DRAFT räknas inte in (inte ens skickad än) — bara SENT/VIEWED, precis som
 // "canRespond" på den publika offertsidan. Till skillnad från resten av

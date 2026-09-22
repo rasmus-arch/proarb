@@ -42,6 +42,14 @@ router.get("/top-customers", async (req, res, next) => {
   }
 });
 
+router.get("/monthly-trend", async (req, res, next) => {
+  try {
+    res.json(await stats.getMonthlyCategoryTrend(Number(req.query.months) || 12));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/open-quote-pipeline", async (req, res, next) => {
   try {
     res.json(await stats.getOpenQuotePipeline());
