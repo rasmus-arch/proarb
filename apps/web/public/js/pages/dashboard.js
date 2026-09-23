@@ -18,6 +18,53 @@ const inactiveSection = document.getElementById("inactive-customers-section");
 const inactiveList = document.getElementById("inactive-customers-list");
 const lowStockSection = document.getElementById("low-stock-section");
 const lowStockList = document.getElementById("low-stock-list");
+const greetingEyebrow = document.getElementById("greeting-eyebrow");
+const todayDate = document.getElementById("today-date");
+const kpiRevenue = document.getElementById("kpi-revenue");
+const kpiQuotes = document.getElementById("kpi-quotes");
+const kpiQuotesValue = document.getElementById("kpi-quotes-value");
+const kpiReadyPickup = document.getElementById("kpi-ready-pickup");
+
+function money(value) {
+  return `${Number(value).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} kr`;
+}
+
+// Tidpunktsbaserad hälsning + dagens datum — små detaljer som gör
+// startsidan mindre av ett rent formulär, samma tanke som märkesfärgen
+// i kundportalen (portal.js) fast här mot en inloggad medarbetare istället
+// för en kund.
+async function loadGreeting() {
+  const hour = new Date().getHours();
+  const greeting = hour < 10 ? "God morgon" : hour < 17 ? "Hej" : "God kväll";
+  greetingEyebrow.textContent = greeting;
+  todayDate.textContent = new Date().toLocaleDateString("sv-SE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  const settings = await api.get("/settings/branding").catch(() => null);
+  if (settings?.brand_color) {
+    greetingEyebrow.style.color = settings.brand_color;
+  }
+}
+
+async function loadKpis() {
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+
+  const [summary, pipeline, readyOrders] = await Promise.all([
+    api.get(`/stats/summary?from=${firstOfMonth}&to=${today}`),
+    api.get("/stats/open-quote-pipeline"),
+    api.get("/orders?status=READY_FOR_PICKUP&pageSize=1"),
+  ]);
+
+  kpiRevenue.textContent = money(summary.revenue_ex_vat);
+  kpiQuotes.textContent = String(pipeline.quote_count);
+  kpiQuotesValue.textContent = pipeline.quote_count > 0 ? `Värde ${money(pipeline.total_value)}` : "";
+  kpiReadyPickup.textContent = String(readyOrders.total);
+}
 
 async function loadReminders() {
   const { rows } = await api.get("/quotes/reminders");
@@ -179,6 +226,8 @@ async function loadLowStock() {
   }
 }
 
+loadGreeting();
+loadKpis();
 loadReminders();
 loadPortalRequests();
 loadInactiveCustomers();

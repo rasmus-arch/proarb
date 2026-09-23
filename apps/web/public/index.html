@@ -10,80 +10,140 @@
     <div id="nav"></div>
 
     <main class="mx-auto max-w-6xl px-4 py-8">
-      <h1 class="text-xl font-semibold text-slate-900">Översikt</h1>
-      <p class="mt-1 text-sm text-slate-600">
-        Affärssystem för Profil &amp; Arbetskläder. Se <code>PLAN.md</code>
-        i repot för fullständig kravspec och byggplan.
-      </p>
+      <div class="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p id="greeting-eyebrow" class="text-sm font-medium text-slate-500">Välkommen tillbaka</p>
+          <h1 class="mt-0.5 text-2xl font-semibold text-slate-900">Översikt</h1>
+        </div>
+        <p id="today-date" class="text-sm text-slate-500"></p>
+      </div>
+
+      <!-- KPI-rad -->
+      <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="card">
+          <p class="text-sm text-slate-500">Omsättning denna månad</p>
+          <p id="kpi-revenue" class="mt-1 text-3xl font-semibold text-slate-900">–</p>
+        </div>
+        <div class="card">
+          <p class="text-sm text-slate-500">Öppna offerter</p>
+          <p id="kpi-quotes" class="mt-1 text-3xl font-semibold text-slate-900">–</p>
+          <p id="kpi-quotes-value" class="mt-0.5 text-xs text-slate-500"></p>
+        </div>
+        <div class="card">
+          <p class="text-sm text-slate-500">Redo för upphämtning</p>
+          <p id="kpi-ready-pickup" class="mt-1 text-3xl font-semibold text-slate-900">–</p>
+        </div>
+      </div>
 
       <!-- Beställningsförfrågningar från "Mina sidor" -->
-      <section id="portal-requests-section" class="mt-6 hidden card">
-        <h2 class="text-sm font-medium text-slate-900">Beställningar från kundportalen</h2>
-        <p class="mt-1 text-sm text-slate-600">
-          Kunden har skickat in en beställning via sin portalsida — granska och skapa en order.
-        </p>
-        <ul id="portal-requests-list" class="mt-3 divide-y divide-slate-100"></ul>
-      </section>
-
-      <!-- Inaktiva kunder -->
-      <section id="inactive-customers-section" class="mt-6 hidden card">
-        <h2 class="text-sm font-medium text-slate-900">Kunder utan beställning på ett tag</h2>
-        <p class="mt-1 text-sm text-slate-600">
-          Tröskeln styrs under Inställningar → Påminnelser ("Månader utan beställning...").
-        </p>
-        <ul id="inactive-customers-list" class="mt-3 divide-y divide-slate-100"></ul>
+      <section id="portal-requests-section" class="mt-6 hidden card border-l-4 border-blue-400">
+        <div class="flex items-start gap-3">
+          <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7-4.5L17 8v8a1 1 0 01-1 1H4a1 1 0 01-1-1V8z" /><path stroke-linecap="round" stroke-linejoin="round" d="M7 17v-5h6v5" /></svg>
+          <div class="flex-1">
+            <h2 class="text-sm font-medium text-slate-900">Beställningar från kundportalen</h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Kunden har skickat in en beställning via sin portalsida — granska och skapa en order.
+            </p>
+            <ul id="portal-requests-list" class="mt-3 divide-y divide-slate-100"></ul>
+          </div>
+        </div>
       </section>
 
       <!-- Lågt lagersaldo -->
-      <section id="low-stock-section" class="mt-6 hidden card">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-medium text-slate-900">Lågt lagersaldo</h2>
-          <a href="/lager.html" class="text-sm text-blue-700 underline">Till inköpsförslag</a>
+      <section id="low-stock-section" class="mt-6 hidden card border-l-4 border-amber-400">
+        <div class="flex items-start gap-3">
+          <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6v4l2.5 2.5M17 10a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-medium text-slate-900">Lågt lagersaldo</h2>
+              <a href="/lager.html" class="text-sm text-blue-700 underline">Till inköpsförslag</a>
+            </div>
+            <p class="mt-1 text-sm text-slate-600">
+              Varor under sin satta minimigräns — se Lager → Inköpsförslag för att skapa en inköpsorder.
+            </p>
+            <ul id="low-stock-list" class="mt-3 divide-y divide-slate-100"></ul>
+          </div>
         </div>
-        <p class="mt-1 text-sm text-slate-600">
-          Varor under sin satta minimigräns — se Lager → Inköpsförslag för att skapa en inköpsorder.
-        </p>
-        <ul id="low-stock-list" class="mt-3 divide-y divide-slate-100"></ul>
+      </section>
+
+      <!-- Inaktiva kunder -->
+      <section id="inactive-customers-section" class="mt-6 hidden card border-l-4 border-slate-300">
+        <div class="flex items-start gap-3">
+          <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10 10a3 3 0 100-6 3 3 0 000 6zM4 17a6 6 0 0112 0" /></svg>
+          <div class="flex-1">
+            <h2 class="text-sm font-medium text-slate-900">Kunder utan beställning på ett tag</h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Tröskeln styrs under Inställningar → Påminnelser ("Månader utan beställning...").
+            </p>
+            <ul id="inactive-customers-list" class="mt-3 divide-y divide-slate-100"></ul>
+          </div>
+        </div>
       </section>
 
       <!-- Reminders (Fas 7) -->
-      <section id="reminders-section" class="mt-6 hidden card">
-        <h2 class="text-sm font-medium text-slate-900">Påminnelser – obesvarade offerter</h2>
-        <p class="mt-1 text-sm text-slate-600">
-          Skickar ett uppföljningsmejl direkt till kunden. Kräver en ikopplad e-postleverantör
-          (Inställningar → E-post) — fram tills dess visas ett felmeddelande men inget skickas.
-        </p>
-        <ul id="reminders-list" class="mt-3 divide-y divide-slate-100"></ul>
+      <section id="reminders-section" class="mt-6 hidden card border-l-4 border-indigo-400">
+        <div class="flex items-start gap-3">
+          <svg class="mt-0.5 h-5 w-5 flex-shrink-0 text-indigo-500" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0" /></svg>
+          <div class="flex-1">
+            <h2 class="text-sm font-medium text-slate-900">Påminnelser – obesvarade offerter</h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Skickar ett uppföljningsmejl direkt till kunden. Kräver en ikopplad e-postleverantör
+              (Inställningar → E-post) — fram tills dess visas ett felmeddelande men inget skickas.
+            </p>
+            <ul id="reminders-list" class="mt-3 divide-y divide-slate-100"></ul>
+          </div>
+        </div>
       </section>
 
-      <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <a href="/kunder.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Kunder</h2>
-          <p class="mt-1 text-sm text-slate-600">Kundkort, hämtbehöriga kontakter, namngivna logga-/tryckfiler.</p>
+      <div class="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <a href="/kunder.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.5a3 3 0 00-6 0M12 12.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5zM4.5 19.5a4.5 4.5 0 019-.375M19.5 19.5a4.5 4.5 0 00-4.163-4.484M14.25 8.25a3 3 0 110-.001" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Kunder</h2>
+            <p class="mt-1 text-sm text-slate-600">Kundkort, hämtbehöriga kontakter, namngivna logga-/tryckfiler.</p>
+          </div>
         </a>
-        <a href="/offerter.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Offerter</h2>
-          <p class="mt-1 text-sm text-slate-600">Skapa, skicka som PDF/länk, acceptera, konvertera till order.</p>
+        <a href="/offerter.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 3.75h6M7.5 4.5h6.879a1.5 1.5 0 011.06.44l3.122 3.12a1.5 1.5 0 01.439 1.061V19.5a1.5 1.5 0 01-1.5 1.5h-9.75a1.5 1.5 0 01-1.5-1.5V6a1.5 1.5 0 011.5-1.5z" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Offerter</h2>
+            <p class="mt-1 text-sm text-slate-600">Skapa, skicka som PDF/länk, acceptera, konvertera till order.</p>
+          </div>
         </a>
-        <a href="/ordrar.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Ordrar</h2>
-          <p class="mt-1 text-sm text-slate-600">Direkt eller via offert, statusflöde, utlämning mot behörig kontakt.</p>
+        <a href="/ordrar.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25M21 7.5v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Ordrar</h2>
+            <p class="mt-1 text-sm text-slate-600">Direkt eller via offert, statusflöde, utlämning mot behörig kontakt.</p>
+          </div>
         </a>
-        <a href="/lager.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Lager</h2>
-          <p class="mt-1 text-sm text-slate-600">Saldo, inleverans, inventering och inköpsförslag.</p>
+        <a href="/lager.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 7.5h16.5M3.75 7.5v10.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5V7.5M3.75 7.5L5.25 3h13.5l1.5 4.5M10.5 11.25h3" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Lager</h2>
+            <p class="mt-1 text-sm text-slate-600">Saldo, inleverans, inventering och inköpsförslag.</p>
+          </div>
         </a>
-        <a href="/produkter.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Produkter</h2>
-          <p class="mt-1 text-sm text-slate-600">Sök, skapa produkter och bulkimportera via CSV.</p>
+        <a href="/produkter.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a2.25 2.25 0 003.182 0l4.318-4.318a2.25 2.25 0 000-3.182L11.16 3.66A2.25 2.25 0 009.568 3z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Produkter</h2>
+            <p class="mt-1 text-sm text-slate-600">Sök, skapa produkter och bulkimportera via CSV.</p>
+          </div>
         </a>
-        <a href="/statistik.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Statistik</h2>
-          <p class="mt-1 text-sm text-slate-600">Bästsäljare (produkt/kategori/kund) och marginal.</p>
+        <a href="/statistik.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5h3.75V21H3v-7.5zM10.125 8.25h3.75V21h-3.75V8.25zM17.25 3h3.75v18h-3.75V3z" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Statistik</h2>
+            <p class="mt-1 text-sm text-slate-600">Bästsäljare (produkt/kategori/kund) och marginal.</p>
+          </div>
         </a>
-        <a href="/installningar.html" class="card hover:ring-slate-400">
-          <h2 class="font-medium text-slate-900">Inställningar</h2>
-          <p class="mt-1 text-sm text-slate-600">Offertutseende, säljarinfo, e-postpåminnelser.</p>
+        <a href="/installningar.html" class="card flex items-start gap-3 hover:ring-slate-400">
+          <svg class="mt-0.5 h-6 w-6 flex-shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.245a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.752.43.992l1.005.828c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.245a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.752-.43-.992l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          <div>
+            <h2 class="font-medium text-slate-900">Inställningar</h2>
+            <p class="mt-1 text-sm text-slate-600">Offertutseende, säljarinfo, e-postpåminnelser.</p>
+          </div>
         </a>
       </div>
     </main>
