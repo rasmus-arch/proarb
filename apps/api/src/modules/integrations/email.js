@@ -1,13 +1,9 @@
-// Outbound email — deliberately a stub for now, same reasoning as
-// fortnox.js: the behaviour is built end-to-end (including the actual
-// HTML that will go out), but no SMTP provider is connected yet.
-// Credentials live in app_settings (smtp_host/port/username/password/
-// from_email/use_tls) — filled in under Inställningar whenever a real
-// provider is ready — rather than env vars, so staff can set this up
-// themselves without a redeploy. Every caller already fetches `settings`
-// (getSettings()) for other reasons and just passes it through; fill in
-// `dispatch` below with a real send (e.g. nodemailer) once smtp_host etc.
-// are set, and every caller starts working with no further changes.
+// Outbound email via nodemailer. Credentials live in app_settings
+// (smtp_host/port/username/password/from_email/use_tls) — filled in under
+// Inställningar rather than env vars, so staff can set this up themselves
+// without a redeploy. Every caller already fetches `settings` (getSettings())
+// for other reasons and just passes it through.
+import nodemailer from "nodemailer";
 
 export function isEmailConfigured(settings) {
   return Boolean(settings?.smtp_host);
@@ -17,16 +13,34 @@ function notConfigured() {
   return { ok: false, reason: "NOT_CONFIGURED", note: "E-post är inte konfigurerat ännu." };
 }
 
-// TODO: real SMTP send once settings.smtp_host etc. are set, e.g.:
-//   const transport = nodemailer.createTransport({
-//     host: settings.smtp_host, port: settings.smtp_port, secure: Boolean(settings.smtp_use_tls),
-//     auth: { user: settings.smtp_username, pass: settings.smtp_password },
-//   });
-//   await transport.sendMail({ to, subject, html, from: settings.smtp_from_email });
-//   return { ok: true };
 async function dispatch({ settings, to, subject, html } = {}) {
   if (!isEmailConfigured(settings)) return notConfigured();
-  throw new Error("Email sending not implemented yet");
+  if (!to) return { ok: false, reason: "NO_RECIPIENT", note: "Mottagarens e-postadress saknas." };
+
+  const port = Number(settings.smtp_port) || 587;
+  const transport = nodemailer.createTransport({
+    host: settings.smtp_host,
+    port,
+    // Port 465 = implicit TLS from the start of the connection ("secure").
+    // Anything else (587/25) negotiates TLS via STARTTLS instead — only
+    // require it when the "Använd TLS" setting is on, so an internal/
+    // unencrypted relay on a plain port still works.
+    secure: port === 465,
+    requireTLS: port !== 465 && Boolean(settings.smtp_use_tls),
+    auth: settings.smtp_username ? { user: settings.smtp_username, pass: settings.smtp_password } : undefined,
+  });
+
+  try {
+    await transport.sendMail({
+      to,
+      subject,
+      html,
+      from: settings.smtp_from_email || settings.smtp_username,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, reason: "SEND_FAILED", note: err.message };
+  }
 }
 
 // Called when staff marks an order "Redo för utlämning" with the
