@@ -32,6 +32,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
 
 const app = express();
+// Needed so req.protocol reflects the original https:// when the app runs
+// behind a TLS-terminating reverse proxy (e.g. cPanel/Apache) — the
+// Fortnox OAuth redirect_uri (settings/routes.js) must exactly match what
+// the browser was actually redirected from, not the plain-http backend.
+app.set("trust proxy", true);
 app.use(cors());
 app.use(express.json());
 app.use(cookieParser());

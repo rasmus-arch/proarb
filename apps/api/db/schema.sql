@@ -84,6 +84,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
   fortnox_client_secret VARCHAR(255) NULL,
   fortnox_access_token  VARCHAR(500) NULL,
   fortnox_refresh_token VARCHAR(500) NULL,
+  -- Satt av integrations/fortnox.js: när access_token går ut (för att veta
+  -- när den ska förnyas via refresh_token) och den tillfälliga "state"-
+  -- parametern för den pågående OAuth-inloggningen (skyddar mot CSRF på
+  -- callback-anropet, nollställs direkt efter).
+  fortnox_token_expires_at   DATETIME NULL,
+  fortnox_oauth_state        VARCHAR(64) NULL,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -111,6 +117,11 @@ CREATE TABLE IF NOT EXISTS customers (
   -- vanligt hos företag som har en gemensam ekonomi-/fakturabrevlåda.
   -- Faller tillbaka på email när den saknas (se customers/service.js).
   invoice_email      VARCHAR(255) NULL,
+  -- Fortnox-kundnumret motsvarande denna kund, satt av
+  -- integrations/fortnox.js första gången en faktura skickas för kunden
+  -- (skapar kunden i Fortnox om den saknar ett). Cachas här så kunden
+  -- inte skapas dubbelt i Fortnox nästa gång.
+  fortnox_customer_number VARCHAR(20) NULL,
   phone              VARCHAR(50) NULL,
   address            VARCHAR(255) NULL,
   postal_code        VARCHAR(20) NULL,

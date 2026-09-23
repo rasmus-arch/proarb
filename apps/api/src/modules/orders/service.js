@@ -466,8 +466,9 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     const result = await createCustomerInvoice({
       settings,
       customerId: order.customer_id,
-      amount: order.totals.total_inc_vat,
+      lines: order.lines,
       orderId,
+      orderNumber: order.order_number,
     });
     if (result.ok) {
       await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [

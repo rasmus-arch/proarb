@@ -167,12 +167,20 @@ export async function createOrderReturn(orderId, { reason, lines }, userId) {
   }
 
   try {
+    const [[originalInvoice]] = await pool.query(
+      `SELECT external_ref FROM invoices
+       WHERE order_id = ? AND type = 'CUSTOMER_INVOICE' AND external_ref IS NOT NULL
+       ORDER BY id DESC LIMIT 1`,
+      [orderId]
+    );
+
     const settings = await getSettings();
     const result = await createCreditInvoice({
       settings,
       customerId: order.customer_id,
-      amount: round2(creditAmountIncVat),
+      lines: validatedLines.map(({ orderLine, quantity }) => ({ ...orderLine, quantity })),
       orderId,
+      originalExternalRef: originalInvoice?.external_ref,
     });
     if (result.ok) {
       await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [
