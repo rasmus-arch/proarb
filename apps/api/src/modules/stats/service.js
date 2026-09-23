@@ -10,9 +10,10 @@ function defaultRange({ from, to }) {
   return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-// One combined source of "sold lines" across both sales channels: POS
-// (sale_lines/sales) and orders (order_lines/orders). Cancelled orders and
-// non-completed sales are excluded so this only reflects real revenue.
+// One source of "sold lines": orders (order_lines/orders). Cancelled
+// orders are excluded so this only reflects real revenue. (There used to
+// be a second channel here, POS/kassa sale_lines/sales — removed along
+// with the rest of that feature; see schema.sql.)
 //
 // product_variant_id can be NULL here (fritextrad — a free-text line with
 // no catalog product behind it). Every query below LEFT JOINs product_variants/
@@ -23,11 +24,6 @@ function defaultRange({ from, to }) {
 // "top product" by definition.
 const SALE_SOURCE_CTE = `
   WITH sale_source AS (
-    SELECT sl.product_variant_id, sl.quantity, sl.unit_price, sl.discount_percent,
-           s.created_at, s.customer_id
-    FROM sale_lines sl JOIN sales s ON s.id = sl.sale_id
-    WHERE s.status = 'COMPLETED' AND s.created_at >= ? AND s.created_at < ? + INTERVAL 1 DAY
-    UNION ALL
     SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent,
            o.created_at, o.customer_id
     FROM order_lines ol JOIN orders o ON o.id = ol.order_id
@@ -36,7 +32,7 @@ const SALE_SOURCE_CTE = `
 `;
 
 function rangeParams(range) {
-  return [range.from, range.to, range.from, range.to];
+  return [range.from, range.to];
 }
 
 export async function getSummary(rangeInput) {
@@ -84,7 +80,7 @@ export async function getDailySalesTrend(days = 90) {
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
      FROM sale_source ss
      GROUP BY day`,
-    [fromStr, toStr, fromStr, toStr]
+    [fromStr, toStr]
   );
   const byDay = new Map(rows.map((r) => [r.day, round2(Number(r.revenue_ex_vat))]));
 
@@ -176,7 +172,7 @@ export async function getMonthlyCategoryTrend(months = 12) {
      LEFT JOIN product_categories pc ON pc.id = p.category_id
      GROUP BY month, COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
      ORDER BY month ASC`,
-    [from, to, from, to]
+    [from, to]
   );
 
   return {
@@ -242,7 +238,7 @@ export async function getTopCustomers(rangeInput, limit = 20) {
   const range = defaultRange(rangeInput);
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
-     SELECT COALESCE(c.id, 0) AS customer_id, COALESCE(c.name, 'Kassaköp utan vald kund') AS name,
+     SELECT c.id AS customer_id, c.name,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
             CASE WHEN MAX(p.cost_price IS NULL) = 0
                  THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
@@ -250,8 +246,8 @@ export async function getTopCustomers(rangeInput, limit = 20) {
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
-     LEFT JOIN customers c ON c.id = ss.customer_id
-     GROUP BY COALESCE(c.id, 0), COALESCE(c.name, 'Kassaköp utan vald kund')
+     JOIN customers c ON c.id = ss.customer_id
+     GROUP BY c.id, c.name
      ORDER BY revenue_ex_vat DESC
      LIMIT ?`,
     [...rangeParams(range), limit]

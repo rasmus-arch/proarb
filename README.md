@@ -1,7 +1,7 @@
 # ProArb
 
 Affärssystem för butik/webshop inom arbetskläder och profilprodukter
-(kunder, offerter, order, kassa, lager, produktkatalog). Se
+(kunder, offerter, order, lager, produktkatalog). Se
 [`PLAN.md`](PLAN.md) för fullständig kravspec och byggplan.
 
 ## Stack
@@ -67,7 +67,7 @@ PLAN.md              Kravspec och fasindelad byggplan
 ## Status
 
 - **Fas 0** – klar: grundscaffold, kundmodul (kort, kontakter med
-  hämtbehörighet), produktsökning och kassa-skanning (streckkod → variant).
+  hämtbehörighet) och produktsökning (streckkod → variant).
 - **Fas 1** – klar: fullt CRUD på produkter/varianter, kategorier/varumärken,
   och CSV-bulkimport (batch-upsert, klarar stora kataloger).
 - **Fas 2** – klar: offerter med rader (inkl. tryck), skicka, PDF, publik
@@ -77,9 +77,12 @@ PLAN.md              Kravspec och fasindelad byggplan
   bekräftad → i produktion → klar för avhämtning → levererad → fakturerad)
   och utlämning registrerad mot en hämtberättigad kundkontakt (eller
   manuellt namn), med full utlämningshistorik.
-- **Fas 4** – klar: kassasessioner (öppna/stänga med kassaavstämning),
-  försäljning med streckkodsskanning, delad betalning (flera
-  betalmetoder per köp) och PDF-kvitto.
+- **Fas 4** – borttagen: kassa (kassasessioner, streckkodsskanning, delad
+  betalning, PDF-kvitto) byggdes, men togs sedan bort igen som egen
+  modul — streckkodsskanning vid försäljning sker nu i order-editorn
+  istället. `pos_sessions`/`sales`/`sale_lines`/`payments`-tabellerna
+  ligger kvar i databasen, oanvända, för att inte förlora ev. redan
+  bokförd historik.
 - **Kundkort** – klar: kunddetaljsida med redigerbar info, hämtbehöriga
   kontakter, och fleruppladdning av namngivna logga-/tryckfiler
   (eps/jpg/png/svg/pdf).
@@ -88,17 +91,15 @@ PLAN.md              Kravspec och fasindelad byggplan
   e-postpåminnelser (själva utskicket kräver en SMTP-leverantör, ej
   kopplad).
 - **Statistik** – klar: bästsäljande produkter/kategorier/kunder och
-  marginal (kr + %) över valfri period, slår ihop kassa- och
-  orderförsäljning.
-- **Marginal** – visas nu i kassan, offert-editorn och order-editorn
-  (per rad och som totalsumma), baserat på produktens inköpspris.
-- **Fritextrader & snabbskapade produkter** – klar: i offert-editorn,
-  order-editorn och kassan kan man nu lägga till en fritextrad (egen
-  beskrivning, antal, pris och momssats, utan att den behöver finnas som
-  produkt) samt skapa en ny produkt direkt i flödet (namn och pris räcker
-  — artikelnummer och SKU genereras automatiskt om de utelämnas) och
-  lägga till den som rad på en gång. Kassan har dessutom fått fritextsök
-  på produktnamn/artikelnummer/SKU, inte bara streckkodsskanning.
+  marginal (kr + %) över valfri period, baserat på orderförsäljning.
+- **Marginal** – visas nu i offert-editorn och order-editorn (per rad
+  och som totalsumma), baserat på produktens inköpspris.
+- **Fritextrader & snabbskapade produkter** – klar: i offert-editorn och
+  order-editorn kan man nu lägga till en fritextrad (egen beskrivning,
+  antal, pris och momssats, utan att den behöver finnas som produkt)
+  samt skapa en ny produkt direkt i flödet (namn och pris räcker —
+  artikelnummer och SKU genereras automatiskt om de utelämnas) och lägga
+  till den som rad på en gång.
 - **Fas 5** – klar: lagersaldo per lagerplats, inleverans mot inköpsorder
   via streckkodsskanning, en juridiskt spårbar inventering (skanna eller
   lägg in manuellt, avvikelselista inkl. det som *inte* blev skannat,
@@ -140,7 +141,7 @@ PLAN.md              Kravspec och fasindelad byggplan
   leverantör eller på en specifik produkt (produktregeln vinner om båda
   matchar) — hanteras under kundkortet ("Stående rabatt") och föreslås
   automatiskt (fortfarande redigerbart per rad) när en rad läggs till i
-  offert, order eller kassa. Detta gjorde leverantör obligatoriskt på alla
+  offert eller order. Detta gjorde leverantör obligatoriskt på alla
   nya produkter, inklusive de som snabbskapas i offert/order (kolumnen är
   dock nullable i databasen så en uppgraderad installation med äldre
   produkter inte går sönder). Ny order åt en kund med en ifylld
@@ -152,9 +153,7 @@ PLAN.md              Kravspec och fasindelad byggplan
   till Fortnox") och API-anrop mot `/3/customers`/`/3/invoices`. Order →
   Utlämnad skapar en kundfaktura, "Fakturerad" skickar den från Fortnox,
   och en retur skapar en kreditfaktura, se `fortnox.js`. Oprövat mot en
-  verklig Fortnox-miljö (inget testkonto tillgängligt när detta byggdes)
-  — `createCashInvoice` (kontantfaktura) finns förberedd men har ingen
-  anropande kassamodul ännu.
+  verklig Fortnox-miljö (inget testkonto tillgängligt när detta byggdes).
 - **Kvar**: auditlogg och GDPR-verktyg (export/radering av persondata) är
   inte byggt, koppla produkt↔leverantör saknar ännu ett UI-formulär
   (backend klart, `POST /api/products/:id/suppliers` finns). Se

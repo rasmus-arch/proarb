@@ -87,12 +87,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- Satt av integrations/fortnox.js: när access_token går ut (för att veta
   -- när den ska förnyas via refresh_token) och den tillfälliga "state"-
   -- parametern för den pågående OAuth-inloggningen (skyddar mot CSRF på
-  -- callback-anropet, nollställs direkt efter). fortnox_cash_customer_number
-  -- cachar Fortnox-kundnumret för den generiska "Kontantkund" som
-  -- kontantfakturor (createCashInvoice) bokförs mot.
+  -- callback-anropet, nollställs direkt efter).
   fortnox_token_expires_at   DATETIME NULL,
   fortnox_oauth_state        VARCHAR(64) NULL,
-  fortnox_cash_customer_number VARCHAR(20) NULL,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

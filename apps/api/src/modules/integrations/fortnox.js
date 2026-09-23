@@ -169,22 +169,6 @@ async function findOrCreateFortnoxCustomer(settings, customerId) {
   return { customerNumber, settings: settingsAfter };
 }
 
-// Generic walk-in customer used for kontantfaktura (createCashInvoice)
-// sales with no real customer attached — created once in Fortnox and then
-// reused via app_settings.fortnox_cash_customer_number.
-async function ensureCashCustomer(settings) {
-  if (settings.fortnox_cash_customer_number) {
-    return { customerNumber: settings.fortnox_cash_customer_number, settings };
-  }
-  const { data, settings: settingsAfter } = await fortnoxRequest(settings, "/customers", {
-    method: "POST",
-    body: { Customer: { Name: "Kontantkund" } },
-  });
-  const customerNumber = data.Customer.CustomerNumber;
-  await pool.query(`UPDATE app_settings SET fortnox_cash_customer_number = ? WHERE id = 1`, [customerNumber]);
-  return { customerNumber, settings: { ...settingsAfter, fortnox_cash_customer_number: customerNumber } };
-}
-
 // --- Invoice rows ---------------------------------------------------------
 
 // order_lines/order_return_lines rows (quantity, unit_price,
@@ -237,27 +221,6 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
       Invoice: {
         CustomerNumber: customerNumber,
         YourOrderNumber: orderNumber ?? (orderId != null ? String(orderId) : undefined),
-        InvoiceRows: invoiceRows,
-      },
-    },
-  });
-  return { ok: true, invoiceNumber: data.Invoice.DocumentNumber, externalRef: data.Invoice.DocumentNumber };
-}
-
-// "Kontantfaktura" — a walk-in/Swish sale with no customer record, booked
-// against the shared Kontantkund (see ensureCashCustomer above).
-export async function createCashInvoice({ settings, lines, reference } = {}) {
-  if (!isFortnoxConfigured(settings)) return notConfigured();
-  const invoiceRows = buildInvoiceRows(lines);
-  if (invoiceRows.length === 0) throw new Error("Köpet har inga rader att fakturera.");
-
-  const { customerNumber, settings: settingsAfter } = await ensureCashCustomer(settings);
-  const { data } = await fortnoxRequest(settingsAfter, "/invoices", {
-    method: "POST",
-    body: {
-      Invoice: {
-        CustomerNumber: customerNumber,
-        YourReference: reference || undefined,
         InvoiceRows: invoiceRows,
       },
     },
