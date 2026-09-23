@@ -109,6 +109,7 @@ export async function run() {
     "ALTER TABLE portal_order_requests ADD COLUMN reference_contact_id INT NULL, ADD CONSTRAINT fk_por_contact FOREIGN KEY (reference_contact_id) REFERENCES customer_contacts(id)",
     "ALTER TABLE app_settings ADD COLUMN next_order_number INT NOT NULL DEFAULT 1",
     "ALTER TABLE app_settings ADD COLUMN next_quote_number INT NOT NULL DEFAULT 1",
+    "ALTER TABLE customers ADD COLUMN invoice_email VARCHAR(255) NULL AFTER email",
   ];
   for (const statement of alters) {
     try {

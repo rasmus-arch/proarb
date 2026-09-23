@@ -19,6 +19,7 @@ const el = {
   name: document.getElementById("f-name"),
   org: document.getElementById("f-org"),
   email: document.getElementById("f-email"),
+  invoiceEmail: document.getElementById("f-invoice-email"),
   phone: document.getElementById("f-phone"),
   address: document.getElementById("f-address"),
   postal: document.getElementById("f-postal"),
@@ -137,6 +138,7 @@ async function loadCustomer() {
   el.name.value = customer.name ?? "";
   el.org.value = customer.org_number ?? "";
   el.email.value = customer.email ?? "";
+  el.invoiceEmail.value = customer.invoice_email ?? "";
   el.phone.value = customer.phone ?? "";
   el.address.value = customer.address ?? "";
   el.postal.value = customer.postal_code ?? "";
@@ -236,6 +238,7 @@ el.saveBtn.addEventListener("click", async () => {
       name: el.name.value,
       orgNumber: el.org.value || null,
       email: el.email.value || null,
+      invoiceEmail: el.invoiceEmail.value || null,
       phone: el.phone.value || null,
       address: el.address.value || null,
       postalCode: el.postal.value || null,

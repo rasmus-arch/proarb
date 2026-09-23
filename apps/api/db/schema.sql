@@ -106,6 +106,11 @@ CREATE TABLE IF NOT EXISTS customers (
   name               VARCHAR(255) NOT NULL,
   org_number         VARCHAR(50) NULL,
   email              VARCHAR(255) NULL,
+  -- Fakturerings-epost: dit fakturor/påminnelser om betalning ska gå, om
+  -- det skiljer sig från kontaktpersonens vanliga e-post (email ovan) —
+  -- vanligt hos företag som har en gemensam ekonomi-/fakturabrevlåda.
+  -- Faller tillbaka på email när den saknas (se customers/service.js).
+  invoice_email      VARCHAR(255) NULL,
   phone              VARCHAR(50) NULL,
   address            VARCHAR(255) NULL,
   postal_code        VARCHAR(20) NULL,

@@ -127,13 +127,14 @@ export async function createCustomer(data) {
 
   const [result] = await pool.query(
     `INSERT INTO customers
-       (customer_number, name, org_number, email, phone, address, postal_code, city, logo_url, payment_terms_days, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (customer_number, name, org_number, email, invoice_email, phone, address, postal_code, city, logo_url, payment_terms_days, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       customerNumber,
       data.name,
       data.orgNumber ?? null,
       data.email ?? null,
+      data.invoiceEmail ?? null,
       data.phone ?? null,
       data.address ?? null,
       data.postalCode ?? null,
@@ -152,6 +153,7 @@ export async function updateCustomer(id, data) {
     name: data.name,
     org_number: data.orgNumber,
     email: data.email,
+    invoice_email: data.invoiceEmail,
     phone: data.phone,
     address: data.address,
     postal_code: data.postalCode,
