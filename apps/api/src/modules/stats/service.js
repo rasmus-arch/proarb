@@ -59,6 +59,37 @@ export async function getSummary(rangeInput) {
   };
 }
 
+// Daglig försäljning senaste N dagarna, för diagrammet högst upp på
+// Översikt. Fyller i dagar utan försäljning med 0 istället för att bara
+// hoppa över dem, så serien blir sammanhängande (en lucka i grafen ska
+// betyda "ingen försäljning", inte "data saknas").
+export async function getDailySalesTrend(days = 90) {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  const toStr = to.toISOString().slice(0, 10);
+  const fromStr = from.toISOString().slice(0, 10);
+
+  const [rows] = await pool.query(
+    `${SALE_SOURCE_CTE}
+     SELECT DATE_FORMAT(ss.created_at, '%Y-%m-%d') AS day,
+            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
+     FROM sale_source ss
+     GROUP BY day`,
+    [fromStr, toStr, fromStr, toStr]
+  );
+  const byDay = new Map(rows.map((r) => [r.day, round2(Number(r.revenue_ex_vat))]));
+
+  const points = [];
+  const cursor = new Date(from);
+  while (cursor <= to) {
+    const key = cursor.toISOString().slice(0, 10);
+    points.push({ date: key, revenue_ex_vat: byDay.get(key) ?? 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return { from: fromStr, to: toStr, points };
+}
+
 export async function getTopProducts(rangeInput, limit = 20) {
   const range = defaultRange(rangeInput);
   const [rows] = await pool.query(

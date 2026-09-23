@@ -18,6 +18,22 @@
         <p id="today-date" class="text-sm text-slate-500"></p>
       </div>
 
+      <!-- Försäljning senaste 90 dagarna -->
+      <section class="mt-5 card">
+        <div class="flex items-baseline justify-between">
+          <h2 class="text-sm font-medium text-slate-900">Försäljning senaste 90 dagarna</h2>
+          <p class="text-xs text-slate-500">Ex moms, kassa + order</p>
+        </div>
+        <div id="sales-chart-wrap" class="relative mt-2">
+          <svg id="sales-chart" viewBox="0 0 800 220" class="w-full" style="height: 220px;" preserveAspectRatio="none"></svg>
+          <div
+            id="sales-chart-tooltip"
+            class="pointer-events-none absolute hidden rounded-md bg-slate-900 px-2.5 py-1.5 text-xs text-white shadow-md"
+            style="transform: translate(-50%, calc(-100% - 8px));"
+          ></div>
+        </div>
+      </section>
+
       <!-- KPI-rad -->
       <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div class="card">

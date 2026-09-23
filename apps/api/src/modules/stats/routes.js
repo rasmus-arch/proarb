@@ -42,6 +42,14 @@ router.get("/top-customers", async (req, res, next) => {
   }
 });
 
+router.get("/daily-trend", async (req, res, next) => {
+  try {
+    res.json(await stats.getDailySalesTrend(Number(req.query.days) || 90));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/monthly-trend", async (req, res, next) => {
   try {
     res.json(await stats.getMonthlyCategoryTrend(Number(req.query.months) || 12));
