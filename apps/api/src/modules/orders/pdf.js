@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
+import bwipjs from "bwip-js";
 import { uploadsRoot } from "../../lib/uploads.js";
 
 const FALLBACK_SELLER_NAME = "Mitt företag";
@@ -53,6 +54,18 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
   const sellerName = settings?.seller_name || FALLBACK_SELLER_NAME;
   const brandColor = settings?.brand_color || FALLBACK_BRAND_COLOR;
   const qrPng = await QRCode.toBuffer(qrUrl, { width: 120, margin: 1 });
+  // Code128-streckkod på ordernumret — samma sak QR-koden kodar (i
+  // praktiken), men läsbar av en vanlig USB/Bluetooth-streckkodsläsare
+  // (tangentbordsemulering) på Orderhantering-sidan, där personalen redan
+  // är inloggad och inte behöver skanna sig till en webbadress först.
+  const barcodePng = await bwipjs.toBuffer({
+    bcid: "code128",
+    text: order.order_number,
+    scale: 2,
+    height: 10,
+    includetext: true,
+    textxalign: "center",
+  });
 
   let logoBuffer = null;
   if (settings?.seller_logo_path) {
@@ -151,6 +164,12 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
     doc.image(qrPng, 40, y, { width: 80 });
     doc.font("Helvetica").fontSize(8).fillColor("#475569");
     doc.text("Scanna för att öppna ordern i systemet.", 130, y + 8, { width: 300 });
+
+    const barcodeY = y + 90;
+    doc.image(barcodePng, 40, barcodeY, { width: 160 });
+    doc.text("Skanna på Orderhantering för att ändra status/registrera utlämning.", 210, barcodeY + 20, {
+      width: 300,
+    });
 
     doc.end();
   });

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Orderhantering</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="orderhantering">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-2xl px-4 py-8">
+      <h1 class="text-xl font-semibold text-slate-900">Orderhantering</h1>
+      <p class="mt-1 text-sm text-slate-600">
+        Skanna streckkoden på ordersedeln (eller skriv ordernumret) för att ändra status eller
+        registrera utlämning.
+      </p>
+
+      <div class="mt-4 card">
+        <label class="block text-sm">
+          <span class="text-slate-700">Ordernummer</span>
+          <input
+            id="scan-input"
+            type="text"
+            autofocus
+            class="input mt-1 text-lg"
+            placeholder="Skanna streckkod eller skriv t.ex. ORD-0001"
+          />
+        </label>
+        <p id="scan-error" class="mt-2 hidden text-sm text-red-600"></p>
+      </div>
+
+      <section id="order-section" class="mt-4 hidden card">
+        <div class="flex items-center justify-between">
+          <div>
+            <div id="order-number" class="text-lg font-semibold text-slate-900"></div>
+            <div id="order-customer" class="text-sm text-slate-600"></div>
+          </div>
+          <span id="order-status" class="rounded-full px-2 py-0.5 text-xs font-medium"></span>
+        </div>
+
+        <div id="order-actions" class="mt-4 flex flex-wrap gap-2"></div>
+
+        <div id="pickup-form" class="mt-4 hidden border-t border-slate-100 pt-4">
+          <h2 class="text-sm font-medium text-slate-900">Registrera utlämning</h2>
+          <p class="mt-1 text-sm text-slate-600">Välj en hämtberättigad kontakt hos kunden, eller ange namn manuellt.</p>
+          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label class="block text-sm">
+              <span class="text-slate-700">Hämtberättigad kontakt</span>
+              <select id="pickup-contact-select" class="input mt-1">
+                <option value="">— Välj —</option>
+              </select>
+            </label>
+            <label class="block text-sm">
+              <span class="text-slate-700">Eller namn (utan konto)</span>
+              <input id="pickup-name-input" type="text" class="input mt-1" placeholder="För- och efternamn" />
+            </label>
+          </div>
+          <div class="mt-3">
+            <button type="button" id="pickup-btn" class="btn">Registrera utlämning</button>
+          </div>
+        </div>
+
+        <p id="order-message" class="mt-3 hidden text-sm text-green-700"></p>
+      </section>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/orderhantering.js"></script>
+  </body>
+</html>

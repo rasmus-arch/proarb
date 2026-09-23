@@ -42,6 +42,18 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+// Before /:id so a scanned order_number (e.g. "ORD-0001") isn't parsed as
+// a numeric id — see Orderhantering (orderhantering.html/.js).
+router.get("/by-number/:orderNumber", async (req, res, next) => {
+  try {
+    const order = await orders.getOrderByNumber(req.params.orderNumber);
+    if (!order) return res.status(404).json({ error: "Ingen order med det numret" });
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const order = await orders.getOrder(Number(req.params.id));

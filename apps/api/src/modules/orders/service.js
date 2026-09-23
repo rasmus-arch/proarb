@@ -139,6 +139,16 @@ async function loadOrderLines(orderId) {
   });
 }
 
+// Exact lookup by order_number — used by Orderhantering, where a barcode
+// scan (or manual typing as a fallback) hands over the printed order
+// number verbatim. A LIKE-based search (see listOrders) would risk
+// matching more than one order on a short/prefix number.
+export async function getOrderByNumber(orderNumber) {
+  const [[row]] = await pool.query(`SELECT id FROM orders WHERE order_number = ?`, [orderNumber]);
+  if (!row) return null;
+  return getOrder(row.id);
+}
+
 export async function getOrder(id) {
   const [[order]] = await pool.query(
     `SELECT o.*, c.name AS customer_name, c.email AS customer_email, c.address AS customer_address,
