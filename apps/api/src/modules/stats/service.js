@@ -13,6 +13,14 @@ function defaultRange({ from, to }) {
 // One combined source of "sold lines" across both sales channels: POS
 // (sale_lines/sales) and orders (order_lines/orders). Cancelled orders and
 // non-completed sales are excluded so this only reflects real revenue.
+//
+// product_variant_id can be NULL here (fritextrad — a free-text line with
+// no catalog product behind it). Every query below LEFT JOINs product_variants/
+// products (not JOIN) so those lines still count toward revenue/customer/
+// category totals — same "unknown, not zero" treatment already used for
+// cost_price IS NULL (margin excluded, lines_missing_cost counted). Only
+// getTopProducts stays an inner join: a line with no product can't be a
+// "top product" by definition.
 const SALE_SOURCE_CTE = `
   WITH sale_source AS (
     SELECT sl.product_variant_id, sl.quantity, sl.unit_price, sl.discount_percent,
@@ -43,8 +51,8 @@ export async function getSummary(rangeInput) {
        SUM(CASE WHEN p.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
        COUNT(*) AS line_count
      FROM sale_source ss
-     JOIN product_variants v ON v.id = ss.product_variant_id
-     JOIN products p ON p.id = v.product_id`,
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id`,
     rangeParams(range)
   );
 
@@ -127,8 +135,8 @@ export async function getTopCategories(rangeInput, limit = 20) {
                  THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
                  ELSE NULL END AS margin_amount
      FROM sale_source ss
-     JOIN product_variants v ON v.id = ss.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN product_categories pc ON pc.id = p.category_id
      GROUP BY COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
      ORDER BY revenue_ex_vat DESC
@@ -163,8 +171,8 @@ export async function getMonthlyCategoryTrend(months = 12) {
             SUM(ss.quantity) AS total_qty,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
      FROM sale_source ss
-     JOIN product_variants v ON v.id = ss.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN product_categories pc ON pc.id = p.category_id
      GROUP BY month, COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
      ORDER BY month ASC`,
@@ -240,8 +248,8 @@ export async function getTopCustomers(rangeInput, limit = 20) {
                  THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
                  ELSE NULL END AS margin_amount
      FROM sale_source ss
-     JOIN product_variants v ON v.id = ss.product_variant_id
-     JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN customers c ON c.id = ss.customer_id
      GROUP BY COALESCE(c.id, 0), COALESCE(c.name, 'Kassaköp utan vald kund')
      ORDER BY revenue_ex_vat DESC
