@@ -22,12 +22,17 @@
 
       <!-- Saldo -->
       <section id="tab-saldo" class="tab-panel mt-4">
-        <div class="flex flex-wrap items-end gap-3">
-          <input id="saldo-search" type="search" placeholder="Sök produkt…" class="input max-w-sm" />
-          <label class="flex items-center gap-2 text-sm">
-            <input id="saldo-low-only" type="checkbox" class="rounded border-slate-300" />
-            <span class="text-slate-700">Visa bara under min-saldo</span>
-          </label>
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="flex flex-wrap items-end gap-3">
+            <input id="saldo-search" type="search" placeholder="Sök produkt…" class="input max-w-sm" />
+            <label class="flex items-center gap-2 text-sm">
+              <input id="saldo-low-only" type="checkbox" class="rounded border-slate-300" />
+              <span class="text-slate-700">Visa bara under min-saldo</span>
+            </label>
+          </div>
+          <a href="/api/inventory/stock-levels/export" class="btn-secondary" download>
+            Exportera lagervärde (CSV)
+          </a>
         </div>
         <div class="mt-3 overflow-x-auto card">
           <table class="min-w-full divide-y divide-slate-200 text-sm">

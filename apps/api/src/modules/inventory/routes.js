@@ -39,6 +39,17 @@ router.get("/stock-levels", async (req, res, next) => {
   }
 });
 
+router.get("/stock-levels/export", async (req, res, next) => {
+  try {
+    const csv = await inventory.exportStockValueCsv();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="lagervarde-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/stock-levels/:variantId/:warehouseId/reorder", canAdjustStock, async (req, res, next) => {
   try {
     await inventory.setReorderSettings(Number(req.params.variantId), Number(req.params.warehouseId), req.body ?? {});

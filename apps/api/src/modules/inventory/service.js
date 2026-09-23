@@ -29,6 +29,76 @@ export async function recordMovement(
   );
 }
 
+// Lagervärde-export (CSV): hela lagersaldot med värde i både inköps- och
+// försäljningspris (ex moms, produktens base_price — samma pris som
+// offert/order utgår från innan ev. kundrabatt). Ingen paginering — det
+// är hela poängen med en export, att få med allt i en fil.
+function csvField(value) {
+  const str = String(value ?? "");
+  return /[",\n;]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+export async function exportStockValueCsv() {
+  const [rows] = await pool.query(
+    `SELECT p.article_number, p.name AS product_name, v.color, v.size, v.sku,
+            w.name AS warehouse_name, sl.quantity_on_hand,
+            p.cost_price, p.base_price
+     FROM stock_levels sl
+     JOIN product_variants v ON v.id = sl.product_variant_id
+     JOIN products p ON p.id = v.product_id
+     JOIN warehouses w ON w.id = sl.warehouse_id
+     WHERE sl.quantity_on_hand <> 0
+     ORDER BY p.name ASC, v.color ASC, v.size ASC`
+  );
+
+  const header = [
+    "Artikelnr",
+    "Produkt",
+    "Färg",
+    "Storlek",
+    "SKU",
+    "Lagerplats",
+    "Antal i lager",
+    "Inköpspris/st",
+    "Inköpsvärde",
+    "Försäljningspris/st (ex moms)",
+    "Försäljningsvärde (ex moms)",
+  ];
+
+  let totalCostValue = 0;
+  let totalSaleValue = 0;
+  const lines = rows.map((r) => {
+    const qty = Number(r.quantity_on_hand);
+    const costPrice = r.cost_price === null ? null : Number(r.cost_price);
+    const salePrice = r.base_price === null ? null : Number(r.base_price);
+    const costValue = costPrice === null ? null : Math.round(qty * costPrice * 100) / 100;
+    const saleValue = salePrice === null ? null : Math.round(qty * salePrice * 100) / 100;
+    if (costValue !== null) totalCostValue += costValue;
+    if (saleValue !== null) totalSaleValue += saleValue;
+    return [
+      r.article_number,
+      r.product_name,
+      r.color,
+      r.size,
+      r.sku,
+      r.warehouse_name,
+      qty,
+      costPrice ?? "",
+      costValue ?? "",
+      salePrice ?? "",
+      saleValue ?? "",
+    ]
+      .map(csvField)
+      .join(";");
+  });
+
+  const totalRow = ["", "", "", "", "", "", "Totalt", "", Math.round(totalCostValue * 100) / 100, "", Math.round(totalSaleValue * 100) / 100]
+    .map(csvField)
+    .join(";");
+
+  return "﻿" + [header.map(csvField).join(";"), ...lines, totalRow].join("\r\n");
+}
+
 export async function listWarehouses() {
   const [rows] = await pool.query(`SELECT * FROM warehouses ORDER BY name ASC`);
   return rows;
