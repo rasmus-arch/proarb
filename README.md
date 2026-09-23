@@ -79,10 +79,7 @@ PLAN.md              Kravspec och fasindelad byggplan
   manuellt namn), med full utlämningshistorik.
 - **Fas 4** – klar: kassasessioner (öppna/stänga med kassaavstämning),
   försäljning med streckkodsskanning, delad betalning (flera
-  betalmetoder per köp) och PDF-kvitto. Betalmetod Faktura/Swish skapar
-  automatiskt en Fortnox-fakturarad (kundfaktura respektive
-  kontantfaktura) — själva Fortnox-anropet är en tydligt markerad stub
-  tills en testmiljö finns, se `fortnox.js`.
+  betalmetoder per köp) och PDF-kvitto.
 - **Kundkort** – klar: kunddetaljsida med redigerbar info, hämtbehöriga
   kontakter, och fleruppladdning av namngivna logga-/tryckfiler
   (eps/jpg/png/svg/pdf).
@@ -151,9 +148,14 @@ PLAN.md              Kravspec och fasindelad byggplan
   "Mina sidor" (kundportalen) visar numera ett utvalt sortiment istället
   för offert-/orderhistorik — vilka produkter som visas hanteras under
   kundkortet ("Sortiment").
-- **Kvar**: riktig Fortnox-koppling (order → kundfaktura, synk tillbaka
-  — stub finns i `fortnox.js`, väntar på testmiljö). Mindre luckor:
-  auditlogg och GDPR-verktyg (export/radering av persondata) är inte
-  byggt, koppla produkt↔leverantör saknar ännu ett UI-formulär (backend
-  klart, `POST /api/products/:id/suppliers` finns). Se `PLAN.md` för
-  detaljer.
+- **Fortnox** – klar: riktig OAuth2-anslutning (Inställningar → "Anslut
+  till Fortnox") och API-anrop mot `/3/customers`/`/3/invoices`. Order →
+  Utlämnad skapar en kundfaktura, "Fakturerad" skickar den från Fortnox,
+  och en retur skapar en kreditfaktura, se `fortnox.js`. Oprövat mot en
+  verklig Fortnox-miljö (inget testkonto tillgängligt när detta byggdes)
+  — `createCashInvoice` (kontantfaktura) finns förberedd men har ingen
+  anropande kassamodul ännu.
+- **Kvar**: auditlogg och GDPR-verktyg (export/radering av persondata) är
+  inte byggt, koppla produkt↔leverantör saknar ännu ett UI-formulär
+  (backend klart, `POST /api/products/:id/suppliers` finns). Se
+  `PLAN.md` för detaljer.

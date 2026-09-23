@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as settings from "./service.js";
+import * as fortnox from "../integrations/fortnox.js";
 import { createLogoUpload } from "../../lib/uploads.js";
 import { requireRole } from "../../lib/auth-middleware.js";
 
@@ -55,5 +56,44 @@ router.post(
     }
   }
 );
+
+// Fortnox OAuth2 — "Anslut till Fortnox" i installningar.js navigerar hit
+// direkt (inte via fetch), så sessionscookien följer med som vid all
+// vanlig sidnavigering och Fortnox kan skicka tillbaka webbläsaren till
+// callbacken nedan med en engångskod.
+function fortnoxRedirectUri(req) {
+  return `${req.protocol}://${req.get("host")}/api/settings/fortnox/callback`;
+}
+
+router.get("/fortnox/connect", requireRole("ADMIN"), async (req, res) => {
+  try {
+    const current = await settings.getSettings();
+    const url = await fortnox.getConnectUrl(current, fortnoxRedirectUri(req));
+    res.redirect(url);
+  } catch (err) {
+    res.redirect(`/installningar.html?fortnox=error&message=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.get("/fortnox/callback", requireRole("ADMIN"), async (req, res) => {
+  try {
+    const { code, state, error, error_description: errorDescription } = req.query;
+    if (error) throw new Error(errorDescription || error);
+    const current = await settings.getSettings();
+    await fortnox.handleOAuthCallback({ settings: current, code, state, redirectUri: fortnoxRedirectUri(req) });
+    res.redirect("/installningar.html?fortnox=connected");
+  } catch (err) {
+    res.redirect(`/installningar.html?fortnox=error&message=${encodeURIComponent(err.message)}`);
+  }
+});
+
+router.post("/fortnox/disconnect", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    await fortnox.disconnectFortnox();
+    res.json(await settings.getSettings());
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

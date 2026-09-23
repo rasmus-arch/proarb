@@ -193,7 +193,7 @@ proarb/
 | 4 | ✅ Klar | Kassa: streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning |
 | 5 | ✅ Klar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista inkl. ej skannat, justera eller behåll, spårbart via `StockMovement`), lågt-lager-varningar, **inköpsförslag** per leverantör |
 | 6 | ✅ Klar | Tryck/produktionsflöde kopplat till order-/offertrader |
-| 7 | ✅ Klar* | Kundportal (länk utan inloggning), påminnelser (skickas ej via e-post ännu — se nedan). *Fortnox-integrationen (skicka klar order → skapa kundfaktura, synka status/fakturanummer tillbaka) väntar fortfarande på en testmiljö, se `fortnox.js`. |
+| 7 | ✅ Klar | Kundportal (länk utan inloggning), påminnelser (skickas ej via e-post ännu — se nedan). Fortnox-integrationen (order → kundfaktura, retur → kreditfaktura, "Fakturerad" → skicka från Fortnox) är byggd mot Fortnox' riktiga API (OAuth2 + `/3/invoices`/`/3/customers`), se `fortnox.js` — anslut under Inställningar, oprövat mot en verklig Fortnox-miljö. |
 | 8 | ✅ Klar* | Inloggning (e-post/lösenord, sessions-cookie) och rollbaserad behörighet (ADMIN/SALES/WAREHOUSE/POS) på alla API-rutter. *Auditlogg, GDPR-verktyg (export/radering) och prestandaoptimering för stora kataloger är inte byggt — se `README.md`. |
 
 **Tillkommande önskemål** (inte bundna till en specifik fas ovan):
@@ -206,12 +206,13 @@ proarb/
   slår ihop kassa- och orderförsäljning.
 - ✅ Marginal syns nu i kassan, offert-editorn och order-editorn (per
   rad + totalsumma), baserat på produktens `cost_price`.
-- ✅ Kassans betalmetoder Faktura/Swish skapar automatiskt en
-  Fortnox-fakturarad (kundfaktura respektive kontantfaktura, se
-  `invoices`-tabellen). Faktura kräver att en kund är vald i kassan.
-  Det faktiska Fortnox-API-anropet är en stub (`fortnox.js`) tills en
-  testmiljö/inloggning finns – kopplas in i Fas 7 utan att övrig logik
-  behöver ändras.
+- ✅ Order → Utlämnad skapar automatiskt en kundfaktura i Fortnox,
+  "Fakturerad" skickar den från Fortnox till kunden, och en retur skapar
+  en kreditfaktura – se `invoices`-tabellen och `fortnox.js`. Anslutning
+  sker under Inställningar (OAuth2, "Anslut till Fortnox"); riktiga
+  kassa-/POS-betalmetoder (Faktura/Swish → kontantfaktura) finns
+  förberedda i `fortnox.js` (`createCashInvoice`) men har ingen anropande
+  kassamodul ännu.
 - ✅ Inköpsförslag: egen flik i Lager, uppdelad på leverantör, med både
   orderrader som saknar lagertäckning (eller är markerade "beställ ändå"
   via `order_lines.sourcing`) och produkter under sitt min-saldo. Går att
