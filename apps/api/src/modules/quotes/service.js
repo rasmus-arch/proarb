@@ -218,8 +218,12 @@ async function insertLines(connection, quoteId, lines) {
   }
 }
 
-// Full-replace update: only meaningful while the quote is still a DRAFT
+// Full-replace update: allowed while the quote is DRAFT/SENT/VIEWED
 // (enforced by the route layer) — simpler and safer than diffing lines.
+// Editing a SENT/VIEWED quote does not reset its status; "Maila offert
+// till kund" already re-sends regardless of status (see
+// emailQuoteToCustomer), so staff can correct something and resend
+// without the customer losing their original SENT timestamp.
 export async function updateQuote(id, data) {
   const connection = await pool.getConnection();
   try {

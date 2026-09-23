@@ -79,8 +79,8 @@ router.patch("/:id", async (req, res, next) => {
   try {
     const existing = await quotes.getQuote(Number(req.params.id));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.status !== "DRAFT") {
-      return res.status(409).json({ error: "Endast utkast kan redigeras" });
+    if (!["DRAFT", "SENT", "VIEWED"].includes(existing.status)) {
+      return res.status(409).json({ error: "Offerten kan inte längre redigeras (redan besvarad eller omvandlad)" });
     }
     const quote = await quotes.updateQuote(Number(req.params.id), req.body ?? {});
     res.json(quote);

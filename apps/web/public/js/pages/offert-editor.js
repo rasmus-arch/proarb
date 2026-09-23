@@ -134,7 +134,12 @@ function renderTotals() {
   el.totalsMargin.textContent = `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
 }
 
-const isEditable = () => state.status === "DRAFT";
+// DRAFT is always editable; SENT/VIEWED stay editable too so staff can
+// correct something and resend ("Maila offert till kund" works regardless
+// of status, see emailQuoteToCustomer) — once the customer has actually
+// responded (ACCEPTED/DECLINED/CONVERTED/EXPIRED) it's locked, since that
+// outcome shouldn't be silently rewritten after the fact.
+const isEditable = () => ["DRAFT", "SENT", "VIEWED"].includes(state.status);
 
 function renderLines() {
   el.linesEmpty.classList.toggle("hidden", state.lines.length > 0);
