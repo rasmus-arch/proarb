@@ -179,7 +179,7 @@ export async function listPortalOrderRequests({ status = "NEW" } = {}) {
   return rows;
 }
 
-async function getPortalOrderRequest(id) {
+export async function getPortalOrderRequest(id) {
   const [[request]] = await pool.query(
     `SELECT por.*, c.name AS customer_name
      FROM portal_order_requests por

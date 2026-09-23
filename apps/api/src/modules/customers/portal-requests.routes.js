@@ -15,6 +15,16 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/:id", async (req, res, next) => {
+  try {
+    const request = await portalRequests.getPortalOrderRequest(Number(req.params.id));
+    if (!request) return res.status(404).json({ error: "Not found" });
+    res.json(request);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/:id/convert", async (req, res, next) => {
   try {
     const order = await portalRequests.convertPortalOrderRequest(Number(req.params.id), req.user.id);
