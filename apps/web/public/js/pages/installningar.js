@@ -25,8 +25,11 @@ const el = {
   smtpTls: document.getElementById("s-smtp-tls"),
   fortnoxClientId: document.getElementById("s-fortnox-client-id"),
   fortnoxClientSecret: document.getElementById("s-fortnox-client-secret"),
-  fortnoxAccessToken: document.getElementById("s-fortnox-access-token"),
-  fortnoxRefreshToken: document.getElementById("s-fortnox-refresh-token"),
+  fortnoxRedirectUri: document.getElementById("fortnox-redirect-uri"),
+  fortnoxStatus: document.getElementById("fortnox-status"),
+  fortnoxConnectBtn: document.getElementById("fortnox-connect-btn"),
+  fortnoxDisconnectBtn: document.getElementById("fortnox-disconnect-btn"),
+  fortnoxMessage: document.getElementById("fortnox-message"),
   githubRepo: document.getElementById("s-github-repo"),
   githubToken: document.getElementById("s-github-token"),
   logoPreview: document.getElementById("s-logo-preview"),
@@ -70,8 +73,7 @@ function applySettings(settings) {
   el.smtpTls.checked = settings.smtp_use_tls === undefined ? true : Boolean(settings.smtp_use_tls);
   el.fortnoxClientId.value = settings.fortnox_client_id ?? "";
   el.fortnoxClientSecret.value = settings.fortnox_client_secret ?? "";
-  el.fortnoxAccessToken.value = settings.fortnox_access_token ?? "";
-  el.fortnoxRefreshToken.value = settings.fortnox_refresh_token ?? "";
+  applyFortnoxStatus(settings);
   el.githubRepo.value = settings.github_issues_repo ?? "";
   el.githubToken.value = settings.github_issues_token ?? "";
 
@@ -116,8 +118,6 @@ el.saveBtn.addEventListener("click", async () => {
       smtpUseTls: el.smtpTls.checked,
       fortnoxClientId: el.fortnoxClientId.value || null,
       fortnoxClientSecret: el.fortnoxClientSecret.value || null,
-      fortnoxAccessToken: el.fortnoxAccessToken.value || null,
-      fortnoxRefreshToken: el.fortnoxRefreshToken.value || null,
       githubIssuesRepo: el.githubRepo.value || null,
       githubIssuesToken: el.githubToken.value || null,
     });
@@ -150,6 +150,46 @@ el.logoForm.addEventListener("submit", async (event) => {
     el.logoError.classList.remove("hidden");
   }
 });
+
+// --- Fortnox ---------------------------------------------------------------
+
+el.fortnoxRedirectUri.textContent = `${location.origin}/api/settings/fortnox/callback`;
+
+function applyFortnoxStatus(settings) {
+  const connected = Boolean(settings.fortnox_access_token);
+  el.fortnoxStatus.textContent = connected ? "Ansluten" : "Inte ansluten";
+  el.fortnoxStatus.className = `text-sm font-medium ${connected ? "text-green-700" : "text-slate-500"}`;
+  el.fortnoxConnectBtn.textContent = connected ? "Anslut igen" : "Anslut till Fortnox";
+  el.fortnoxDisconnectBtn.classList.toggle("hidden", !connected);
+}
+
+el.fortnoxDisconnectBtn.addEventListener("click", async () => {
+  if (!confirm("Koppla från Fortnox? Nya fakturor skapas då inte förrän ni ansluter igen.")) return;
+  const settings = await api.post("/settings/fortnox/disconnect", {});
+  applyFortnoxStatus(settings);
+});
+
+// Fortnox skickar tillbaka hit efter anslutningsförsöket (se
+// settings/routes.js /fortnox/callback) via ?fortnox=connected|error.
+{
+  const params = new URLSearchParams(location.search);
+  const fortnoxResult = params.get("fortnox");
+  if (fortnoxResult === "connected") {
+    el.fortnoxMessage.textContent = "Ansluten till Fortnox.";
+    el.fortnoxMessage.className = "mt-2 text-sm text-green-700";
+    el.fortnoxMessage.classList.remove("hidden");
+  } else if (fortnoxResult === "error") {
+    el.fortnoxMessage.textContent = params.get("message") || "Kunde inte ansluta till Fortnox.";
+    el.fortnoxMessage.className = "mt-2 text-sm text-red-600";
+    el.fortnoxMessage.classList.remove("hidden");
+  }
+  if (fortnoxResult) {
+    params.delete("fortnox");
+    params.delete("message");
+    const query = params.toString();
+    history.replaceState(null, "", location.pathname + (query ? `?${query}` : ""));
+  }
+}
 
 // --- Users (Fas 8) --------------------------------------------------------
 

@@ -184,10 +184,14 @@
       <section class="mt-4 card">
         <h2 class="text-sm font-medium text-slate-900">Fortnox</h2>
         <p class="mt-1 text-sm text-slate-600">
-          Krävs för att fakturor faktiskt ska skapas/skickas i Fortnox (vid kassaköp med Faktura/Swish,
-          och när en order blir Utlämnad/Fakturerad). Uppgifterna hämtas från er Fortnox-integration
-          (Mina sidor → Integrationer → API i Fortnox). Fram tills de fylls i sparas bara
-          inställningarna, ingen faktura skickas.
+          Krävs för att fakturor faktiskt ska skapas/skickas i Fortnox (när en order blir
+          Utlämnad/Fakturerad, samt vid retur). Client ID/Secret skapas under
+          <em>Mina sidor → Integrationer → API i Fortnox</em> som en egen "app" — ange
+          adressen nedan som dess redirect URI innan du ansluter.
+        </p>
+        <p class="mt-2 text-xs text-slate-500">
+          Redirect URI att ange i Fortnox-appen:
+          <code id="fortnox-redirect-uri" class="rounded bg-slate-100 px-1 py-0.5"></code>
         </p>
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label class="block text-sm">
@@ -198,15 +202,16 @@
             <span class="text-slate-700">Client Secret</span>
             <input id="s-fortnox-client-secret" type="password" autocomplete="new-password" class="input mt-1" />
           </label>
-          <label class="block text-sm">
-            <span class="text-slate-700">Access Token</span>
-            <input id="s-fortnox-access-token" type="password" autocomplete="new-password" class="input mt-1" />
-          </label>
-          <label class="block text-sm">
-            <span class="text-slate-700">Refresh Token</span>
-            <input id="s-fortnox-refresh-token" type="password" autocomplete="new-password" class="input mt-1" />
-          </label>
         </div>
+        <p class="mt-3 text-xs text-slate-500">
+          Spara Client ID/Secret ovan (knappen "Spara" längst ner) innan du ansluter.
+        </p>
+        <div class="mt-3 flex flex-wrap items-center gap-3">
+          <span id="fortnox-status" class="text-sm font-medium"></span>
+          <a id="fortnox-connect-btn" href="/api/settings/fortnox/connect" class="btn">Anslut till Fortnox</a>
+          <button type="button" id="fortnox-disconnect-btn" class="btn-secondary hidden">Koppla från</button>
+        </div>
+        <p id="fortnox-message" class="mt-2 hidden text-sm"></p>
       </section>
 
       <!-- GitHub (buggrapporter) -->

@@ -2,8 +2,7 @@ import { Router } from "express";
 import * as stats from "./service.js";
 
 // Statistik: bästsäljande produkter/kategorier/kunder + marginalberäkning,
-// slår ihop kassaförsäljning (sale_lines) och order (order_lines). Alla
-// belopp ex moms, per PLAN.md.
+// baserat på order (order_lines). Alla belopp ex moms, per PLAN.md.
 const router = Router();
 
 function parseRange(req) {

@@ -8,9 +8,11 @@ butik och till företagskunder via offert/order.
 ## 1. Mål
 
 Ett system som täcker hela flödet: **kund → offert → order → plock/tryck →
-utlämning/leverans → fakturering**, plus en **kassa** för direktförsäljning
-i butik och **lagerhantering** med streckkodsskanning, för en katalog på
-100 000+ produktrader (kläder i många färger/storlekar).
+utlämning/leverans → fakturering**, plus **lagerhantering** med
+streckkodsskanning, för en katalog på 100 000+ produktrader (kläder i
+många färger/storlekar). (En separat kassa/POS för direktförsäljning i
+butik ingick i den ursprungliga kravspecen — se §2 punkt 4 — men byggdes
+bort igen, se Fas 4 i §6.)
 
 ## 2. Huvudmoduler (från kravet)
 
@@ -32,7 +34,9 @@ i butik och **lagerhantering** med streckkodsskanning, för en katalog på
      levererad/delvis levererad → fakturerad.
    - Utlämning kräver vald hämtberättigad kontakt (eller manuellt namn +
      signatur som fallback).
-4. **Kassa (POS)**
+4. **Kassa (POS)** — *byggdes, togs sedan bort igen som egen modul (se Fas 4
+   i §6); streckkodsskanningen lever kvar i order-editorn istället.*
+   Ursprungligt krav, kvar här som historik:
    - Skanna streckkod → lägg i kundvagn → betala (kort/kontant/Swish/
      mot faktura för företagskund).
    - Fungerar med vanliga USB/BT-handskannrar (agerar tangentbord, se
@@ -100,14 +104,14 @@ i butik och **lagerhantering** med streckkodsskanning, för en katalog på
 - **Retur/RMA-flöde** för både butik och företagsorder.
 - **Statistik/dashboard**: bästsäljande produkter, bästsäljande
   **kategorier** och **bästa kunder** (per period, i antal och i kronor),
-  offert-konverteringsgrad, lagervärde, försäljning per säljare/kassa.
-  Bygger på `sale_lines`/`order_lines` (och `products.category_id`,
-  `customers`) så listorna kan räknas fram direkt ur transaktionsdata.
+  offert-konverteringsgrad, lagervärde, försäljning per säljare.
+  Bygger på `order_lines` (och `products.category_id`, `customers`) så
+  listorna kan räknas fram direkt ur transaktionsdata.
 - **Marginalberäkning**: eftersom varje produkt har både `cost_price`
   (inköpspris) och försäljningspris kan systemet räkna ut marginal (kr
-  och %) per produkt, per offert/order och per kassarad – och därmed
-  även bruttovinst per kund eller period i statistiken ovan.
-- **Rollbaserad åtkomst**: kassapersonal ska t.ex. inte se inköpspriser;
+  och %) per produkt, per offert/orderrad – och därmed även bruttovinst
+  per kund eller period i statistiken ovan.
+- **Rollbaserad åtkomst**: säljpersonal ska t.ex. inte se inköpspriser;
   endast admin/inköp ser leverantörspriser och marginaler.
 - **PWA för lager/mottagning**: mobilanpassad sida som använder
   telefonens kamera som streckkodsläsare vid inventering/mottagning, som
@@ -137,10 +141,12 @@ Warehouse ──< StockLevel >── ProductVariant       (saldo per lagerplats)
 Warehouse ──< StockMovement                       (in/ut/justering/överföring)
 Warehouse ──< StockCount ──< StockCountLine        (inventering via skanning)
 Supplier ──< PurchaseOrder ──< PurchaseOrderLine   (inleverans via skanning)
-
-PosSession ──< Sale ──< SaleLine >── ProductVariant
-Sale ──< Payment (kontant/kort/Swish/faktura)
 ```
+
+(`PosSession`/`Sale`/`SaleLine`/`Payment` fanns här tidigare för kassan —
+borttagna ur modellen sedan kassan togs bort som modul, se Fas 4 i §6.
+Tabellerna finns fortfarande i databasen, oanvända, för att inte förlora
+ev. redan bokförd kassahistorik.)
 
 ## 5. Teknisk arkitektur
 
@@ -161,10 +167,10 @@ Samma grundstack som föregångaren (Node.js + MariaDB), moderniserad:
   en publik, skrivskyddad sida `/q/:token` med acceptera/avböj-knappar –
   ingen inloggning krävs för kunden.
 - **Streckkodsskanning**: vanliga USB/Bluetooth-skannrar fungerar som
-  tangentbord ("HID keyboard wedge") – kassan/lagervyn lyssnar på snabba
-  knapptryckningar som avslutas med Enter. Ingen speciell drivrutin
-  behövs. Kamerabaserad skanning (mobil/PWA) läggs till som komplement
-  senare (t.ex. med ett bibliotek som `@zxing/browser`).
+  tangentbord ("HID keyboard wedge") – order-editorn/lagervyn lyssnar på
+  snabba knapptryckningar som avslutas med Enter. Ingen speciell
+  drivrutin behövs. Kamerabaserad skanning (mobil/PWA) läggs till som
+  komplement senare (t.ex. med ett bibliotek som `@zxing/browser`).
 - **Bulkimport av produkter**: CSV/Excel-import samt plats för schemalagd
   import mot leverantörers produktflöden, kritiskt för att hantera
   100 000+ rader utan manuell inmatning.
@@ -186,14 +192,14 @@ proarb/
 
 | Fas | Status | Innehåll |
 |---|---|---|
-| 0 | ✅ Klar | Repo-scaffold, grundmoduler, kassa-skanning (uppslag) |
+| 0 | ✅ Klar | Repo-scaffold, grundmoduler, produktuppslag |
 | 1 | ✅ Klar | Produktkatalog: CRUD, varianter, kategorier/varumärken, CSV-bulkimport |
 | 2 | ✅ Klar | Offerter: skapa/skicka, PDF, publik länk, acceptera → konvertera till order |
 | 3 | ✅ Klar | Order: direktskapande, statusflöde, utlämning mot behörig kontakt |
-| 4 | ✅ Klar | Kassa: streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning |
+| 4 | ❌ Borttagen | Kassa (streckkodsskanning, delad betalning, PDF-kvitto, kassaavstämning) byggdes, men togs bort igen som egen modul – streckkodsskanning vid försäljning finns nu i order-editorn istället. `pos_sessions`/`sales`/`sale_lines`/`payments`-tabellerna ligger kvar i databasen, oanvända, för att inte förlora ev. redan bokförd historik; `invoices.sale_id` refererar dem fortfarande men är alltid NULL i praktiken. |
 | 5 | ✅ Klar | Lager: saldo per lagerplats, inleverans-skanning, **inventering** (skanna/manuellt, avvikelselista inkl. ej skannat, justera eller behåll, spårbart via `StockMovement`), lågt-lager-varningar, **inköpsförslag** per leverantör |
 | 6 | ✅ Klar | Tryck/produktionsflöde kopplat till order-/offertrader |
-| 7 | ✅ Klar* | Kundportal (länk utan inloggning), påminnelser (skickas ej via e-post ännu — se nedan). *Fortnox-integrationen (skicka klar order → skapa kundfaktura, synka status/fakturanummer tillbaka) väntar fortfarande på en testmiljö, se `fortnox.js`. |
+| 7 | ✅ Klar | Kundportal (länk utan inloggning), påminnelser (skickas ej via e-post ännu — se nedan). Fortnox-integrationen (order → kundfaktura, retur → kreditfaktura, "Fakturerad" → skicka från Fortnox) är byggd mot Fortnox' riktiga API (OAuth2 + `/3/invoices`/`/3/customers`), se `fortnox.js` — anslut under Inställningar, oprövat mot en verklig Fortnox-miljö. |
 | 8 | ✅ Klar* | Inloggning (e-post/lösenord, sessions-cookie) och rollbaserad behörighet (ADMIN/SALES/WAREHOUSE/POS) på alla API-rutter. *Auditlogg, GDPR-verktyg (export/radering) och prestandaoptimering för stora kataloger är inte byggt — se `README.md`. |
 
 **Tillkommande önskemål** (inte bundna till en specifik fas ovan):
@@ -203,15 +209,13 @@ proarb/
   och publik offertsida, samt på/av + intervall för e-postpåminnelser
   (själva utskicket kräver fortfarande en SMTP-leverantör, ej kopplad).
 - ✅ Statistik: bästsäljande produkter/kategorier/kunder + marginal,
-  slår ihop kassa- och orderförsäljning.
-- ✅ Marginal syns nu i kassan, offert-editorn och order-editorn (per
-  rad + totalsumma), baserat på produktens `cost_price`.
-- ✅ Kassans betalmetoder Faktura/Swish skapar automatiskt en
-  Fortnox-fakturarad (kundfaktura respektive kontantfaktura, se
-  `invoices`-tabellen). Faktura kräver att en kund är vald i kassan.
-  Det faktiska Fortnox-API-anropet är en stub (`fortnox.js`) tills en
-  testmiljö/inloggning finns – kopplas in i Fas 7 utan att övrig logik
-  behöver ändras.
+  baserat på orderförsäljning (kassan är borttagen, se Fas 4).
+- ✅ Marginal syns nu i offert-editorn och order-editorn (per rad +
+  totalsumma), baserat på produktens `cost_price`.
+- ✅ Order → Utlämnad skapar automatiskt en kundfaktura i Fortnox,
+  "Fakturerad" skickar den från Fortnox till kunden, och en retur skapar
+  en kreditfaktura – se `invoices`-tabellen och `fortnox.js`. Anslutning
+  sker under Inställningar (OAuth2, "Anslut till Fortnox").
 - ✅ Inköpsförslag: egen flik i Lager, uppdelad på leverantör, med både
   orderrader som saknar lagertäckning (eller är markerade "beställ ändå"
   via `order_lines.sourcing`) och produkter under sitt min-saldo. Går att
@@ -220,10 +224,10 @@ proarb/
 ## 7. Prisregel: allt hanteras exklusive moms
 
 Alla priser som systemet räknar med internt – produktens `base_price`,
-`cost_price`, rader på offert/order/kassa, prislistor – anges och lagras
+`cost_price`, rader på offert/order, prislistor – anges och lagras
 **exklusive moms**. Momssatsen (`tax_rate_percent`, default 25 %) ligger
 separat per produkt och läggs bara på när en summa ska visas för kunden
-(offert-PDF, orderbekräftelse, kassakvitto, totalsumma i kassan). Detta
+(offert-PDF, orderbekräftelse, totalsumma i order-editorn). Detta
 gör att marginalberäkning, statistik och rapporter alltid kan jämföras
 rakt av utan att först behöva räkna bort moms, och matchar hur
 bokföring/Fortnox-export förväntas fungera.

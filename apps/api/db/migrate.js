@@ -112,6 +112,9 @@ export async function run() {
     "ALTER TABLE customers ADD COLUMN invoice_email VARCHAR(255) NULL AFTER email",
     "ALTER TABLE app_settings ADD COLUMN github_issues_token VARCHAR(255) NULL",
     "ALTER TABLE app_settings ADD COLUMN github_issues_repo VARCHAR(255) NULL",
+    "ALTER TABLE customers ADD COLUMN fortnox_customer_number VARCHAR(20) NULL",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_token_expires_at DATETIME NULL",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_oauth_state VARCHAR(64) NULL",
   ];
   for (const statement of alters) {
     try {
