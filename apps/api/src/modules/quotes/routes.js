@@ -12,10 +12,11 @@ const router = Router();
 
 router.get("/", async (req, res, next) => {
   try {
-    const { search = "", status = "", page = "1", pageSize = "25" } = req.query;
+    const { search = "", status = "", customerId = "", page = "1", pageSize = "25" } = req.query;
     const result = await quotes.listQuotes({
       search: String(search),
       status: String(status),
+      customerId: String(customerId),
       page: Number(page) || 1,
       pageSize: Number(pageSize) || 25,
     });

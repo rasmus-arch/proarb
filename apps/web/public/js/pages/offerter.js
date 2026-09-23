@@ -58,6 +58,14 @@ function renderRows(quotes) {
 
 const PAGE_SIZE = 25;
 let currentPage = 1;
+const customerId = new URLSearchParams(location.search).get("customerId") || "";
+
+if (customerId) {
+  api.get(`/customers/${customerId}`).then((customer) => {
+    document.getElementById("customer-filter-name").textContent = `Kund: ${customer.name}`;
+    document.getElementById("customer-filter").classList.remove("hidden");
+  });
+}
 
 let searchTimer;
 async function loadQuotes(page = currentPage) {
@@ -65,6 +73,7 @@ async function loadQuotes(page = currentPage) {
   const params = new URLSearchParams({
     search: searchEl.value,
     status: statusEl.value,
+    customerId,
     page: currentPage,
     pageSize: PAGE_SIZE,
   });

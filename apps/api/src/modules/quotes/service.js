@@ -50,12 +50,14 @@ function lineMargin(line) {
   return line.line_total - Number(line.quantity) * Number(line.cost_price);
 }
 
-export async function listQuotes({ search = "", status = "", page = 1, pageSize = 25 }) {
+export async function listQuotes({ search = "", status = "", customerId = "", page = 1, pageSize = 25 }) {
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
   const statusClause = status ? "AND q.status = ?" : "";
-  const params = status ? [like, like, status, pageSize, offset] : [like, like, pageSize, offset];
-  const countParams = status ? [like, like, status] : [like, like];
+  const customerClause = customerId ? "AND q.customer_id = ?" : "";
+  const extra = [status ? status : null, customerId ? Number(customerId) : null].filter((v) => v !== null);
+  const params = [like, like, ...extra, pageSize, offset];
+  const countParams = [like, like, ...extra];
 
   const [rows] = await pool.query(
     `SELECT q.id, q.quote_number, q.status, q.valid_until, q.created_at, q.sent_at,
@@ -67,7 +69,7 @@ export async function listQuotes({ search = "", status = "", page = 1, pageSize 
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
      LEFT JOIN quote_lines ql ON ql.quote_id = q.id
-     WHERE (q.quote_number LIKE ? OR c.name LIKE ?) ${statusClause}
+     WHERE (q.quote_number LIKE ? OR c.name LIKE ?) ${statusClause} ${customerClause}
      GROUP BY q.id
      ORDER BY q.created_at DESC
      LIMIT ? OFFSET ?`,
@@ -76,7 +78,7 @@ export async function listQuotes({ search = "", status = "", page = 1, pageSize 
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM quotes q JOIN customers c ON c.id = q.customer_id
-     WHERE (q.quote_number LIKE ? OR c.name LIKE ?) ${statusClause}`,
+     WHERE (q.quote_number LIKE ? OR c.name LIKE ?) ${statusClause} ${customerClause}`,
     countParams
   );
 

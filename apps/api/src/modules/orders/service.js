@@ -83,12 +83,14 @@ const ALLOWED_TRANSITIONS = {
 // small-shop staff often skip the intermediate statuses.
 const PICKUP_BLOCKED_STATUSES = ["DELIVERED", "CANCELLED", "INVOICED"];
 
-export async function listOrders({ search = "", status = "", page = 1, pageSize = 25 }) {
+export async function listOrders({ search = "", status = "", customerId = "", page = 1, pageSize = 25 }) {
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
   const statusClause = status ? "AND o.status = ?" : "";
-  const params = status ? [like, like, status, pageSize, offset] : [like, like, pageSize, offset];
-  const countParams = status ? [like, like, status] : [like, like];
+  const customerClause = customerId ? "AND o.customer_id = ?" : "";
+  const extra = [status ? status : null, customerId ? Number(customerId) : null].filter((v) => v !== null);
+  const params = [like, like, ...extra, pageSize, offset];
+  const countParams = [like, like, ...extra];
 
   const [rows] = await pool.query(
     `SELECT o.id, o.order_number, o.status, o.delivery_method, o.created_at,
@@ -100,7 +102,7 @@ export async function listOrders({ search = "", status = "", page = 1, pageSize 
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN order_lines ol ON ol.order_id = o.id
-     WHERE (o.order_number LIKE ? OR c.name LIKE ?) ${statusClause}
+     WHERE (o.order_number LIKE ? OR c.name LIKE ?) ${statusClause} ${customerClause}
      GROUP BY o.id
      ORDER BY o.created_at DESC
      LIMIT ? OFFSET ?`,
@@ -109,7 +111,7 @@ export async function listOrders({ search = "", status = "", page = 1, pageSize 
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM orders o JOIN customers c ON c.id = o.customer_id
-     WHERE (o.order_number LIKE ? OR c.name LIKE ?) ${statusClause}`,
+     WHERE (o.order_number LIKE ? OR c.name LIKE ?) ${statusClause} ${customerClause}`,
     countParams
   );
 

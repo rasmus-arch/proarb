@@ -14,6 +14,11 @@ const el = {
   statAllTime: document.getElementById("stat-all-time"),
   statLastOrder: document.getElementById("stat-last-order"),
   statPendingQuotes: document.getElementById("stat-pending-quotes"),
+  historySection: document.getElementById("history-section"),
+  quotesList: document.getElementById("quotes-list"),
+  quotesEmpty: document.getElementById("quotes-empty"),
+  ordersList: document.getElementById("orders-list"),
+  ordersEmpty: document.getElementById("orders-empty"),
   templateRows: document.getElementById("template-rows"),
   templatesEmpty: document.getElementById("templates-empty"),
   name: document.getElementById("f-name"),
@@ -169,6 +174,68 @@ async function loadCustomer() {
   renderEmployees(employees);
 
   await loadTemplates();
+  await loadHistory();
+}
+
+const QUOTE_STATUS_LABELS = {
+  DRAFT: "Utkast",
+  SENT: "Skickad",
+  VIEWED: "Visad",
+  ACCEPTED: "Accepterad",
+  DECLINED: "Avböjd",
+  EXPIRED: "Utgången",
+  CONVERTED: "Omvandlad till order",
+};
+
+const ORDER_STATUS_LABELS = {
+  NEW: "Order",
+  READY_FOR_PICKUP: "Redo för utlämning",
+  DELIVERED: "Utlämnad",
+  INVOICED: "Fakturerad",
+  CANCELLED: "Avbruten",
+};
+
+async function loadHistory() {
+  const [{ rows: quoteRows }, { rows: orderRows }] = await Promise.all([
+    api.get(`/quotes?customerId=${customerId}&pageSize=10`),
+    api.get(`/orders?customerId=${customerId}&pageSize=10`),
+  ]);
+
+  el.historySection.classList.remove("hidden");
+  document.getElementById("quotes-all-link").href = `/offerter.html?customerId=${customerId}`;
+  document.getElementById("orders-all-link").href = `/ordrar.html?customerId=${customerId}`;
+
+  el.quotesEmpty.classList.toggle("hidden", quoteRows.length > 0);
+  el.quotesList.innerHTML = quoteRows
+    .map(
+      (q) => `
+      <li>
+        <a href="/offert-editor.html?id=${q.id}" class="flex items-center justify-between py-2 text-sm hover:text-blue-700">
+          <span>
+            <span class="font-medium text-slate-900">${escapeHtml(q.quote_number)}</span>
+            <span class="ml-2 text-xs text-slate-500">${new Date(q.created_at).toLocaleDateString("sv-SE")}</span>
+          </span>
+          <span class="text-xs text-slate-500">${QUOTE_STATUS_LABELS[q.status] ?? q.status}</span>
+        </a>
+      </li>`
+    )
+    .join("");
+
+  el.ordersEmpty.classList.toggle("hidden", orderRows.length > 0);
+  el.ordersList.innerHTML = orderRows
+    .map(
+      (o) => `
+      <li>
+        <a href="/order-editor.html?id=${o.id}" class="flex items-center justify-between py-2 text-sm hover:text-blue-700">
+          <span>
+            <span class="font-medium text-slate-900">${escapeHtml(o.order_number)}</span>
+            <span class="ml-2 text-xs text-slate-500">${new Date(o.created_at).toLocaleDateString("sv-SE")}</span>
+          </span>
+          <span class="text-xs text-slate-500">${ORDER_STATUS_LABELS[o.status] ?? o.status}</span>
+        </a>
+      </li>`
+    )
+    .join("");
 }
 
 async function loadTemplates() {
