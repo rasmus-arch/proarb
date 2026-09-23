@@ -84,6 +84,13 @@ CREATE TABLE IF NOT EXISTS app_settings (
   fortnox_client_secret VARCHAR(255) NULL,
   fortnox_access_token  VARCHAR(500) NULL,
   fortnox_refresh_token VARCHAR(500) NULL,
+  -- Buggrapporter -> GitHub Issues (se bug-reports/github.js). Samma
+  -- självbetjänings-tanke som SMTP/Fortnox ovan — ett repo i formen
+  -- "ägare/repo" och en personal access token (repo-scope) med rättighet
+  -- att skapa issues där, ifyllt i Inställningar istället för .env så det
+  -- fungerar direkt utan omdeploy.
+  github_issues_token   VARCHAR(255) NULL,
+  github_issues_repo    VARCHAR(255) NULL,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

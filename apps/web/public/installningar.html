@@ -209,6 +209,27 @@
         </div>
       </section>
 
+      <!-- GitHub (buggrapporter) -->
+      <section class="mt-4 card">
+        <h2 class="text-sm font-medium text-slate-900">Buggrapporter (GitHub)</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Krävs för att "Rapportera problem" faktiskt ska skapa ett GitHub-ärende. Skapa en
+          personal access token med rättighet att skapa issues i repot (GitHub → Settings →
+          Developer settings → Personal access tokens). Fram tills det är ifyllt sparas
+          rapporten bara internt i ProArb.
+        </p>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Repo (ägare/repo)</span>
+            <input id="s-github-repo" class="input mt-1" placeholder="t.ex. rasmus-arch/proarb" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Personal access token</span>
+            <input id="s-github-token" type="password" autocomplete="new-password" class="input mt-1" />
+          </label>
+        </div>
+      </section>
+
       <p id="save-error" class="mt-3 hidden text-sm text-red-600"></p>
       <p id="save-success" class="mt-3 hidden text-sm text-green-700"></p>
       <div class="mt-4 flex justify-end">

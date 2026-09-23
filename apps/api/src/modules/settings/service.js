@@ -45,6 +45,8 @@ export async function updateSettings(data) {
     fortnox_client_secret: data.fortnoxClientSecret,
     fortnox_access_token: data.fortnoxAccessToken,
     fortnox_refresh_token: data.fortnoxRefreshToken,
+    github_issues_token: data.githubIssuesToken,
+    github_issues_repo: data.githubIssuesRepo,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

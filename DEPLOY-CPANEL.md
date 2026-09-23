@@ -85,26 +85,20 @@ SQL-flik manuellt istället, oavsett miljövariabeln.
 
 **Valfritt — buggrapportering till GitHub**: personalen hos kunden kan
 rapportera problem direkt i appen (knappen "Rapportera problem" i
-menyraden). Rapporterna sparas alltid i databasen, men för att de även
-ska dyka upp som issues i det här GitHub-repot behöver ni lägga till:
-
-| Variabel             | Värde                                                        |
-|----------------------|---------------------------------------------------------------|
-| `GITHUB_ISSUES_TOKEN` | ett fine-grained personal access token (se nedan)             |
-| `GITHUB_ISSUES_REPO`  | `ägare/repo`, t.ex. `rasmus-arch/proarb`                       |
-| `TENANT_NAME`         | valfritt — vilken kund den här driftsatta instansen tillhör    |
+menyraden). Rapporterna sparas alltid i databasen, men för att de även ska
+dyka upp som issues i det här GitHub-repot behöver ni fylla i **Repo** och
+**Personal access token** under Inställningar → Buggrapporter (GitHub) i
+appen — samma självbetjänings-princip som SMTP/Fortnox nedan, ingen
+miljövariabel eller omdeploy krävs.
 
 Skapa token på
 [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new):
 välj *Only select repositories* → detta repo, och under *Repository
-permissions* sätt **Issues: Read and write** (inget annat behövs). Sätt
-`TENANT_NAME` till kundens namn (t.ex. `Profil & Arbetskläder AB`) om ni
-säljer systemet till flera kunder mot samma repo — då stämplas det som en
-GitHub-label på issuet så rapporterna går att skilja åt. Utan dessa
-miljövariabler fungerar knappen fortfarande (rapporten sparas lokalt i
-`bug_reports`-tabellen), den synkas bara inte till GitHub.
-
-Klicka *Save*.
+permissions* sätt **Issues: Read and write** (inget annat behövs). Utan
+detta fungerar knappen fortfarande (rapporten sparas lokalt i
+`bug_reports`-tabellen), den synkas bara inte till GitHub. (`TENANT_NAME`
+är en separat, valfri miljövariabel — bara relevant om samma repo tar emot
+rapporter från fler än en driftsättning; se `.env.example`.)
 
 ## 5. Installera + seeda databasen
 

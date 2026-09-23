@@ -110,6 +110,8 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN next_order_number INT NOT NULL DEFAULT 1",
     "ALTER TABLE app_settings ADD COLUMN next_quote_number INT NOT NULL DEFAULT 1",
     "ALTER TABLE customers ADD COLUMN invoice_email VARCHAR(255) NULL AFTER email",
+    "ALTER TABLE app_settings ADD COLUMN github_issues_token VARCHAR(255) NULL",
+    "ALTER TABLE app_settings ADD COLUMN github_issues_repo VARCHAR(255) NULL",
   ];
   for (const statement of alters) {
     try {

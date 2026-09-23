@@ -27,6 +27,8 @@ const el = {
   fortnoxClientSecret: document.getElementById("s-fortnox-client-secret"),
   fortnoxAccessToken: document.getElementById("s-fortnox-access-token"),
   fortnoxRefreshToken: document.getElementById("s-fortnox-refresh-token"),
+  githubRepo: document.getElementById("s-github-repo"),
+  githubToken: document.getElementById("s-github-token"),
   logoPreview: document.getElementById("s-logo-preview"),
   logoForm: document.getElementById("logo-form"),
   logoFile: document.getElementById("s-logo-file"),
@@ -70,6 +72,8 @@ function applySettings(settings) {
   el.fortnoxClientSecret.value = settings.fortnox_client_secret ?? "";
   el.fortnoxAccessToken.value = settings.fortnox_access_token ?? "";
   el.fortnoxRefreshToken.value = settings.fortnox_refresh_token ?? "";
+  el.githubRepo.value = settings.github_issues_repo ?? "";
+  el.githubToken.value = settings.github_issues_token ?? "";
 
   if (settings.seller_logo_path) {
     el.logoPreview.src = `/uploads/${settings.seller_logo_path}`;
@@ -114,6 +118,8 @@ el.saveBtn.addEventListener("click", async () => {
       fortnoxClientSecret: el.fortnoxClientSecret.value || null,
       fortnoxAccessToken: el.fortnoxAccessToken.value || null,
       fortnoxRefreshToken: el.fortnoxRefreshToken.value || null,
+      githubIssuesRepo: el.githubRepo.value || null,
+      githubIssuesToken: el.githubToken.value || null,
     });
     el.saveSuccess.textContent = "Sparat.";
     el.saveSuccess.classList.remove("hidden");

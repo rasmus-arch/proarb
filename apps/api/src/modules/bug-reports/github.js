@@ -1,22 +1,20 @@
-// GitHub issue sync — same pattern as integrations/fortnox.js: works for
-// real once GITHUB_ISSUES_TOKEN/GITHUB_ISSUES_REPO are set (see
-// .env.example), otherwise every report is still saved locally (see
-// service.js) and simply marked NOT_CONFIGURED so nothing is lost while
-// waiting for a token.
+// GitHub issue sync — same self-service pattern as integrations/fortnox.js
+// and integrations/email.js: reads its credentials from app_settings
+// (github_issues_token/github_issues_repo, filled in under Inställningar)
+// instead of env vars, so staff can turn this on without a redeploy. Every
+// report is still saved locally first (see service.js) and simply marked
+// NOT_CONFIGURED so nothing is lost while waiting for a token.
 //
-// This system is sold to more than one customer against the same repo, so
-// TENANT_NAME (set per deployment) is stamped on the issue and used as a
-// GitHub label — that's how the developer tells reports from different
-// customers apart in one shared issue tracker.
-
-const GITHUB_ISSUES_TOKEN = process.env.GITHUB_ISSUES_TOKEN;
-const GITHUB_ISSUES_REPO = process.env.GITHUB_ISSUES_REPO; // "owner/repo"
+// TENANT_NAME (optional env var, unrelated to the settings above) stamps a
+// label on the issue — only relevant if this same repo ever receives
+// reports from more than one deployment; harmless to leave unset otherwise.
 const TENANT_NAME = process.env.TENANT_NAME || null;
 
-export const isGithubIssuesConfigured = () => Boolean(GITHUB_ISSUES_TOKEN && GITHUB_ISSUES_REPO);
+export const isGithubIssuesConfigured = (settings) =>
+  Boolean(settings?.github_issues_token && settings?.github_issues_repo);
 
-export async function createGithubIssue(report) {
-  if (!isGithubIssuesConfigured()) {
+export async function createGithubIssue(report, settings) {
+  if (!isGithubIssuesConfigured(settings)) {
     return { ok: false, reason: "NOT_CONFIGURED", note: "GitHub-integrationen är inte konfigurerad." };
   }
 
@@ -38,10 +36,10 @@ export async function createGithubIssue(report) {
 
   let res;
   try {
-    res = await fetch(`https://api.github.com/repos/${GITHUB_ISSUES_REPO}/issues`, {
+    res = await fetch(`https://api.github.com/repos/${settings.github_issues_repo}/issues`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GITHUB_ISSUES_TOKEN}`,
+        Authorization: `Bearer ${settings.github_issues_token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "Content-Type": "application/json",

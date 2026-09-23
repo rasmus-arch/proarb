@@ -1,5 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { createGithubIssue } from "./github.js";
+import { getSettings } from "../settings/service.js";
 
 export async function createBugReport(data, user) {
   const title = (data.title ?? "").trim();
@@ -19,15 +20,19 @@ export async function createBugReport(data, user) {
   // report is already safely stored above, so a GitHub outage (or it not
   // being configured yet) never loses it — just leaves it PENDING/FAILED
   // for someone to retry or read straight from the database.
-  const sync = await createGithubIssue({
-    title,
-    description,
-    severity,
-    pageUrl: data.pageUrl,
-    userAgent: data.userAgent,
-    reporterName: user.name,
-    reporterEmail: user.email,
-  });
+  const settings = await getSettings();
+  const sync = await createGithubIssue(
+    {
+      title,
+      description,
+      severity,
+      pageUrl: data.pageUrl,
+      userAgent: data.userAgent,
+      reporterName: user.name,
+      reporterEmail: user.email,
+    },
+    settings
+  );
 
   if (sync.ok) {
     await pool.query(
