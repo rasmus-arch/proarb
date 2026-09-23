@@ -1,7 +1,11 @@
+import fs from "node:fs";
+import path from "node:path";
 import PDFDocument from "pdfkit";
+import { uploadsRoot } from "../../lib/uploads.js";
 
 const FALLBACK_SELLER_NAME = "Mitt företag";
 const FALLBACK_BRAND_COLOR = "#0f172a";
+const TABLE_RIGHT_EDGE = 535;
 
 function money(n) {
   return `${Number(n).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
@@ -16,28 +20,35 @@ const COLS = [
 ];
 
 function drawTableHeader(doc, y, brandColor) {
+  doc.rect(40, y - 4, TABLE_RIGHT_EDGE - 40, 18).fill("#f8fafc");
   doc.font("Helvetica-Bold").fontSize(9).fillColor(brandColor);
   for (const col of COLS) {
     doc.text(col.label, col.x, y, { width: col.width, align: col.align ?? "left" });
   }
-  doc
-    .moveTo(40, y + 14)
-    .lineTo(535, y + 14)
-    .strokeColor("#cbd5e1")
-    .stroke();
+  doc.moveTo(40, y + 14).lineTo(TABLE_RIGHT_EDGE, y + 14).strokeColor("#cbd5e1").stroke();
   doc.font("Helvetica").fillColor("#0f172a");
 }
 
-// Renders a quote as a PDF and returns it as a Buffer. `publicUrl` (the
-// customer-facing accept/decline link) is printed on the document when
-// given — the PDF itself is static, so it can't have a clickable button,
-// but the link text lets a customer act on a printed/emailed copy too.
-// `settings` (from GET /api/settings, see Inställningar) controls the
-// seller info, accent color and footer note — falls back sensibly if
-// omitted.
+// Renders a quote as a PDF and returns it as a Buffer. Same visual language
+// as ordersedeln (orders/pdf.js) — stor logga uppe till vänster, kontakt-
+// uppgifter under den, titel/metadata högerställt, samma tabellhuvud-stil
+// med radskiljare — så de två dokumenten känns som en och samma produkt.
+// `publicUrl` (the customer-facing accept/decline link) is printed on the
+// document when given — the PDF itself is static, so it can't have a
+// clickable button, but the link text lets a customer act on a printed/
+// emailed copy too. `settings` controls seller info/accent color/footer.
 export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
   const sellerName = settings?.seller_name || FALLBACK_SELLER_NAME;
   const brandColor = settings?.brand_color || FALLBACK_BRAND_COLOR;
+
+  let logoBuffer = null;
+  if (settings?.seller_logo_path) {
+    try {
+      logoBuffer = fs.readFileSync(path.join(uploadsRoot, settings.seller_logo_path));
+    } catch {
+      // Saknad/oläsbar fil ska aldrig stoppa PDF-genereringen.
+    }
+  }
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -46,58 +57,87 @@ export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text("OFFERT", 40, 40);
-    doc.font("Helvetica").fontSize(10).fillColor("#475569");
-    doc.text(sellerName, 40, 65);
-    if (settings?.seller_org_number) doc.text(`Org.nr: ${settings.seller_org_number}`, 40, 78);
-    const sellerAddressLine = [settings?.seller_postal_code, settings?.seller_city].filter(Boolean).join(" ");
-    if (settings?.seller_address || sellerAddressLine) {
-      doc.text([settings?.seller_address, sellerAddressLine].filter(Boolean).join(", "), 40, 91);
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 40, 36, { fit: [180, 54], align: "left", valign: "top" });
+      } catch {
+        doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text(sellerName, 40, 50);
+      }
+    } else {
+      doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text(sellerName, 40, 50);
     }
 
+    const contactAddressLine = [
+      settings?.seller_address,
+      [settings?.seller_postal_code, settings?.seller_city].filter(Boolean).join(" "),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const contactDetailsLine = [settings?.seller_phone, settings?.seller_email].filter(Boolean).join(" · ");
+    const orgLine = settings?.seller_org_number ? `Org.nr: ${settings.seller_org_number}` : null;
+    if (contactAddressLine || contactDetailsLine || orgLine) {
+      doc.font("Helvetica").fontSize(8).fillColor("#475569");
+      let contactY = logoBuffer ? 94 : 76;
+      if (contactAddressLine) {
+        doc.text(contactAddressLine, 40, contactY, { width: 260 });
+        contactY += 11;
+      }
+      if (orgLine) {
+        doc.text(orgLine, 40, contactY, { width: 260 });
+        contactY += 11;
+      }
+      if (contactDetailsLine) doc.text(contactDetailsLine, 40, contactY, { width: 260 });
+    }
+
+    doc.font("Helvetica-Bold").fontSize(18).fillColor(brandColor).text("OFFERT", 320, 40, {
+      width: 215,
+      align: "right",
+    });
     doc.fontSize(10).fillColor("#0f172a");
-    doc.text(`Offertnr: ${quote.quote_number}`, 400, 40, { width: 135, align: "right" });
-    doc.text(`Datum: ${new Date(quote.created_at).toLocaleDateString("sv-SE")}`, 400, 55, {
-      width: 135,
+    doc.text(`Offertnr: ${quote.quote_number}`, 320, 64, { width: 215, align: "right" });
+    doc.text(`Datum: ${new Date(quote.created_at).toLocaleDateString("sv-SE")}`, 320, 78, {
+      width: 215,
       align: "right",
     });
     if (quote.valid_until) {
-      doc.text(`Giltig till: ${new Date(quote.valid_until).toLocaleDateString("sv-SE")}`, 400, 70, {
-        width: 135,
+      doc.text(`Giltig till: ${new Date(quote.valid_until).toLocaleDateString("sv-SE")}`, 320, 92, {
+        width: 215,
         align: "right",
       });
     }
 
-    let y = 130;
-    doc.font("Helvetica-Bold").fontSize(11).fillColor(brandColor).text("Kund", 40, y);
-    doc.fillColor("#0f172a");
-    y += 16;
-    doc.font("Helvetica").fontSize(10);
+    let y = 128;
+    doc.moveTo(40, y).lineTo(TABLE_RIGHT_EDGE, y).strokeColor("#e2e8f0").stroke();
+    y += 12;
+
+    doc.font("Helvetica-Bold").fontSize(9).fillColor(brandColor).text("Kund", 40, y);
+    doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+    y += 14;
     doc.text(quote.customer_name, 40, y);
     y += 13;
     if (quote.customer_org_number) {
       doc.text(`Org.nr: ${quote.customer_org_number}`, 40, y);
       y += 13;
     }
-    if (quote.customer_address) {
-      doc.text(quote.customer_address, 40, y);
+    const addressLine = [quote.customer_postal_code, quote.customer_city].filter(Boolean).join(" ");
+    if (quote.customer_address || addressLine) {
+      doc.text([quote.customer_address, addressLine].filter(Boolean).join(", "), 40, y, { width: 300 });
       y += 13;
     }
-    if (quote.customer_postal_code || quote.customer_city) {
-      doc.text(`${quote.customer_postal_code ?? ""} ${quote.customer_city ?? ""}`.trim(), 40, y);
-      y += 13;
-    }
+
     if (quote.reference_name) {
-      doc.text(`Referens: ${quote.reference_name}`, 40, y);
-      y += 13;
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(brandColor).text("Referens", 320, 140);
+      doc.font("Helvetica").fontSize(10).fillColor("#0f172a").text(quote.reference_name, 320, 154, { width: 175 });
     }
 
-    y += 15;
-    drawTableHeader(doc, y, brandColor);
-    y += 22;
+    y += 16;
+    y = Math.max(y, 175);
 
-    doc.fontSize(9);
-    for (const line of quote.lines) {
+    drawTableHeader(doc, y, brandColor);
+    y += 24;
+
+    doc.font("Helvetica").fontSize(9).fillColor("#0f172a");
+    quote.lines.forEach((line, i) => {
       const description = [
         line.product_name,
         [line.color, line.size].filter(Boolean).join(" / "),
@@ -107,7 +147,7 @@ export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
         .filter(Boolean)
         .join("\n");
 
-      const rowHeight = Math.max(14, doc.heightOfString(description, { width: COLS[0].width }) + 4);
+      const rowHeight = Math.max(14, doc.heightOfString(description, { width: COLS[0].width }) + 10);
 
       doc.text(description, COLS[0].x, y, { width: COLS[0].width });
       doc.text(String(line.quantity), COLS[1].x, y, { width: COLS[1].width, align: "right" });
@@ -116,17 +156,22 @@ export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
       doc.text(money(line.line_total), COLS[4].x, y, { width: COLS[4].width, align: "right" });
 
       y += rowHeight;
-      if (y > 720) {
+      if (i < quote.lines.length - 1) {
+        doc.moveTo(40, y - 5).lineTo(TABLE_RIGHT_EDGE, y - 5).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+      }
+      if (y > 700) {
         doc.addPage();
         y = 40;
+        drawTableHeader(doc, y, brandColor);
+        y += 24;
       }
-    }
+    });
 
     y += 10;
-    doc.moveTo(320, y).lineTo(535, y).strokeColor("#cbd5e1").stroke();
+    doc.moveTo(320, y).lineTo(TABLE_RIGHT_EDGE, y).strokeColor("#cbd5e1").stroke();
     y += 8;
 
-    doc.font("Helvetica").fontSize(10);
+    doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
     doc.text("Delsumma ex moms", 320, y, { width: 135 });
     doc.text(money(quote.totals.subtotal_ex_vat), 440, y, { width: 95, align: "right" });
     y += 15;
