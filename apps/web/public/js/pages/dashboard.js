@@ -18,7 +18,6 @@ const inactiveSection = document.getElementById("inactive-customers-section");
 const inactiveList = document.getElementById("inactive-customers-list");
 const lowStockSection = document.getElementById("low-stock-section");
 const lowStockList = document.getElementById("low-stock-list");
-const greetingEyebrow = document.getElementById("greeting-eyebrow");
 const todayDate = document.getElementById("today-date");
 const kpiRevenue = document.getElementById("kpi-revenue");
 const kpiQuotes = document.getElementById("kpi-quotes");
@@ -29,24 +28,12 @@ function money(value) {
   return `${Number(value).toLocaleString("sv-SE", { maximumFractionDigits: 0 })} kr`;
 }
 
-// Tidpunktsbaserad hälsning + dagens datum — små detaljer som gör
-// startsidan mindre av ett rent formulär, samma tanke som märkesfärgen
-// i kundportalen (portal.js) fast här mot en inloggad medarbetare istället
-// för en kund.
-async function loadGreeting() {
-  const hour = new Date().getHours();
-  const greeting = hour < 10 ? "God morgon" : hour < 17 ? "Hej" : "God kväll";
-  greetingEyebrow.textContent = greeting;
+function loadGreeting() {
   todayDate.textContent = new Date().toLocaleDateString("sv-SE", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
-
-  const settings = await api.get("/settings/branding").catch(() => null);
-  if (settings?.brand_color) {
-    greetingEyebrow.style.color = settings.brand_color;
-  }
 }
 
 // --- Försäljning senaste 90 dagarna (linjediagram) -------------------------

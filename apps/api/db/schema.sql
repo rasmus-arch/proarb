@@ -482,9 +482,10 @@ CREATE TABLE IF NOT EXISTS orders (
   notes                TEXT NULL,
   -- QR-koden på ordersedelns PDF (se orders/pdf.js). Unguessable token,
   -- samma mönster som customers.portal_token — scanning den (ingen
-  -- inloggning) kan bara flytta ordern NEW -> READY_FOR_PICKUP, aldrig
-  -- något annat. Slutar fungera (redirect till proarb.se) så fort ordern
-  -- lämnat NEW, oavsett om det skedde via scan eller manuellt i appen.
+  -- inloggning) visar en minimal sida med bara statusknappar och kan flytta
+  -- ordern NEW -> READY_FOR_PICKUP -> DELIVERED (se orders/qr-public.js).
+  -- Slutar fungera (redirect till proarb.se) så fort ordern är DELIVERED/
+  -- INVOICED/CANCELLED, oavsett om det skedde via scan eller i appen.
   pickup_qr_token      VARCHAR(64) NULL UNIQUE,
   created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

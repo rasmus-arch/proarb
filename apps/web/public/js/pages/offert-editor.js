@@ -639,6 +639,11 @@ function renderActionButtons(quote) {
     buttons.push(`<a href="/api/quotes/${quote.id}/pdf" target="_blank" class="btn-secondary">Visa PDF</a>`);
     buttons.push(`<a href="/q/${quote.public_token}" target="_blank" class="btn-secondary">Öppna offentlig länk</a>`);
   }
+  if (["SENT", "VIEWED"].includes(quote.status)) {
+    buttons.push(
+      `<button type="button" id="accept-btn" class="btn-secondary">Markera som accepterad (t.ex. telefon)</button>`
+    );
+  }
   if (quote.status === "ACCEPTED") {
     buttons.push(`<button type="button" id="convert-btn" class="btn">Konvertera till order</button>`);
   }
@@ -655,6 +660,15 @@ function renderActionButtons(quote) {
       if (result.notification) {
         sessionStorage.setItem("quote-email-notification", JSON.stringify(result.notification));
       }
+      location.reload();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  document.getElementById("accept-btn")?.addEventListener("click", async () => {
+    if (!confirm("Markera offerten som accepterad? Använd det här när kunden accepterar muntligt, t.ex. via telefon.")) return;
+    try {
+      await api.post(`/quotes/${quote.id}/accept`, {});
       location.reload();
     } catch (err) {
       alert(err.message);

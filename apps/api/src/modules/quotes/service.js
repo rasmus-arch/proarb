@@ -402,6 +402,22 @@ export async function respondToQuote(token, decision, meta) {
   return getQuote(quote.id);
 }
 
+// Staff-side equivalent of the customer's public accept link — for when a
+// customer calls or emails and accepts verbally/informally instead of
+// clicking through /q/:token themselves. Same end state (status ACCEPTED,
+// responded_at set) so "Konvertera till order" lights up the same way;
+// the event's meta records who marked it, so the audit trail still shows
+// this wasn't a digital accept from the customer.
+export async function markQuoteAccepted(id, byUserName) {
+  const quote = await getQuote(id);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+  if (!["SENT", "VIEWED"].includes(quote.status)) throw new Error("INVALID_TRANSITION");
+
+  await pool.query(`UPDATE quotes SET status = 'ACCEPTED', responded_at = NOW() WHERE id = ?`, [id]);
+  await recordEvent(id, "ACCEPTED", `Manuellt markerad accepterad av ${byUserName}`);
+  return getQuote(id);
+}
+
 // "Andra kunder gillade också" — visas på den publika offertsidan. Räknar
 // fram vilka produkter som oftast dyker upp i SAMMA riktiga order som
 // produkterna redan i den här offerten (co-occurrence i order_lines — en
