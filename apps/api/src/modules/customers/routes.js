@@ -224,6 +224,19 @@ router.post("/:id/assortment", async (req, res, next) => {
   }
 });
 
+router.patch("/:id/assortment/:productId", async (req, res, next) => {
+  try {
+    const rows = await customers.updateAssortmentPrint(Number(req.params.id), Number(req.params.productId), {
+      printDescription: req.body?.printDescription,
+      printPrice: req.body?.printPrice === "" || req.body?.printPrice === undefined ? null : Number(req.body.printPrice),
+      printDiscountPercent: Number(req.body?.printDiscountPercent) || 0,
+    });
+    res.json({ rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete("/:id/assortment/:productId", async (req, res, next) => {
   try {
     await customers.removeFromAssortment(Number(req.params.id), Number(req.params.productId));

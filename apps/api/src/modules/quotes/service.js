@@ -424,6 +424,18 @@ export async function markQuoteAccepted(id, byUserName) {
   return getQuote(id);
 }
 
+// Staff-side equivalent of the customer's public decline — for when a
+// customer calls and declines instead of using the /q/:token link.
+export async function markQuoteDeclined(id, byUserName) {
+  const quote = await getQuote(id);
+  if (!quote) throw new Error("QUOTE_NOT_FOUND");
+  if (!["SENT", "VIEWED"].includes(quote.status)) throw new Error("INVALID_TRANSITION");
+
+  await pool.query(`UPDATE quotes SET status = 'DECLINED', responded_at = NOW() WHERE id = ?`, [id]);
+  await recordEvent(id, "DECLINED", `Manuellt markerad avböjd av ${byUserName}`);
+  return getQuote(id);
+}
+
 // "Andra kunder gillade också" — visas på den publika offertsidan. Räknar
 // fram vilka produkter som oftast dyker upp i SAMMA riktiga order som
 // produkterna redan i den här offerten (co-occurrence i order_lines — en

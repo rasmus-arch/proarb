@@ -60,17 +60,28 @@ const DISCOUNT_SELECT = `
   ) AS suggested_discount_percent
 `;
 
+// Förifyllt tryck från kundens sortiment (customer_assortment, satt i
+// kund-editorn) — samma "0/NULL när ingen kund/regel" -princip som
+// DISCOUNT_SELECT, så anropande kod kan använda värdena direkt utan extra
+// null-koll.
+const PRINT_PREFILL_SELECT = `
+  (SELECT print_description FROM customer_assortment WHERE customer_id = ? AND product_id = p.id LIMIT 1) AS assortment_print_description,
+  (SELECT print_price FROM customer_assortment WHERE customer_id = ? AND product_id = p.id LIMIT 1) AS assortment_print_price,
+  COALESCE((SELECT print_discount_percent FROM customer_assortment WHERE customer_id = ? AND product_id = p.id LIMIT 1), 0) AS assortment_print_discount_percent
+`;
+
 // Used by the POS / warehouse scanning flows: look up a sellable variant
 // directly by the barcode a scanner just read.
 export async function findVariantByBarcode(barcode, customerId = null) {
   const [[variant]] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
             p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent,
-            ${DISCOUNT_SELECT}
+            ${DISCOUNT_SELECT},
+            ${PRINT_PREFILL_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.barcode = ? AND v.active = 1`,
-    [customerId ?? 0, customerId ?? 0, barcode]
+    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, barcode]
   );
   return variant ?? null;
 }
@@ -82,14 +93,15 @@ export async function searchVariants(search = "", limit = 15, customerId = null)
   const [rows] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
             p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable,
-            ${DISCOUNT_SELECT}
+            ${DISCOUNT_SELECT},
+            ${PRINT_PREFILL_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.active = 1 AND p.active = 1
        AND (p.name LIKE ? OR p.article_number LIKE ? OR v.sku LIKE ? OR v.barcode LIKE ?)
      ORDER BY p.name ASC
      LIMIT ?`,
-    [customerId ?? 0, customerId ?? 0, like, like, like, like, limit]
+    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, like, like, like, like, limit]
   );
   return rows;
 }

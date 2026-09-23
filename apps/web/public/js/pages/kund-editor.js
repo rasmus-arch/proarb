@@ -286,13 +286,34 @@ function renderAssortment(rows) {
           ? `<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">-${p.discount_percent}% rabatt</span>`
           : "";
       return `
-      <li class="flex items-center justify-between py-2 text-sm">
-        <div>
-          <span class="font-medium text-slate-900">${escapeHtml(p.name)}</span>
-          <span class="ml-2 text-slate-500">${escapeHtml(p.article_number)}</span>
-          ${variantBadge}${discountBadge}
+      <li class="py-2 text-sm" data-assortment-product="${p.product_id}">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-medium text-slate-900">${escapeHtml(p.name)}</span>
+            <span class="ml-2 text-slate-500">${escapeHtml(p.article_number)}</span>
+            ${variantBadge}${discountBadge}
+          </div>
+          <button type="button" class="text-slate-400 hover:text-red-600" data-remove-assortment="${p.product_id}">✕</button>
         </div>
-        <button type="button" class="text-slate-400 hover:text-red-600" data-remove-assortment="${p.product_id}">✕</button>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            class="input flex-1 min-w-[180px]"
+            placeholder="Förifyllt tryck (valfritt)"
+            data-print-description="${p.product_id}"
+            value="${escapeHtml(p.print_description ?? "")}"
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            class="input w-28"
+            placeholder="Tryckpris"
+            data-print-price="${p.product_id}"
+            value="${p.print_price ?? ""}"
+          />
+          <button type="button" class="btn-secondary text-xs" data-save-print="${p.product_id}">Spara tryck</button>
+        </div>
       </li>`;
     })
     .join("");
@@ -520,10 +541,26 @@ el.assortmentResults.addEventListener("click", async (event) => {
 });
 
 el.assortmentList.addEventListener("click", async (event) => {
-  const productId = event.target.dataset.removeAssortment;
-  if (productId === undefined) return;
-  await api.delete(`/customers/${customerId}/assortment/${productId}`);
-  loadCustomer();
+  const removeId = event.target.dataset.removeAssortment;
+  if (removeId !== undefined) {
+    await api.delete(`/customers/${customerId}/assortment/${removeId}`);
+    loadCustomer();
+    return;
+  }
+
+  const saveId = event.target.dataset.savePrint;
+  if (saveId !== undefined) {
+    const item = el.assortmentList.querySelector(`[data-assortment-product="${saveId}"]`);
+    const description = item.querySelector(`[data-print-description="${saveId}"]`).value;
+    const price = item.querySelector(`[data-print-price="${saveId}"]`).value;
+    await api.patch(`/customers/${customerId}/assortment/${saveId}`, {
+      printDescription: description || null,
+      printPrice: price === "" ? null : Number(price),
+    });
+    const originalLabel = event.target.textContent;
+    event.target.textContent = "Sparat!";
+    setTimeout(() => (event.target.textContent = originalLabel), 1500);
+  }
 });
 
 // --- Personal & storlekar (uniformsprogram) -------------------------------

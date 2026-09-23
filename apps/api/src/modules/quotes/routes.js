@@ -130,6 +130,19 @@ router.post("/:id/accept", async (req, res, next) => {
   }
 });
 
+router.post("/:id/decline", async (req, res, next) => {
+  try {
+    const quote = await quotes.markQuoteDeclined(Number(req.params.id), req.user.name);
+    res.json(quote);
+  } catch (err) {
+    if (err.message === "QUOTE_NOT_FOUND") return res.status(404).json({ error: "Offert saknas" });
+    if (err.message === "INVALID_TRANSITION") {
+      return res.status(409).json({ error: "Bara skickade offerter kan markeras som avböjda" });
+    }
+    next(err);
+  }
+});
+
 router.post("/:id/convert-to-order", async (req, res, next) => {
   try {
     const order = await convertQuoteToOrder(Number(req.params.id), req.user.id);

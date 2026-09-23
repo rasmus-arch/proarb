@@ -338,12 +338,14 @@ export async function listAssortment(customerId) {
   const [rows] = await pool.query(
     `SELECT ca.id, p.id AS product_id, p.article_number, p.name, p.base_price,
             COUNT(v.id) AS variant_count,
+            ca.print_description, ca.print_price, ca.print_discount_percent,
             ${ASSORTMENT_DISCOUNT_SELECT}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE ca.customer_id = ?
-     GROUP BY ca.id, p.id, p.article_number, p.name, p.base_price, p.supplier_id
+     GROUP BY ca.id, p.id, p.article_number, p.name, p.base_price, p.supplier_id,
+              ca.print_description, ca.print_price, ca.print_discount_percent
      ORDER BY p.name ASC`,
     [customerId, customerId, customerId]
   );
@@ -355,6 +357,17 @@ export async function addToAssortment(customerId, productId) {
     customerId,
     productId,
   ]);
+  return listAssortment(customerId);
+}
+
+// Förifyllt tryck för en produkt i kundens sortiment (se products/service.js
+// PRINT_PREFILL_SELECT för var det sedan läses ut, vid sök/skanning).
+export async function updateAssortmentPrint(customerId, productId, { printDescription, printPrice, printDiscountPercent }) {
+  await pool.query(
+    `UPDATE customer_assortment SET print_description = ?, print_price = ?, print_discount_percent = ?
+     WHERE customer_id = ? AND product_id = ?`,
+    [printDescription || null, printPrice ?? null, printDiscountPercent ?? 0, customerId, productId]
+  );
   return listAssortment(customerId);
 }
 

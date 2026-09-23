@@ -82,6 +82,8 @@ const el = {
   formError: document.getElementById("form-error"),
   saveRow: document.getElementById("save-row"),
   saveBtn: document.getElementById("save-btn"),
+  saveLinesRow: document.getElementById("save-lines-row"),
+  saveLinesBtn: document.getElementById("save-lines-btn"),
   pickupSection: document.getElementById("pickup-section"),
   pickupContactSelect: document.getElementById("pickup-contact-select"),
   pickupNameInput: document.getElementById("pickup-name-input"),
@@ -266,9 +268,9 @@ function variantToLine(v) {
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
-    printDescription: "",
-    printPrice: null,
-    printDiscountPercent: 0,
+    printDescription: v.assortment_print_description ?? "",
+    printPrice: v.assortment_print_price === null || v.assortment_print_price === undefined ? null : Number(v.assortment_print_price),
+    printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
     sourcing: "STOCK",
@@ -807,12 +809,7 @@ function renderActionButtons(order) {
       </label>`
     : "";
 
-  const saveLinesButton = canEditLines()
-    ? `<button type="button" id="save-lines-btn" class="btn">Spara ändringar</button>`
-    : "";
-
   el.actionButtons.innerHTML =
-    saveLinesButton +
     emailCheckbox +
     order.allowed_next_statuses
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
@@ -821,7 +818,12 @@ function renderActionButtons(order) {
     `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>` +
     `<button type="button" id="print-slip-btn" class="btn-secondary">Skriv ut ordersedel</button>`;
 
-  document.getElementById("save-lines-btn")?.addEventListener("click", async () => {
+  // Sparaknappen för radändringar står under marginalen istället för i
+  // åtgärdsraden högst upp — den hör ihop med raderna/summeringen den
+  // sparar, inte med statusövergångarna bredvid den.
+  el.saveLinesRow.classList.toggle("hidden", !canEditLines());
+
+  el.saveLinesBtn.addEventListener("click", async () => {
     el.formError.classList.add("hidden");
     if (state.lines.length === 0) {
       el.formError.textContent = "Lägg till minst en rad.";

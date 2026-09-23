@@ -286,6 +286,14 @@ CREATE TABLE IF NOT EXISTS customer_assortment (
   id          INT PRIMARY KEY AUTO_INCREMENT,
   customer_id INT NOT NULL,
   product_id  INT NOT NULL,
+  -- Förifyllt tryck för just den här kunden/produkten — när produkten
+  -- sedan läggs till på en offert/order (sök eller streckkodsskanning,
+  -- med kunden vald) fylls tryckraden i automatiskt istället för att
+  -- säljaren behöver komma ihåg exakt vad som brukar tryckas. Fortfarande
+  -- bara ett förslag: raden går att ändra/tömma som vanligt efteråt.
+  print_description      VARCHAR(255) NULL,
+  print_price             DECIMAL(10,2) NULL,
+  print_discount_percent  DECIMAL(5,2) NOT NULL DEFAULT 0,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_cust_assortment_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
   CONSTRAINT fk_cust_assortment_product FOREIGN KEY (product_id) REFERENCES products(id),

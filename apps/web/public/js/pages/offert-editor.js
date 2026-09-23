@@ -253,9 +253,9 @@ el.lineResults.addEventListener("click", (event) => {
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
-    printDescription: "",
-    printPrice: null,
-    printDiscountPercent: 0,
+    printDescription: v.assortment_print_description ?? "",
+    printPrice: v.assortment_print_price === null || v.assortment_print_price === undefined ? null : Number(v.assortment_print_price),
+    printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
   });
@@ -645,9 +645,8 @@ function renderActionButtons(quote) {
     buttons.push(`<a href="/q/${quote.public_token}" target="_blank" class="btn-secondary">Öppna offentlig länk</a>`);
   }
   if (["SENT", "VIEWED"].includes(quote.status)) {
-    buttons.push(
-      `<button type="button" id="accept-btn" class="btn-secondary">Markera som accepterad (t.ex. telefon)</button>`
-    );
+    buttons.push(`<button type="button" id="accept-btn" class="btn">Gör till order</button>`);
+    buttons.push(`<button type="button" id="decline-btn" class="btn-secondary">Ändra till avböjd</button>`);
   }
   if (quote.status === "ACCEPTED") {
     buttons.push(`<button type="button" id="convert-btn" class="btn">Konvertera till order</button>`);
@@ -671,9 +670,19 @@ function renderActionButtons(quote) {
     }
   });
   document.getElementById("accept-btn")?.addEventListener("click", async () => {
-    if (!confirm("Markera offerten som accepterad? Använd det här när kunden accepterar muntligt, t.ex. via telefon.")) return;
+    if (!confirm("Gör offerten till en order? Använd det här när kunden accepterar muntligt, t.ex. via telefon.")) return;
     try {
       await api.post(`/quotes/${quote.id}/accept`, {});
+      const order = await api.post(`/quotes/${quote.id}/convert-to-order`, {});
+      location.href = `/order-editor.html?id=${order.id}`;
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  document.getElementById("decline-btn")?.addEventListener("click", async () => {
+    if (!confirm("Ändra offerten till avböjd? Använd det här när kunden avböjer muntligt, t.ex. via telefon.")) return;
+    try {
+      await api.post(`/quotes/${quote.id}/decline`, {});
       location.reload();
     } catch (err) {
       alert(err.message);
