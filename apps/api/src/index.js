@@ -110,11 +110,11 @@ app.use((err, req, res, next) => {
 // code + restarting is enough — otherwise a deploy that skips "Run NPM
 // Install" (the postinstall migration) leaves new columns missing and
 // queries fail with "Unknown column". Idempotent; non-fatal like postinstall.
-try {
-  await runMigrations();
-} catch (err) {
+// No top-level await: cPanel/Passenger loads this file with require(), which
+// throws ERR_REQUIRE_ASYNC_MODULE (-> 503) on an ESM graph with top-level await.
+runMigrations().catch((err) => {
   console.warn(`Kunde inte köra databasmigrering vid start: ${err.message}`);
-}
+});
 
 const port = process.env.PORT ?? 3001;
 app.listen(port, () => {
