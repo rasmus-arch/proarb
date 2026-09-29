@@ -107,7 +107,7 @@ function renderRows(rows) {
         <td class="py-2 pr-4">${single ? escapeHtml(v.barcode) : "–"}</td>
         <td class="py-2 pr-4 text-right">${mainRowPrice === null ? "–" : `${formatPrice(mainRowPrice)} kr`}</td>
         <td class="py-2 pr-4 text-right whitespace-nowrap">
-          <button type="button" class="text-blue-700 underline" data-edit="${p.id}">Redigera</button>
+          <button type="button" class="link" data-edit="${p.id}">Redigera</button>
           <button type="button" class="ml-2 text-red-600 underline" data-delete="${p.id}">Ta bort</button>
         </td>
       </tr>`;

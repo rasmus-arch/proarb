@@ -42,7 +42,6 @@ const el = {
   fritextForm: document.getElementById("fritext-form"),
   cancelFritextBtn: document.getElementById("cancel-fritext-btn"),
   addProductBtn: document.getElementById("add-product-btn"),
-  addSizerunBtnOpen: document.getElementById("add-sizerun-btn-open"),
   addKitBtnOpen: document.getElementById("add-kit-btn-open"),
   kitDialog: document.getElementById("kit-dialog"),
   kitSelect: document.getElementById("kit-select"),
@@ -51,24 +50,6 @@ const el = {
   kitError: document.getElementById("kit-error"),
   cancelKitBtn: document.getElementById("cancel-kit-btn"),
   addKitBtn: document.getElementById("add-kit-btn"),
-  addEmployeeBtnOpen: document.getElementById("add-employee-btn-open"),
-  employeeDialog: document.getElementById("employee-dialog"),
-  employeeSelect: document.getElementById("employee-select"),
-  employeePreviewWrap: document.getElementById("employee-preview-wrap"),
-  employeePreviewRows: document.getElementById("employee-preview-rows"),
-  employeeUnmatchedNote: document.getElementById("employee-unmatched-note"),
-  employeeDialogError: document.getElementById("employee-dialog-error"),
-  cancelEmployeeBtn: document.getElementById("cancel-employee-btn"),
-  addEmployeeBtn: document.getElementById("add-employee-btn"),
-  sizerunDialog: document.getElementById("sizerun-dialog"),
-  sizerunSearch: document.getElementById("sizerun-search"),
-  sizerunSearchResults: document.getElementById("sizerun-search-results"),
-  sizerunGridWrap: document.getElementById("sizerun-grid-wrap"),
-  sizerunProductName: document.getElementById("sizerun-product-name"),
-  sizerunRows: document.getElementById("sizerun-rows"),
-  sizerunError: document.getElementById("sizerun-error"),
-  cancelSizerunBtn: document.getElementById("cancel-sizerun-btn"),
-  addSizerunBtn: document.getElementById("add-sizerun-btn"),
   newProductDialog: document.getElementById("new-product-dialog"),
   newProductForm: document.getElementById("new-product-form"),
   cancelNewProductBtn: document.getElementById("cancel-new-product-btn"),
@@ -425,105 +406,6 @@ el.newProductForm.addEventListener("submit", async (event) => {
   }
 });
 
-// --- Storleksserie: sök en produkt, ange antal per färg/storlek, lägg till
-// alla rader på en gång istället för en sökning per variant -------------
-
-let sizerunProduct = null;
-
-el.addSizerunBtnOpen.addEventListener("click", () => {
-  el.sizerunSearch.value = "";
-  el.sizerunSearchResults.innerHTML = "";
-  el.sizerunGridWrap.classList.add("hidden");
-  el.sizerunError.classList.add("hidden");
-  el.addSizerunBtn.disabled = true;
-  sizerunProduct = null;
-  el.sizerunDialog.showModal();
-});
-el.cancelSizerunBtn.addEventListener("click", () => el.sizerunDialog.close());
-
-let sizerunSearchTimer;
-el.sizerunSearch.addEventListener("input", () => {
-  clearTimeout(sizerunSearchTimer);
-  const q = el.sizerunSearch.value.trim();
-  if (!q) {
-    el.sizerunSearchResults.innerHTML = "";
-    return;
-  }
-  sizerunSearchTimer = setTimeout(async () => {
-    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}`);
-    // /products/search returns one row per variant — dedupe to one entry
-    // per product since we only need the product here, not a specific variant.
-    const seen = new Set();
-    const products = rows.filter((r) => (seen.has(r.product_id) ? false : (seen.add(r.product_id), true)));
-    el.sizerunSearchResults.innerHTML = products
-      .map(
-        (p) => `
-        <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-product-id="${p.product_id}">
-          <div class="font-medium text-slate-900">${escapeHtml(p.name)}</div>
-        </button>`
-      )
-      .join("");
-  }, 200);
-});
-
-el.sizerunSearchResults.addEventListener("click", async (event) => {
-  const button = event.target.closest("button[data-product-id]");
-  if (!button) return;
-  const product = await api.get(`/products/${button.dataset.productId}`);
-  sizerunProduct = product;
-  el.sizerunSearch.value = "";
-  el.sizerunSearchResults.innerHTML = "";
-  el.sizerunProductName.textContent = product.name;
-  const activeVariants = product.variants.filter((v) => v.active);
-  el.sizerunRows.innerHTML = activeVariants
-    .map(
-      (v, i) => `
-      <tr>
-        <td class="py-1 pr-3">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
-        <td class="py-1 pr-3 text-slate-500">${escapeHtml(v.sku)}</td>
-        <td class="py-1 pr-3"><input type="number" min="0" step="1" class="input" data-variant-index="${i}" placeholder="0" /></td>
-      </tr>`
-    )
-    .join("");
-  el.sizerunGridWrap.classList.remove("hidden");
-  el.addSizerunBtn.disabled = false;
-});
-
-el.addSizerunBtn.addEventListener("click", () => {
-  el.sizerunError.classList.add("hidden");
-  if (!sizerunProduct) return;
-  const activeVariants = sizerunProduct.variants.filter((v) => v.active);
-  const qtyInputs = el.sizerunRows.querySelectorAll("input[data-variant-index]");
-  let added = 0;
-  qtyInputs.forEach((input) => {
-    const qty = Number(input.value);
-    if (!(qty > 0)) return;
-    const v = activeVariants[Number(input.dataset.variantIndex)];
-    state.lines.push({
-      productVariantId: v.id,
-      name: sizerunProduct.name,
-      colorSize: [v.color, v.size, v.sku].filter(Boolean).join(" · "),
-      quantity: qty,
-      unitPrice: Number(v.price_override ?? sizerunProduct.base_price),
-      discountPercent: 0,
-      printDescription: "",
-      printPrice: null,
-      printDiscountPercent: 0,
-      taxRatePercent: Number(sizerunProduct.tax_rate_percent),
-      costPrice: sizerunProduct.cost_price === null || sizerunProduct.cost_price === undefined ? null : Number(sizerunProduct.cost_price),
-      sourcing: "STOCK",
-    });
-    added++;
-  });
-  if (added === 0) {
-    el.sizerunError.textContent = "Ange antal för minst en storlek.";
-    el.sizerunError.classList.remove("hidden");
-    return;
-  }
-  el.sizerunDialog.close();
-  renderLines();
-});
-
 // --- Produktpaket: välj ett färdigt paket, lägg till alla rader på en
 // gång istället för en sökning per produkt -------------------------------
 
@@ -578,73 +460,6 @@ el.addKitBtn.addEventListener("click", () => {
     state.lines.push(line);
   }
   el.kitDialog.close();
-  renderLines();
-});
-
-// --- Från anställd: lägg till rader utifrån en anställds sparade
-// storlekar (se kund-editor.js "Personal & storlekar") ---------------------
-
-let selectedEmployeeLines = null;
-
-el.addEmployeeBtnOpen.addEventListener("click", async () => {
-  el.employeeDialogError.classList.add("hidden");
-  el.employeePreviewWrap.classList.add("hidden");
-  el.addEmployeeBtn.disabled = true;
-  selectedEmployeeLines = null;
-  if (!state.customerId) {
-    el.employeeDialogError.textContent = "Välj en kund för ordern först.";
-    el.employeeDialogError.classList.remove("hidden");
-    el.employeeSelect.innerHTML = `<option value="">— Välj anställd —</option>`;
-    el.employeeDialog.showModal();
-    return;
-  }
-  const { rows } = await api.get(`/customers/${state.customerId}/employees`);
-  el.employeeSelect.innerHTML =
-    `<option value="">— Välj anställd —</option>` +
-    rows.map((e) => `<option value="${e.id}">${escapeHtml(e.name)} (${e.sizes.length} storlek${e.sizes.length === 1 ? "" : "ar"})</option>`).join("");
-  el.employeeSelect.value = "";
-  el.employeeDialog.showModal();
-});
-
-el.cancelEmployeeBtn.addEventListener("click", () => el.employeeDialog.close());
-
-el.employeeSelect.addEventListener("change", async () => {
-  const id = el.employeeSelect.value;
-  el.employeeUnmatchedNote.classList.add("hidden");
-  if (!id) {
-    el.employeePreviewWrap.classList.add("hidden");
-    el.addEmployeeBtn.disabled = true;
-    return;
-  }
-  const result = await api.get(`/customers/${state.customerId}/employees/${id}/order-lines`);
-  selectedEmployeeLines = result.lines;
-  el.employeePreviewRows.innerHTML = result.lines
-    .map(
-      (l) => `
-      <tr>
-        <td class="py-1 pr-3">${escapeHtml(l.name)}</td>
-        <td class="py-1 pr-3">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</td>
-        <td class="py-1 pr-3 text-right">${money(l.price_override ?? l.base_price)}</td>
-      </tr>`
-    )
-    .join("");
-  if (result.unmatched.length > 0) {
-    el.employeeUnmatchedNote.textContent =
-      `Hittade ingen aktuell variant för: ` +
-      result.unmatched.map((u) => `${u.product_name} (${[u.size, u.color].filter(Boolean).join(" / ") || "storlek saknas"})`).join(", ") +
-      ` — lägg till för hand vid behov.`;
-    el.employeeUnmatchedNote.classList.remove("hidden");
-  }
-  el.employeePreviewWrap.classList.remove("hidden");
-  el.addEmployeeBtn.disabled = result.lines.length === 0;
-});
-
-el.addEmployeeBtn.addEventListener("click", () => {
-  if (!selectedEmployeeLines || selectedEmployeeLines.length === 0) return;
-  for (const l of selectedEmployeeLines) {
-    state.lines.push(variantToLine(l));
-  }
-  el.employeeDialog.close();
   renderLines();
 });
 

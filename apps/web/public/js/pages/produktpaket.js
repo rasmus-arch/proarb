@@ -41,7 +41,7 @@ async function loadKits() {
           <span class="ml-2 text-xs text-slate-500">${k.line_count} produkt${k.line_count === 1 ? "" : "er"}</span>
         </div>
         <span class="flex gap-2">
-          <button type="button" class="text-blue-700 underline text-xs" data-edit-kit="${k.id}">Redigera</button>
+          <button type="button" class="link text-xs" data-edit-kit="${k.id}">Redigera</button>
           <button type="button" class="text-red-600 underline text-xs" data-delete-kit="${k.id}">Ta bort</button>
         </span>
       </li>`

@@ -75,8 +75,8 @@ async function loadSaldo(page = saldoPage) {
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_point ?? "–"}</td>
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_quantity ?? "–"}</td>
         <td class="py-2 pr-2 text-right whitespace-nowrap">
-          <button type="button" class="text-blue-700 underline text-xs" data-adjust="${r.variant_id}" data-warehouse="${r.warehouse_id}">Justera</button>
-          <button type="button" class="ml-2 text-blue-700 underline text-xs" data-reorder="${r.variant_id}" data-warehouse="${r.warehouse_id}" data-point="${r.reorder_point ?? ""}" data-qty="${r.reorder_quantity ?? ""}">Min-saldo</button>
+          <button type="button" class="link text-xs" data-adjust="${r.variant_id}" data-warehouse="${r.warehouse_id}">Justera</button>
+          <button type="button" class="link ml-2 text-xs" data-reorder="${r.variant_id}" data-warehouse="${r.warehouse_id}" data-point="${r.reorder_point ?? ""}" data-qty="${r.reorder_quantity ?? ""}">Min-saldo</button>
         </td>
       </tr>`
     )
@@ -457,8 +457,8 @@ function decisionButtons(kind, id, decision) {
     return `<span class="text-xs text-slate-500">${decision === "ADJUST" ? "Justerad" : "Behållen"}</span>`;
   }
   return `
-    <button type="button" class="text-xs text-blue-700 underline" data-decide="${kind}:${id}:ADJUST">Justera</button>
-    <button type="button" class="ml-2 text-xs text-blue-700 underline" data-decide="${kind}:${id}:KEEP">Behåll</button>`;
+    <button type="button" class="link text-xs" data-decide="${kind}:${id}:ADJUST">Justera</button>
+    <button type="button" class="link ml-2 text-xs" data-decide="${kind}:${id}:KEEP">Behåll</button>`;
 }
 
 async function renderCountDetail() {
@@ -593,100 +593,161 @@ document.getElementById("complete-count-btn").addEventListener("click", async ()
 
 const suggestionsContainer = document.getElementById("suggestions-container");
 const suggestionsEmpty = document.getElementById("suggestions-empty");
+const suggestionsSummary = document.getElementById("suggestions-summary");
+let suggestionGroups = [];
+let supplierOptions = null;
+
+function reasonChips(line) {
+  return line.reasons
+    .map((r) => {
+      if (r.type === "restock") {
+        return `<span class="chip">Min-saldo ${r.quantity_on_hand}/${r.reorder_point}</span>`;
+      }
+      return `<span class="chip${r.forced ? " chip-accent" : ""}" title="${escapeHtml(r.customer_name)}">${escapeHtml(r.order_number)} · ${r.quantity} st${r.forced ? " · beställ ändå" : ""}</span>`;
+    })
+    .join("");
+}
+
+function groupTotal(group, card) {
+  let total = 0;
+  let missingPrice = false;
+  group.lines.forEach((l, i) => {
+    const checked = card ? card.querySelector(`[data-pick="${i}"]`).checked : true;
+    if (!checked) return;
+    const qty = card ? Number(card.querySelector(`[data-qty="${i}"]`).value) || 0 : l.suggested_qty;
+    if (l.cost_price === null) missingPrice = true;
+    total += qty * (l.cost_price ?? 0);
+  });
+  return { total, missingPrice };
+}
+
+function suggestionCardHtml(group, index) {
+  const noSupplier = group.supplier_id === 0;
+  const { total, missingPrice } = groupTotal(group);
+  const rows = group.lines
+    .map(
+      (l, i) => `
+      <tr>
+        <td class="w-8 py-2 pl-1"><input type="checkbox" data-pick="${i}" checked class="rounded border-slate-300" /></td>
+        <td class="py-2 pr-3">
+          <div class="font-medium text-slate-900">${escapeHtml(l.product_name)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml([[l.color, l.size].filter(Boolean).join(" / "), l.supplier_sku ? `Lev.art ${l.supplier_sku}` : l.sku].filter(Boolean).join(" · "))}</div>
+        </td>
+        <td class="py-2 pr-3"><div class="flex flex-wrap gap-1">${reasonChips(l)}</div></td>
+        <td class="num py-2 pr-4 text-slate-500">${l.stock_on_hand}${l.already_on_order_qty > 0 ? `<div class="text-xs">+${l.already_on_order_qty} beställt</div>` : ""}</td>
+        <td class="py-2 pr-3"><input type="number" min="0" step="1" value="${l.suggested_qty}" data-qty="${i}" class="input num w-20" /></td>
+        <td class="num py-2 pr-1 text-slate-500">${l.cost_price === null ? "–" : money(l.cost_price)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const supplierPicker = noSupplier
+    ? `<select data-supplier-select class="input w-56"><option value="">Välj leverantör…</option>${(supplierOptions ?? [])
+        .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
+        .join("")}</select>`
+    : "";
+
+  return `
+    <section class="card p-0" data-group="${index}">
+      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+        <div>
+          <h2 class="text-base font-semibold text-slate-900">${noSupplier ? "Saknar leverantör" : escapeHtml(group.supplier_name)}</h2>
+          <p class="text-xs text-slate-500">
+            ${group.lines.length} ${group.lines.length === 1 ? "rad" : "rader"} ·
+            <span data-group-total>${money(total)}${missingPrice ? " + rader utan inpris" : ""}</span>
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          ${supplierPicker}
+          <button type="button" class="btn" data-create-po>Skapa inköpsorder</button>
+        </div>
+      </header>
+      ${noSupplier ? `<p class="border-b border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">Välj leverantör för just den här ordern — eller sätt leverantör på produkten så hamnar den rätt nästa gång.</p>` : ""}
+      <div class="overflow-x-auto px-4">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="th-row">
+              <th class="w-8 py-2"></th><th class="py-2 pr-3">Produkt</th><th class="py-2 pr-3">Orsak</th><th class="py-2 pr-4 text-right">I lager</th><th class="py-2 pr-3">Antal</th><th class="py-2 pr-1 text-right">Inpris</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">${rows}</tbody>
+        </table>
+      </div>
+      <p class="hidden px-4 pb-3 text-sm text-red-600" data-group-error></p>
+    </section>`;
+}
 
 async function loadSuggestions() {
   const { bySupplier } = await api.get("/inventory/purchase-suggestions");
+  suggestionGroups = bySupplier;
+  if (bySupplier.some((g) => g.supplier_id === 0) && !supplierOptions) {
+    supplierOptions = (await api.get("/suppliers")).rows;
+  }
   suggestionsEmpty.classList.toggle("hidden", bySupplier.length > 0);
-
-  suggestionsContainer.innerHTML = bySupplier
-    .map((group) => {
-      // En rad vars behov redan täcks helt av en utestående inköpsorder
-      // (suggested_qty <= 0) visas inte — inget att göra just nu.
-      const orderRows = group.order_driven
-        .flatMap((g) =>
-          g.lines
-            .filter((l) => l.suggested_qty > 0)
-            .map(
-              (l) => `
-            <tr>
-              <td class="py-1.5 pr-2">${escapeHtml(l.product_name)} <span class="text-slate-500">${escapeHtml([l.color, l.size].filter(Boolean).join(" / "))}</span></td>
-              <td class="py-1.5 pr-2 text-slate-500">${escapeHtml(g.order_number)} (${escapeHtml(g.customer_name)})</td>
-              <td class="py-1.5 pr-2 text-right">${l.suggested_qty}${l.forced ? ' <span class="text-xs text-amber-600">beställ ändå</span>' : ""}${l.already_on_order_qty > 0 ? ` <span class="text-xs text-slate-400">(${l.already_on_order_qty} redan beställd)</span>` : ""}</td>
-            </tr>`
-            )
-        )
-        .join("");
-
-      const restockRows = group.restock_driven
-        .map(
-          (r) => `
-          <tr>
-            <td class="py-1.5 pr-2">${escapeHtml(r.product_name)} <span class="text-slate-500">${escapeHtml([r.color, r.size].filter(Boolean).join(" / "))}</span></td>
-            <td class="py-1.5 pr-2 text-slate-500">Saldo ${r.quantity_on_hand} / min ${r.reorder_point}</td>
-            <td class="py-1.5 pr-2 text-right">${r.suggested_qty}${r.already_on_order_qty > 0 ? ` <span class="text-xs text-slate-400">(${r.already_on_order_qty} redan beställd)</span>` : ""}</td>
-          </tr>`
-        )
-        .join("");
-
-      return `
-        <div class="card">
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-medium text-slate-900">${escapeHtml(group.supplier_name)}</h2>
-            <button type="button" class="btn-secondary text-xs" data-create-po="${group.supplier_id}">Skapa inköpsorder</button>
-          </div>
-          ${
-            orderRows
-              ? `<h3 class="mt-3 text-xs font-medium uppercase text-slate-500">Från ordrar</h3>
-                 <table class="mt-1 min-w-full text-sm"><tbody>${orderRows}</tbody></table>`
-              : ""
-          }
-          ${
-            restockRows
-              ? `<h3 class="mt-3 text-xs font-medium uppercase text-slate-500">Under min-saldo</h3>
-                 <table class="mt-1 min-w-full text-sm"><tbody>${restockRows}</tbody></table>`
-              : ""
-          }
-        </div>`;
-    })
-    .join("");
-
-  suggestionsContainer.dataset.groups = JSON.stringify(bySupplier);
+  const lineCount = bySupplier.reduce((n, g) => n + g.lines.length, 0);
+  const total = bySupplier.reduce((sum, g) => sum + groupTotal(g).total, 0);
+  suggestionsSummary.textContent = bySupplier.length
+    ? `${lineCount} ${lineCount === 1 ? "rad" : "rader"} att köpa in · ca ${money(total)}`
+    : "";
+  suggestionsContainer.innerHTML = bySupplier.map(suggestionCardHtml).join("");
 }
 
-suggestionsContainer.addEventListener("click", (event) => {
+suggestionsContainer.addEventListener("input", (event) => {
+  const card = event.target.closest("[data-group]");
+  if (!card) return;
+  const group = suggestionGroups[Number(card.dataset.group)];
+  const { total, missingPrice } = groupTotal(group, card);
+  card.querySelector("[data-group-total]").textContent = `${money(total)}${missingPrice ? " + rader utan inpris" : ""}`;
+});
+suggestionsContainer.addEventListener("change", (event) => {
+  if (event.target.matches("[data-pick]")) event.target.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+suggestionsContainer.addEventListener("click", async (event) => {
   const btn = event.target.closest("[data-create-po]");
   if (!btn) return;
-  const groups = JSON.parse(suggestionsContainer.dataset.groups || "[]");
-  const group = groups.find((g) => String(g.supplier_id) === btn.dataset.createPo);
-  if (!group) return;
+  const card = btn.closest("[data-group]");
+  const group = suggestionGroups[Number(card.dataset.group)];
+  const errorEl = card.querySelector("[data-group-error]");
+  errorEl.classList.add("hidden");
 
-  const lines = [
-    ...group.order_driven.flatMap((g) =>
-      g.lines
-        .filter((l) => l.suggested_qty > 0)
-        .map((l) => ({
-          product_variant_id: l.product_variant_id,
-          product_name: l.product_name,
-          color: l.color,
-          size: l.size,
-          sku: l.sku,
-          quantity: l.suggested_qty,
-          costPrice: 0,
-        }))
-    ),
-    ...group.restock_driven.map((r) => ({
-      product_variant_id: r.product_variant_id,
-      product_name: r.product_name,
-      color: r.color,
-      size: r.size,
-      sku: r.sku,
-      quantity: r.suggested_qty,
-      costPrice: 0,
-    })),
-  ];
+  const supplierId = group.supplier_id || Number(card.querySelector("[data-supplier-select]")?.value);
+  const lines = group.lines
+    .map((l, i) => ({
+      productVariantId: l.product_variant_id,
+      quantity: Number(card.querySelector(`[data-qty="${i}"]`).value) || 0,
+      costPrice: l.cost_price ?? 0,
+      picked: card.querySelector(`[data-pick="${i}"]`).checked,
+    }))
+    .filter((l) => l.picked && l.quantity > 0)
+    .map(({ picked, ...l }) => l);
 
+  const fail = (message) => {
+    errorEl.textContent = message;
+    errorEl.classList.remove("hidden");
+  };
+  if (!supplierId) return fail("Välj en leverantör först.");
+  if (lines.length === 0) return fail("Välj minst en rad med antal.");
+
+  btn.disabled = true;
+  try {
+    const po = await api.post("/inventory/purchase-orders", { supplierId, lines });
+    card.outerHTML = `
+      <section class="card flex items-center justify-between gap-3">
+        <p class="text-sm text-slate-700">Inköpsorder skapad hos <strong>${escapeHtml(po.supplier_name ?? group.supplier_name ?? "")}</strong> — ${lines.length} ${lines.length === 1 ? "rad" : "rader"}.</p>
+        <button type="button" class="btn-secondary" data-open-po="${po.id}">Visa inköpsorder</button>
+      </section>`;
+  } catch (err) {
+    btn.disabled = false;
+    fail(err.message);
+  }
+});
+
+suggestionsContainer.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-open-po]");
+  if (!btn) return;
   activateTab("inleverans");
-  openNewPoDialog({ supplierId: group.supplier_id, lines });
+  openPoDetail(Number(btn.dataset.openPo));
 });
 
 activateTab("saldo");

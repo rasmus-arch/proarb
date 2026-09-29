@@ -67,7 +67,7 @@ async function loadSalesChart() {
     api.get("/stats/daily-trend?days=90"),
     api.get("/settings/branding").catch(() => null),
   ]);
-  renderSalesChart(points, settings?.brand_color || "#0f172a");
+  renderSalesChart(points, settings?.brand_color || "#1c1b19");
 }
 
 function renderSalesChart(points, accentColor) {
@@ -86,9 +86,9 @@ function renderSalesChart(points, accentColor) {
   for (const frac of [0, 0.5, 1]) {
     const gy = CHART_PAD.top + plotH - frac * plotH;
     salesChartSvg.appendChild(
-      svgEl("line", { x1: CHART_PAD.left, x2: CHART_W - CHART_PAD.right, y1: gy, y2: gy, stroke: "#e2e8f0", "stroke-width": 1 })
+      svgEl("line", { x1: CHART_PAD.left, x2: CHART_W - CHART_PAD.right, y1: gy, y2: gy, stroke: "#e4e1da", "stroke-width": 1 })
     );
-    const label = svgEl("text", { x: CHART_PAD.left - 8, y: gy + 3, "text-anchor": "end", "font-size": 10, fill: "#94a3b8" });
+    const label = svgEl("text", { x: CHART_PAD.left - 8, y: gy + 3, "text-anchor": "end", "font-size": 10, fill: "#a5a095" });
     label.textContent = money(Math.round((maxV * frac) / 100) * 100);
     salesChartSvg.appendChild(label);
   }
@@ -101,7 +101,7 @@ function renderSalesChart(points, accentColor) {
       y: CHART_H - 6,
       "text-anchor": i === 0 ? "start" : i === points.length - 1 ? "end" : "middle",
       "font-size": 10,
-      fill: "#94a3b8",
+      fill: "#a5a095",
     });
     label.textContent = new Date(points[i].date).toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
     salesChartSvg.appendChild(label);
@@ -124,7 +124,7 @@ function renderSalesChart(points, accentColor) {
   // linjen pixelexakt.
   const crosshair = svgEl("line", {
     x1: 0, x2: 0, y1: CHART_PAD.top, y2: CHART_PAD.top + plotH,
-    stroke: "#94a3b8", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden",
+    stroke: "#a5a095", "stroke-width": 1, "stroke-dasharray": "3,3", visibility: "hidden",
   });
   const hoverDot = svgEl("circle", { r: 4, fill: accentColor, stroke: "#fff", "stroke-width": 2, visibility: "hidden" });
   salesChartSvg.appendChild(crosshair);
@@ -204,7 +204,7 @@ async function loadReminders() {
       (q) => `
       <li class="flex items-center justify-between py-2 text-sm" data-quote-id="${q.id}">
         <div>
-          <a href="/offert-editor.html?id=${q.id}" class="font-medium text-blue-700 underline">${escapeHtml(q.quote_number)}</a>
+          <a href="/offert-editor.html?id=${q.id}" class="link">${escapeHtml(q.quote_number)}</a>
           <span class="ml-2 text-slate-600">${escapeHtml(q.customer_name)}</span>
           <span class="ml-2 text-xs text-slate-500">${daysSince(q.sent_at)} dagar sedan skickad</span>
         </div>
@@ -295,7 +295,7 @@ async function loadInactiveCustomers() {
       (c) => `
       <li class="flex items-center justify-between py-2 text-sm" data-customer-id="${c.id}">
         <div>
-          <a href="/kund-editor.html?id=${c.id}" class="font-medium text-blue-700 underline">${escapeHtml(c.name)}</a>
+          <a href="/kund-editor.html?id=${c.id}" class="link">${escapeHtml(c.name)}</a>
           <span class="ml-2 text-xs text-slate-500">Senaste beställning ${new Date(c.last_order_at).toLocaleDateString("sv-SE")}</span>
         </div>
         <span class="flex items-center gap-2">

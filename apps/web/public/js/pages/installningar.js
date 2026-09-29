@@ -56,7 +56,7 @@ function applySettings(settings) {
   el.address.value = settings.seller_address ?? "";
   el.postal.value = settings.seller_postal_code ?? "";
   el.city.value = settings.seller_city ?? "";
-  el.color.value = settings.brand_color ?? "#0f172a";
+  el.color.value = settings.brand_color ?? "#1c1b19";
   el.footer.value = settings.quote_footer_note ?? "";
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
@@ -217,7 +217,7 @@ function renderUsers(users) {
           <input type="checkbox" class="rounded border-slate-300" data-active-for="${u.id}" ${u.active ? "checked" : ""} />
         </td>
         <td class="py-2 pr-2">
-          <button type="button" class="text-sm text-blue-700 underline" data-reset-for="${u.id}">Byt lösenord</button>
+          <button type="button" class="link text-sm" data-reset-for="${u.id}">Byt lösenord</button>
         </td>
       </tr>`
     )

@@ -32,7 +32,7 @@ function renderRows(orders) {
         <td class="py-2 pr-4 text-slate-500">${new Date(o.created_at).toLocaleDateString("sv-SE")}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(o.total_amount)}</td>
         <td class="py-2 pr-4 text-right">
-          <button type="button" class="text-blue-700 underline text-xs whitespace-nowrap" data-reorder="${o.id}">Beställ igen</button>
+          <button type="button" class="link text-xs whitespace-nowrap" data-reorder="${o.id}">Beställ igen</button>
         </td>
       </tr>`
     )

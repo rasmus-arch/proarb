@@ -37,32 +37,62 @@ function renderNav(user, branding) {
   // name alone (never the "ProArb" product name) so a fresh install
   // without a logo yet still shows something meaningful.
   const brandMark = branding?.seller_logo_path
-    ? `<img src="/uploads/${branding.seller_logo_path}" alt="${escapeHtml(branding.seller_name)}" class="mr-4 h-8 w-auto" />`
-    : `<span class="mr-4 text-sm font-semibold tracking-tight text-slate-900">${escapeHtml(branding?.seller_name || "ProArb")}</span>`;
+    ? `<img src="/uploads/${branding.seller_logo_path}" alt="${escapeHtml(branding.seller_name)}" class="h-8 w-auto" />`
+    : `<span class="text-sm font-semibold tracking-tight text-slate-900">${escapeHtml(branding?.seller_name || "ProArb")}</span>`;
+
+  const initials = String(user.name ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
 
   mount.innerHTML = `
-    <header class="border-b border-slate-200 bg-white">
-      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-1 px-4 py-3">
-        ${brandMark}
-        ${links
-          .map(
-            (link) => `
-          <a href="${link.href}"
-             class="rounded-md px-3 py-1.5 text-sm font-medium ${
-               link.key === active
-                 ? "bg-slate-900 text-white"
-                 : "text-slate-600 hover:bg-slate-100"
-             }">${link.label}</a>`
-          )
-          .join("")}
-        <span class="ml-auto flex items-center gap-3 text-sm text-slate-600">
-          <button type="button" id="nav-bugreport-btn" class="text-blue-700 underline">Rapportera problem</button>
-          <span>${user.name} <span class="text-slate-400">(${user.role})</span></span>
-          <button type="button" id="nav-logout-btn" class="text-blue-700 underline">Logga ut</button>
-        </span>
+    <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-5 px-4">
+        <a href="/index.html" class="flex shrink-0 items-center">${brandMark}</a>
+        <nav class="-mx-3 flex items-stretch overflow-x-auto">
+          ${links
+            .map(
+              (link) =>
+                `<a href="${link.href}" class="nav-link whitespace-nowrap"${link.key === active ? ' aria-current="page"' : ""}>${link.label}</a>`
+            )
+            .join("")}
+        </nav>
+        <div class="relative ml-auto flex shrink-0 items-center">
+          <button type="button" id="nav-user-btn" class="flex items-center rounded-full p-0.5 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900" aria-haspopup="menu" aria-expanded="false" title="${escapeHtml(user.name)}">
+            <span class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-white">${escapeHtml(initials)}</span>
+          </button>
+          <div id="nav-user-menu" role="menu" class="absolute right-0 top-full mt-1 hidden w-56 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-lg">
+            <div class="px-3 py-2">
+              <div class="font-medium text-slate-900">${escapeHtml(user.name)}</div>
+              <div class="text-xs text-slate-500">${escapeHtml(user.email ?? "")} · ${escapeHtml(user.role)}</div>
+            </div>
+            <div class="my-1 border-t border-slate-100"></div>
+            <button type="button" id="nav-bugreport-btn" role="menuitem" class="block w-full rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-50">Rapportera problem</button>
+            <button type="button" id="nav-logout-btn" role="menuitem" class="block w-full rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-50">Logga ut</button>
+          </div>
+        </div>
       </div>
     </header>
   `;
+
+  const userBtn = document.getElementById("nav-user-btn");
+  const userMenu = document.getElementById("nav-user-menu");
+  const setMenu = (open) => {
+    userMenu.classList.toggle("hidden", !open);
+    userBtn.setAttribute("aria-expanded", String(open));
+  };
+  userBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setMenu(userMenu.classList.contains("hidden"));
+  });
+  document.addEventListener("click", (event) => {
+    if (!userMenu.contains(event.target)) setMenu(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setMenu(false);
+  });
 
   document.getElementById("nav-logout-btn").addEventListener("click", async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -70,6 +100,7 @@ function renderNav(user, branding) {
   });
 
   document.getElementById("nav-bugreport-btn").addEventListener("click", () => {
+    setMenu(false);
     const dialog = ensureBugReportDialog();
     dialog.querySelector("#bugreport-form").reset();
     dialog.querySelector("#bugreport-form").classList.remove("hidden");
@@ -92,7 +123,7 @@ function ensureBugReportDialog() {
     "beforeend",
     `<dialog id="bugreport-dialog" class="w-full max-w-md rounded-lg p-0 backdrop:bg-slate-900/40">
       <div class="card m-0">
-        <h2 class="text-lg font-medium text-slate-900">Rapportera problem</h2>
+        <h2 class="text-lg font-semibold tracking-tight text-slate-900">Rapportera problem</h2>
         <form id="bugreport-form">
           <div class="mt-3 grid grid-cols-1 gap-3">
             <label class="block text-sm">

@@ -111,7 +111,7 @@ async function loadPipeline() {
     .map(
       (q) => `
       <tr>
-        <td class="py-1.5 pr-3"><a href="/offert-editor.html?id=${q.id}" class="text-blue-700 underline">${escapeHtml(q.quote_number)}</a></td>
+        <td class="py-1.5 pr-3"><a href="/offert-editor.html?id=${q.id}" class="link">${escapeHtml(q.quote_number)}</a></td>
         <td class="py-1.5 pr-3 text-slate-900">${escapeHtml(q.customer_name)}</td>
         <td class="py-1.5 pr-3 text-slate-600">${QUOTE_STATUS_LABELS[q.status] ?? q.status}</td>
         <td class="py-1.5 pr-3 text-right">${money(q.total_value)}</td>
