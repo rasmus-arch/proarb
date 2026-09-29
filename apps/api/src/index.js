@@ -27,6 +27,7 @@ import statsRouter from "./modules/stats/routes.js";
 import bugReportsRouter from "./modules/bug-reports/routes.js";
 import { uploadsRoot } from "./lib/uploads.js";
 import { requireAuth, requireRole } from "./lib/auth-middleware.js";
+import { run as runMigrations } from "../db/migrate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
@@ -104,6 +105,16 @@ app.use((err, req, res, next) => {
   const status = err.status ?? 500;
   res.status(status).json({ error: err.message ?? "Internal server error" });
 });
+
+// Brings the database schema up to date on every start, so deploying new
+// code + restarting is enough — otherwise a deploy that skips "Run NPM
+// Install" (the postinstall migration) leaves new columns missing and
+// queries fail with "Unknown column". Idempotent; non-fatal like postinstall.
+try {
+  await runMigrations();
+} catch (err) {
+  console.warn(`Kunde inte köra databasmigrering vid start: ${err.message}`);
+}
 
 const port = process.env.PORT ?? 3001;
 app.listen(port, () => {

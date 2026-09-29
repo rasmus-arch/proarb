@@ -123,7 +123,10 @@ export async function run() {
     try {
       await connection.query(statement);
     } catch (err) {
-      if (![1060, 1061, 1826].includes(err.errno)) {
+      // MariaDB reports a duplicate FK constraint as errno 1005 wrapping
+      // "errno: 121" instead of MySQL's 1826.
+      const duplicateFk = err.errno === 1005 && /errno: 121/.test(err.message);
+      if (![1060, 1061, 1826].includes(err.errno) && !duplicateFk) {
         console.warn(`Migreringssteg hoppades över (${statement}): ${err.message}`);
       }
     }
