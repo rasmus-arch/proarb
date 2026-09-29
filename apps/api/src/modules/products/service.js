@@ -1,5 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
+import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 
 // Fallback for quick-created products (e.g. from the quote/order/kassa line
 // builder) where the user hasn't typed an article number themselves.
@@ -110,9 +111,16 @@ export async function getProduct(id) {
   const [[product]] = await pool.query(`SELECT * FROM products WHERE id = ?`, [id]);
   if (!product) return null;
 
+  // reorder_point/reorder_quantity (min-saldo/beställningsantal) come from
+  // stock_levels for lagrets standardlager — samma rader som redigeras från
+  // Lager > Saldo, bara ihopkopplade här så de går att sätta direkt från
+  // produktredigeringen istället (se produkter.js).
   const [variants] = await pool.query(
-    `SELECT * FROM product_variants WHERE product_id = ? ORDER BY color ASC, size ASC`,
-    [id]
+    `SELECT v.*, sl.reorder_point, sl.reorder_quantity
+     FROM product_variants v
+     LEFT JOIN stock_levels sl ON sl.product_variant_id = v.id AND sl.warehouse_id = ?
+     WHERE v.product_id = ? ORDER BY v.color ASC, v.size ASC`,
+    [DEFAULT_WAREHOUSE_ID, id]
   );
   const [suppliers] = await pool.query(
     `SELECT ps.id, ps.supplier_id, s.name AS supplier_name, ps.supplier_sku, ps.cost_price, ps.lead_time_days

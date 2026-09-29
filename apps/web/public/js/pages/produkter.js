@@ -230,17 +230,34 @@ newProductForm.addEventListener("submit", async (event) => {
 
 // --- Edit / delete product ------------------------------------------------
 
+// Warehouse ID 1 = Centrallager, det enda lager appen räknar mot idag (se
+// DEFAULT_WAREHOUSE_ID i apps/api/src/modules/inventory/service.js).
+const DEFAULT_WAREHOUSE_ID = 1;
+
 function renderEditVariants(variants) {
   editVariantEmpty.classList.toggle("hidden", variants.length > 0);
   editVariantList.innerHTML = variants
     .map(
       (v) => `
-      <li class="flex items-center justify-between py-1.5">
-        <span>
-          <span class="font-medium text-slate-900">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</span>
-          <span class="ml-2 text-slate-500">${escapeHtml(v.sku)}${v.barcode ? " · " + escapeHtml(v.barcode) : ""}</span>
-        </span>
-        <button type="button" class="text-slate-400 hover:text-red-600" data-remove-variant="${v.id}">✕</button>
+      <li class="py-1.5" data-variant-row="${v.id}">
+        <div class="flex items-center justify-between">
+          <span>
+            <span class="font-medium text-slate-900">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</span>
+            <span class="ml-2 text-slate-500">${escapeHtml(v.sku)}${v.barcode ? " · " + escapeHtml(v.barcode) : ""}</span>
+          </span>
+          <button type="button" class="text-slate-400 hover:text-red-600" data-remove-variant="${v.id}">✕</button>
+        </div>
+        <div class="mt-1 flex flex-wrap items-center gap-2">
+          <label class="flex items-center gap-1 text-xs text-slate-500">
+            Min-saldo
+            <input type="number" min="0" step="1" class="input w-20" data-reorder-point="${v.id}" value="${v.reorder_point ?? ""}" />
+          </label>
+          <label class="flex items-center gap-1 text-xs text-slate-500">
+            Beställningsantal
+            <input type="number" min="0" step="1" class="input w-20" data-reorder-quantity="${v.id}" value="${v.reorder_quantity ?? ""}" />
+          </label>
+          <button type="button" class="btn-secondary text-xs" data-save-reorder="${v.id}">Spara</button>
+        </div>
       </li>`
     )
     .join("");
@@ -344,11 +361,33 @@ addVariantBtn.addEventListener("click", async () => {
 
 editVariantList.addEventListener("click", async (event) => {
   const variantId = event.target.dataset.removeVariant;
-  if (variantId === undefined) return;
-  await api.delete(`/products/${editProductForm.dataset.productId}/variants/${variantId}`);
-  const product = await api.get(`/products/${editProductForm.dataset.productId}`);
-  renderEditVariants(product.variants.filter((v) => v.active));
-  await loadProducts();
+  if (variantId !== undefined) {
+    await api.delete(`/products/${editProductForm.dataset.productId}/variants/${variantId}`);
+    const product = await api.get(`/products/${editProductForm.dataset.productId}`);
+    renderEditVariants(product.variants.filter((v) => v.active));
+    await loadProducts();
+    return;
+  }
+
+  const saveId = event.target.dataset.saveReorder;
+  if (saveId !== undefined) {
+    editVariantError.classList.add("hidden");
+    const row = editVariantList.querySelector(`[data-variant-row="${saveId}"]`);
+    const point = row.querySelector(`[data-reorder-point="${saveId}"]`).value;
+    const quantity = row.querySelector(`[data-reorder-quantity="${saveId}"]`).value;
+    try {
+      await api.patch(`/inventory/stock-levels/${saveId}/${DEFAULT_WAREHOUSE_ID}/reorder`, {
+        reorderPoint: point === "" ? null : Number(point),
+        reorderQuantity: quantity === "" ? null : Number(quantity),
+      });
+      const originalLabel = event.target.textContent;
+      event.target.textContent = "Sparat!";
+      setTimeout(() => (event.target.textContent = originalLabel), 1500);
+    } catch (err) {
+      editVariantError.textContent = err.message;
+      editVariantError.classList.remove("hidden");
+    }
+  }
 });
 
 editProductForm.addEventListener("submit", async (event) => {

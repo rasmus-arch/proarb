@@ -153,5 +153,10 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
     });
   }
 
-  return [...bySupplier.values()].filter((b) => b.order_driven.length > 0 || b.restock_driven.length > 0);
+  // Leverantörslösa produkter sist, som en egen kategori under de riktiga
+  // leverantörerna — annars hamnar den gruppen var som helst beroende på
+  // vilken rad som råkade skapa den först.
+  return [...bySupplier.values()]
+    .filter((b) => b.order_driven.length > 0 || b.restock_driven.length > 0)
+    .sort((a, b) => (a.supplier_id === 0 ? 1 : 0) - (b.supplier_id === 0 ? 1 : 0));
 }
