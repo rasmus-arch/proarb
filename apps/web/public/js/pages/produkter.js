@@ -234,16 +234,21 @@ newProductForm.addEventListener("submit", async (event) => {
 // DEFAULT_WAREHOUSE_ID i apps/api/src/modules/inventory/service.js).
 const DEFAULT_WAREHOUSE_ID = 1;
 
+// Satt när produkten öppnas via sökfältet/skanning (?edit=…&variant=…) så
+// den skannade varianten syns markerad.
+let highlightVariantId = null;
+
 function renderEditVariants(variants) {
   editVariantEmpty.classList.toggle("hidden", variants.length > 0);
   editVariantList.innerHTML = variants
     .map(
       (v) => `
-      <li class="py-1.5" data-variant-row="${v.id}">
+      <li class="py-1.5 ${String(v.id) === highlightVariantId ? "-mx-2 rounded-md bg-accent-50 px-2" : ""}" data-variant-row="${v.id}">
         <div class="flex items-center justify-between">
           <span>
             <span class="font-medium text-slate-900">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</span>
             <span class="ml-2 text-slate-500">${escapeHtml(v.sku)}${v.barcode ? " · " + escapeHtml(v.barcode) : ""}</span>
+            <span class="ml-2 text-xs ${Number(v.quantity_on_hand) > 0 ? "text-slate-600" : "text-slate-400"}">Saldo ${Number(v.quantity_on_hand)}</span>
           </span>
           <button type="button" class="text-slate-400 hover:text-red-600" data-remove-variant="${v.id}">✕</button>
         </div>
@@ -452,5 +457,15 @@ document.getElementById("run-import-btn").addEventListener("click", async () => 
   }
 });
 
-populateDatalists();
+const datalistsReady = populateDatalists();
 loadProducts();
+
+// Öppnad via sökfältet i menyn (t.ex. en skannad streckkod).
+{
+  const params = new URLSearchParams(location.search);
+  const editId = params.get("edit");
+  if (editId) {
+    highlightVariantId = params.get("variant");
+    datalistsReady.then(() => openEditDialog(editId));
+  }
+}

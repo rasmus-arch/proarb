@@ -126,3 +126,9 @@ el.pickupBtn.addEventListener("click", async () => {
 });
 
 el.scanInput.focus();
+
+// Sökfältet i menyn skickar hit en skannad ordersedel via ?order=.
+{
+  const initialOrder = new URLSearchParams(location.search).get("order");
+  if (initialOrder) scan(initialOrder);
+}

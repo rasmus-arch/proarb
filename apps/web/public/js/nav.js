@@ -49,7 +49,7 @@ function renderNav(user, branding) {
 
   mount.innerHTML = `
     <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex h-14 max-w-6xl items-stretch gap-5 px-4">
+      <div class="mx-auto flex h-14 max-w-7xl items-stretch gap-5 px-4">
         <a href="/index.html" class="flex shrink-0 items-center">${brandMark}</a>
         <nav class="-mx-3 flex items-stretch overflow-x-auto">
           ${links
@@ -60,6 +60,15 @@ function renderNav(user, branding) {
             .join("")}
         </nav>
         <div class="relative ml-auto flex shrink-0 items-center">
+          <label class="relative">
+            <span class="sr-only">Sök eller skanna</span>
+            <svg class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path stroke-linecap="round" d="m13.5 13.5 3 3"/></svg>
+            <input id="nav-search" type="search" autocomplete="off" spellcheck="false" placeholder="Sök eller skanna…"
+              class="h-9 w-44 rounded-md border border-slate-200 bg-slate-50 pl-8 pr-2 text-sm text-slate-900 transition-colors placeholder:text-slate-400 hover:border-slate-300 focus:border-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-accent-300/70 xl:w-56" />
+          </label>
+          <div id="nav-search-results" class="absolute right-0 top-full z-40 mt-1 hidden w-96 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-slate-200 bg-white text-sm shadow-lg"></div>
+        </div>
+        <div class="relative flex shrink-0 items-center">
           <button type="button" id="nav-user-btn" class="flex items-center rounded-full p-0.5 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900" aria-haspopup="menu" aria-expanded="false" title="${escapeHtml(user.name)}">
             <span class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-white">${escapeHtml(initials)}</span>
           </button>
@@ -77,6 +86,8 @@ function renderNav(user, branding) {
       </div>
     </header>
   `;
+
+  setupSearch();
 
   const userBtn = document.getElementById("nav-user-btn");
   const userMenu = document.getElementById("nav-user-menu");
@@ -118,6 +129,163 @@ function renderNav(user, branding) {
     dialog.querySelector("#bugreport-result").classList.add("hidden");
     dialog.querySelector("#bugreport-error").classList.add("hidden");
     dialog.showModal();
+  });
+}
+
+// --- Sök / skanna ------------------------------------------------------------
+// En skannad ordersedel öppnar ordern i Orderhantering, en skannad
+// produkt (EAN/SKU) öppnar produkten. Fritext visar grupperade träffar.
+
+const SEARCH_GROUPS = [
+  ["orders", "Ordrar", (r) => ({ href: `/order-editor.html?id=${r.id}`, title: r.order_number, sub: r.customer_name })],
+  ["quotes", "Offerter", (r) => ({ href: `/offert-editor.html?id=${r.id}`, title: r.quote_number, sub: r.customer_name })],
+  ["customers", "Kunder", (r) => ({ href: `/kund-editor.html?id=${r.id}`, title: r.name, sub: [r.customer_number, r.city].filter(Boolean).join(" · ") })],
+  ["products", "Produkter", (r) => ({ href: `/produkter.html?edit=${r.id}`, title: r.name, sub: r.article_number })],
+];
+
+function exactHref(exact) {
+  if (exact.type === "order") return `/orderhantering.html?order=${encodeURIComponent(exact.label)}`;
+  if (exact.type === "quote") return `/offert-editor.html?id=${exact.id}`;
+  if (exact.type === "customer") return `/kund-editor.html?id=${exact.id}`;
+  return `/produkter.html?edit=${exact.id}${exact.variantId ? `&variant=${exact.variantId}` : ""}`;
+}
+
+async function searchApi(q) {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error("Sökningen misslyckades");
+  return res.json();
+}
+
+function setupSearch() {
+  const input = document.getElementById("nav-search");
+  const panel = document.getElementById("nav-search-results");
+  let items = [];
+  let active = -1;
+  let timer;
+  let lastQuery = "";
+
+  const close = () => {
+    panel.classList.add("hidden");
+    active = -1;
+  };
+
+  function render(result, q) {
+    items = [];
+    let html = "";
+    if (result.exact) {
+      const href = exactHref(result.exact);
+      items.push(href);
+      html += `<a href="${href}" data-idx="0" class="block border-b border-slate-100 bg-accent-50 px-3 py-2">
+        <div class="text-[11px] font-semibold uppercase tracking-wide text-accent-700">Exakt träff</div>
+        <div class="font-medium text-slate-900">${escapeHtml(result.exact.label)}</div></a>`;
+    }
+    for (const [key, label, map] of SEARCH_GROUPS) {
+      const rows = result[key] ?? [];
+      if (rows.length === 0) continue;
+      html += `<div class="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">${label}</div>`;
+      for (const row of rows) {
+        const { href, title, sub } = map(row);
+        html += `<a href="${href}" data-idx="${items.length}" class="block px-3 py-1.5 hover:bg-slate-50">
+          <span class="font-medium text-slate-900">${escapeHtml(title)}</span>
+          ${sub ? `<span class="ml-2 text-xs text-slate-500">${escapeHtml(sub)}</span>` : ""}</a>`;
+        items.push(href);
+      }
+    }
+    panel.innerHTML = html || `<p class="px-3 py-3 text-slate-500">Inga träffar för "${escapeHtml(q)}".</p>`;
+    panel.classList.remove("hidden");
+    highlight(result.exact ? 0 : -1);
+  }
+
+  function highlight(index) {
+    active = index;
+    panel.querySelectorAll("[data-idx]").forEach((a) => {
+      a.classList.toggle("ring-2", Number(a.dataset.idx) === index);
+      a.classList.toggle("ring-inset", Number(a.dataset.idx) === index);
+      a.classList.toggle("ring-accent-300", Number(a.dataset.idx) === index);
+    });
+  }
+
+  async function run(q) {
+    lastQuery = q;
+    try {
+      const result = await searchApi(q);
+      if (q === lastQuery) render(result, q);
+      return result;
+    } catch (err) {
+      panel.innerHTML = `<p class="px-3 py-3 text-red-600">${escapeHtml(err.message)}</p>`;
+      panel.classList.remove("hidden");
+      return null;
+    }
+  }
+
+  // Enter: en exakt träff (typiskt en skannad streckkod) går direkt dit,
+  // annars den markerade eller första träffen.
+  async function go(q) {
+    if (!q) return;
+    clearTimeout(timer);
+    const result = await run(q);
+    if (!result) return;
+    if (result.exact) return (location.href = exactHref(result.exact));
+    const target = items[active >= 0 ? active : 0];
+    if (target) location.href = target;
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) return close();
+    timer = setTimeout(() => run(q), 180);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      go(input.value.trim());
+    } else if (event.key === "ArrowDown" && items.length) {
+      event.preventDefault();
+      highlight(Math.min(items.length - 1, active + 1));
+    } else if (event.key === "ArrowUp" && items.length) {
+      event.preventDefault();
+      highlight(Math.max(0, active - 1));
+    } else if (event.key === "Escape") {
+      close();
+      input.blur();
+    }
+  });
+  input.addEventListener("focus", () => {
+    if (input.value.trim().length >= 2 && panel.innerHTML) panel.classList.remove("hidden");
+  });
+  document.addEventListener("click", (event) => {
+    if (!panel.contains(event.target) && event.target !== input) close();
+  });
+
+  // "/" eller Ctrl/Cmd+K fokuserar sökfältet. En streckkodsläsare som
+  // "skriver" medan inget fält har fokus (tecken tätt inpå varandra +
+  // Enter) fångas också upp och söks direkt.
+  let scanBuffer = "";
+  let lastKeyAt = 0;
+  document.addEventListener("keydown", (event) => {
+    const target = event.target;
+    const typing = target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+    if ((event.key === "k" && (event.ctrlKey || event.metaKey)) || (event.key === "/" && !typing)) {
+      event.preventDefault();
+      input.focus();
+      input.select();
+      return;
+    }
+    if (typing || event.ctrlKey || event.metaKey || event.altKey || document.querySelector("dialog[open]")) return;
+    const now = Date.now();
+    if (now - lastKeyAt > 80) scanBuffer = "";
+    lastKeyAt = now;
+    if (event.key === "Enter") {
+      if (scanBuffer.length >= 4) {
+        event.preventDefault();
+        input.value = scanBuffer;
+        go(scanBuffer);
+      }
+      scanBuffer = "";
+    } else if (event.key.length === 1) {
+      scanBuffer += event.key;
+    }
   });
 }
 

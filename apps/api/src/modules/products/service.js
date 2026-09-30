@@ -117,7 +117,7 @@ export async function getProduct(id) {
   // Lager > Saldo, bara ihopkopplade här så de går att sätta direkt från
   // produktredigeringen istället (se produkter.js).
   const [variants] = await pool.query(
-    `SELECT v.*, sl.reorder_point, sl.reorder_quantity
+    `SELECT v.*, sl.reorder_point, sl.reorder_quantity, COALESCE(sl.quantity_on_hand, 0) AS quantity_on_hand
      FROM product_variants v
      LEFT JOIN stock_levels sl ON sl.product_variant_id = v.id AND sl.warehouse_id = ?
      WHERE v.product_id = ? ORDER BY v.color ASC, v.size ASC`,
