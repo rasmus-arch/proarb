@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { loadMarginThresholds, marginCellHtml, renderMarginCell, marginLevel, marginSummaryText } from "../margin.js";
 import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
 
 const params = new URLSearchParams(location.search);
@@ -105,10 +106,6 @@ function lineMargin(line) {
   return lineTotal(line) - Number(line.quantity) * Number(line.costPrice);
 }
 
-function marginLabel(margin) {
-  return margin === null ? "–" : money(margin);
-}
-
 function renderTotals() {
   const subtotal = state.lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const vat = state.lines.reduce((sum, l) => sum + lineTotal(l) * (Number(l.taxRatePercent) / 100), 0);
@@ -122,6 +119,14 @@ function renderTotals() {
   const percent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
   const incomplete = margins.length < state.lines.length && state.lines.length > 0;
   el.totalsMargin.textContent = `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
+
+  const warningEl = document.getElementById("margin-warning");
+  const summary = marginSummaryText(state.lines.map((l) => marginLevel(lineMargin(l), lineTotal(l))));
+  warningEl.classList.toggle("hidden", !summary);
+  if (summary) {
+    warningEl.textContent = summary.text;
+    warningEl.className = `mt-2 text-right text-xs ${summary.level === "critical" ? "text-red-600" : "text-amber-700"}`;
+  }
 }
 
 // DRAFT is always editable; SENT/VIEWED stay editable too so staff can
@@ -129,7 +134,47 @@ function renderTotals() {
 // of status, see emailQuoteToCustomer) — once the customer has actually
 // responded (ACCEPTED/DECLINED/CONVERTED/EXPIRED) it's locked, since that
 // outcome shouldn't be silently rewritten after the fact.
-const isEditable = () => ["DRAFT", "SENT", "VIEWED"].includes(state.status);
+const isEditable = () => ["DRAFT", "SENT", "VIEWED", "EXPIRED"].includes(state.status);
+
+const EVENT_LABELS = {
+  CREATED: "Skapad",
+  SENT: "Skickad",
+  EMAILED: "Mejlad till kund",
+  EMAIL_FAILED: "Mejl misslyckades",
+  LINE_ADDED_BY_CUSTOMER: "Kunden lade till en rad",
+  VIEWED: "Öppnad av kunden",
+  ACCEPTED: "Accepterad",
+  DECLINED: "Avböjd",
+  EXPIRED: "Gick ut",
+  REOPENED: "Öppnad igen med nytt datum",
+  REMINDER_SENT: "Påminnelse skickad",
+  REMINDER_FAILED: "Påminnelse misslyckades",
+  CONVERTED: "Omvandlad till order",
+};
+
+function daysUntil(dateString) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(`${dateString.slice(0, 10)}T00:00:00`) - today) / 86400000);
+}
+
+function renderExpiryNote(quote, warningDays) {
+  const note = document.getElementById("expiry-note");
+  note.classList.add("hidden");
+  if (!quote.valid_until) return;
+  const date = new Date(quote.valid_until).toLocaleDateString("sv-SE");
+  if (quote.status === "EXPIRED") {
+    note.textContent = `Offerten gick ut ${date}. Sätt ett nytt datum under "Giltig till" och spara för att öppna den igen.`;
+    note.className = "mt-2 text-sm text-amber-700";
+    return;
+  }
+  if (!["SENT", "VIEWED"].includes(quote.status)) return;
+  const days = daysUntil(quote.valid_until);
+  if (days <= warningDays) {
+    note.textContent = days <= 0 ? `Går ut idag (${date}).` : `Går ut om ${days} ${days === 1 ? "dag" : "dagar"} (${date}).`;
+    note.className = "mt-2 text-sm text-amber-700";
+  }
+}
 
 function renderLines() {
   el.linesEmpty.classList.toggle("hidden", state.lines.length > 0);
@@ -149,8 +194,8 @@ function renderLines() {
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
             <td class="py-2 pr-3">${line.discountPercent} %</td>
             <td class="py-2 pr-3">${printSummary}</td>
-            <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
-            <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+            <td class="py-2 pr-3 text-right" data-cell="total">${money(lineTotal(line))}</td>
+            ${marginCellHtml(lineMargin(line), lineTotal(line), money)}
             <td></td>
           </tr>`;
       }
@@ -168,8 +213,8 @@ function renderLines() {
               <input type="number" min="0" max="100" step="1" class="input" placeholder="Rabatt %" data-field="printDiscountPercent" data-index="${index}" value="${line.printDiscountPercent || 0}" />
             </div>
           </td>
-          <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
-          <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+          <td class="py-2 pr-3 text-right" data-cell="total">${money(lineTotal(line))}</td>
+          ${marginCellHtml(lineMargin(line), lineTotal(line), money)}
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
     })
@@ -195,8 +240,8 @@ el.lineRows.addEventListener("input", (event) => {
   // into doesn't lose focus.
   if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent"].includes(field)) {
     const row = event.target.closest("tr");
-    row.querySelector("td:nth-last-child(3)").textContent = money(lineTotal(line));
-    row.querySelector("td:nth-last-child(2)").textContent = marginLabel(lineMargin(line));
+    row.querySelector('[data-cell="total"]').textContent = money(lineTotal(line));
+    renderMarginCell(row.querySelector('[data-cell="margin"]'), lineMargin(line), lineTotal(line), money);
   }
 });
 
@@ -619,7 +664,11 @@ function applyEditableState() {
 }
 
 async function init() {
-  const suppliers = (await api.get("/suppliers")).rows;
+  await loadMarginThresholds();
+  const [{ rows: suppliers }, branding] = await Promise.all([
+    api.get("/suppliers"),
+    api.get("/settings/branding").catch(() => ({})),
+  ]);
   el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
   if (quoteId) {
@@ -653,18 +702,18 @@ async function init() {
     if (quote.events?.length > 0) {
       el.historySection.classList.remove("hidden");
       el.historyList.innerHTML = quote.events
-        .map((e) => `<li>${new Date(e.created_at).toLocaleString("sv-SE")} – ${escapeHtml(e.type)}</li>`)
+        .map((e) => `<li>${new Date(e.created_at).toLocaleString("sv-SE")} – ${escapeHtml(EVENT_LABELS[e.type] ?? e.type)}${e.meta ? ` <span class="text-slate-400">(${escapeHtml(e.meta)})</span>` : ""}</li>`)
         .join("");
     }
 
     renderActionButtons(quote);
+    renderExpiryNote(quote, Number(branding.quote_expiry_warning_days ?? 3));
     applyEditableState();
   } else {
-    // Samma standard (10 dagar) som backend sätter om fältet lämnas tomt —
-    // visas här så säljaren ser det faktiska datumet direkt och kan ändra
-    // det innan spar, istället för ett tomt fält som "magiskt" fylls i.
+    // Samma standard som backend sätter om fältet lämnas tomt (Inställningar
+    // → Offerter) — visas här så säljaren ser det faktiska datumet direkt.
     const defaultValidUntil = new Date();
-    defaultValidUntil.setDate(defaultValidUntil.getDate() + 10);
+    defaultValidUntil.setDate(defaultValidUntil.getDate() + (Number(branding.quote_valid_days) || 10));
     el.validUntil.value = defaultValidUntil.toISOString().slice(0, 10);
     applyEditableState();
   }

@@ -184,16 +184,22 @@ async function loadKpis() {
   const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const today = now.toISOString().slice(0, 10);
 
-  const [summary, pipeline, readyOrders] = await Promise.all([
+  const [summary, pipeline, orderSummary] = await Promise.all([
     api.get(`/stats/summary?from=${firstOfMonth}&to=${today}`),
     api.get("/stats/open-quote-pipeline"),
-    api.get("/orders?status=READY_FOR_PICKUP&pageSize=1"),
+    api.get("/orders/status-summary"),
   ]);
 
   kpiRevenue.textContent = money(summary.revenue_ex_vat);
   kpiQuotes.textContent = String(pipeline.quote_count);
   kpiQuotesValue.textContent = pipeline.quote_count > 0 ? `Värde ${money(pipeline.total_value)}` : "";
-  kpiReadyPickup.textContent = String(readyOrders.total);
+  kpiReadyPickup.textContent = String(orderSummary.counts.READY_FOR_PICKUP ?? 0);
+  const uninvoiced = orderSummary.uninvoiced;
+  document.getElementById("kpi-uninvoiced").textContent = money(uninvoiced.amount_ex_vat);
+  document.getElementById("kpi-uninvoiced-count").textContent = uninvoiced.count
+    ? `${uninvoiced.count} ${uninvoiced.count === 1 ? "order" : "ordrar"} · äldsta ${new Date(uninvoiced.oldest_delivered_at).toLocaleDateString("sv-SE")}`
+    : "Allt är fakturerat";
+  document.getElementById("kpi-uninvoiced-card").classList.toggle("bg-accent-50", uninvoiced.count > 0);
 }
 
 async function loadReminders() {
@@ -206,7 +212,11 @@ async function loadReminders() {
         <div>
           <a href="/offert-editor.html?id=${q.id}" class="link">${escapeHtml(q.quote_number)}</a>
           <span class="ml-2 text-slate-600">${escapeHtml(q.customer_name)}</span>
-          <span class="ml-2 text-xs text-slate-500">${daysSince(q.sent_at)} dagar sedan skickad</span>
+          <span class="ml-2 text-xs ${q.expiring_soon ? "text-amber-700" : "text-slate-500"}">${
+            q.expiring_soon
+              ? `Går ut ${new Date(q.valid_until).toLocaleDateString("sv-SE")}`
+              : `${daysSince(q.sent_at)} dagar sedan skickad`
+          }</span>
         </div>
         <span class="flex items-center gap-2">
           <span class="hidden text-xs text-red-600" data-reminder-error></span>

@@ -15,10 +15,10 @@ import { getSettings } from "../settings/service.js";
 // ändras i Inställningar (t.ex. vid byte från ett annat system).
 async function nextOrderNumber(connection) {
   await connection.query(`UPDATE app_settings SET next_order_number = next_order_number + 1 WHERE id = 1`);
-  const [[{ next_order_number }]] = await connection.query(
-    `SELECT next_order_number FROM app_settings WHERE id = 1`
+  const [[{ next_order_number, order_number_prefix }]] = await connection.query(
+    `SELECT next_order_number, order_number_prefix FROM app_settings WHERE id = 1`
   );
-  return `ORD-${String(next_order_number - 1).padStart(4, "0")}`;
+  return `${order_number_prefix || "ORD"}-${String(next_order_number - 1).padStart(4, "0")}`;
 }
 
 // Unguessable token for the QR code on the ordersedel PDF — same pattern
@@ -95,6 +95,7 @@ export async function listOrders({ search = "", status = "", customerId = "", pa
   const [rows] = await pool.query(
     `SELECT o.id, o.order_number, o.status, o.delivery_method, o.created_at,
             c.id AS customer_id, c.name AS customer_name,
+            (SELECT MAX(op.picked_up_at) FROM order_pickups op WHERE op.order_id = o.id) AS delivered_at,
             COALESCE(SUM(
               ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
               + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
@@ -116,6 +117,57 @@ export async function listOrders({ search = "", status = "", customerId = "", pa
   );
 
   return { rows, total, page, pageSize };
+}
+
+// Antal per status (för flikarna på Ordrar) + hur mycket som är utlämnat
+// men inte fakturerat ännu — pengar som ligger och väntar.
+export async function getStatusSummary({ customerId = "" } = {}) {
+  const customerClause = customerId ? "WHERE o.customer_id = ?" : "";
+  const params = customerId ? [Number(customerId)] : [];
+  const [rows] = await pool.query(
+    `SELECT o.status, COUNT(*) AS count FROM orders o ${customerClause} GROUP BY o.status`,
+    params
+  );
+  const counts = Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
+
+  const [[uninvoiced]] = await pool.query(
+    `SELECT COUNT(DISTINCT o.id) AS count,
+            COALESCE(SUM(
+              ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
+              + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+            ), 0) AS amount_ex_vat,
+            MIN((SELECT MAX(op.picked_up_at) FROM order_pickups op WHERE op.order_id = o.id)) AS oldest_delivered_at
+     FROM orders o
+     LEFT JOIN order_lines ol ON ol.order_id = o.id
+     WHERE o.status = 'DELIVERED' ${customerId ? "AND o.customer_id = ?" : ""}`,
+    params
+  );
+
+  return {
+    counts,
+    total: Object.values(counts).reduce((a, b) => a + b, 0),
+    uninvoiced: {
+      count: Number(uninvoiced.count),
+      amount_ex_vat: round2(Number(uninvoiced.amount_ex_vat)),
+      oldest_delivered_at: uninvoiced.oldest_delivered_at,
+    },
+  };
+}
+
+// "Fakturera markerade" — samma övergång som knappen på en enskild order,
+// en i taget så att ett Fortnox-fel på en order inte stoppar de andra.
+export async function invoiceOrders(ids) {
+  const results = [];
+  for (const id of ids) {
+    try {
+      const order = await updateOrderStatus(id, "INVOICED");
+      results.push({ id, order_number: order.order_number, ok: true, notification: order.notification });
+    } catch (err) {
+      const [[row]] = await pool.query(`SELECT order_number FROM orders WHERE id = ?`, [id]);
+      results.push({ id, order_number: row?.order_number ?? null, ok: false, error: err.message });
+    }
+  }
+  return results;
 }
 
 async function loadOrderLines(orderId) {
@@ -192,8 +244,8 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order, sourcing)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -206,7 +258,6 @@ async function insertOrderLines(connection, orderId, lines) {
         line.printPrice ?? line.print_price ?? null,
         line.printDiscountPercent ?? line.print_discount_percent ?? 0,
         sortOrder++,
-        line.sourcing ?? "STOCK",
       ]
     );
   }
@@ -226,8 +277,8 @@ export async function createOrder(data, userId) {
 
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         data.customerId,
@@ -236,6 +287,7 @@ export async function createOrder(data, userId) {
         data.notes ?? null,
         userId,
         generateQrToken(),
+        data.skipInventory ? 1 : 0,
       ]
     );
     const orderId = result.insertId;
@@ -264,8 +316,8 @@ export async function duplicateOrder(id, userId) {
 
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         order.customer_id,
@@ -274,6 +326,7 @@ export async function duplicateOrder(id, userId) {
         order.notes,
         userId,
         generateQrToken(),
+        order.skip_inventory ? 1 : 0,
       ]
     );
     const orderId = result.insertId;
@@ -327,7 +380,7 @@ export async function convertQuoteToOrder(quoteId, userId) {
 // på radernas belopp först vid DELIVERED. Full-replace, samma resonemang
 // som quotes.updateQuote: enklare och säkrare än att diffa mot befintliga
 // rader.
-export async function updateOrderLines(id, lines) {
+export async function updateOrderLines(id, lines, fields = {}) {
   const order = await getOrder(id);
   if (!order) throw new Error("ORDER_NOT_FOUND");
   if (PICKUP_BLOCKED_STATUSES.includes(order.status)) throw new Error("ORDER_LINES_LOCKED");
@@ -336,6 +389,15 @@ export async function updateOrderLines(id, lines) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query(
+      `UPDATE orders SET reference_contact_id = ?, delivery_method = ?, skip_inventory = ? WHERE id = ?`,
+      [
+        fields.referenceContactId === undefined ? order.reference_contact_id : fields.referenceContactId || null,
+        fields.deliveryMethod ?? order.delivery_method,
+        fields.skipInventory === undefined ? order.skip_inventory : fields.skipInventory ? 1 : 0,
+        id,
+      ]
+    );
     await connection.query(`DELETE FROM order_lines WHERE order_id = ?`, [id]);
     await insertOrderLines(connection, id, lines);
     await connection.commit();
@@ -444,9 +506,10 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     await connection.query(`UPDATE order_lines SET delivered_qty = quantity WHERE order_id = ?`, [orderId]);
     await connection.query(`UPDATE orders SET status = 'DELIVERED' WHERE id = ?`, [orderId]);
 
-    for (const line of order.lines) {
+    for (const line of order.skip_inventory ? [] : order.lines) {
       // A fritextrad (free-text line) has no product_variant_id — nothing
-      // physical to deduct from lagersaldo.
+      // physical to deduct from lagersaldo. Orders marked "undanta från
+      // lagerhantering" never touch stock at all.
       if (!line.product_variant_id) continue;
       await recordMovement(connection, {
         variantId: line.product_variant_id,

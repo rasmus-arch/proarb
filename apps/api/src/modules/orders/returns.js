@@ -138,8 +138,9 @@ export async function createOrderReturn(orderId, { reason, lines }, userId) {
         ]
       );
 
-      // A fritextrad has no product to put back on lagersaldo.
-      if (orderLine.product_variant_id) {
+      // A fritextrad has no product to put back on lagersaldo, and an order
+      // undantagen från lagerhantering never took anything out of it.
+      if (orderLine.product_variant_id && !order.skip_inventory) {
         await recordMovement(connection, {
           variantId: orderLine.product_variant_id,
           warehouseId: DEFAULT_WAREHOUSE_ID,

@@ -140,7 +140,7 @@ export async function createCustomer(data) {
       data.postalCode ?? null,
       data.city ?? null,
       data.logoUrl ?? null,
-      data.paymentTermsDays ?? 30,
+      data.paymentTermsDays ?? (await getSettings())?.default_payment_terms_days ?? 30,
       data.notes ?? null,
     ]
   );

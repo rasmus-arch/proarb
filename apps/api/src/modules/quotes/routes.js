@@ -33,7 +33,10 @@ router.get("/reminders", async (req, res, next) => {
   try {
     const settings = await getSettings();
     if (!settings?.reminder_enabled) return res.json({ rows: [] });
-    const rows = await quotes.listQuotesNeedingReminder(settings.reminder_days_after ?? REMINDER_DEFAULT_DAYS);
+    const rows = await quotes.listQuotesNeedingReminder(
+      settings.reminder_days_after ?? REMINDER_DEFAULT_DAYS,
+      settings.quote_expiry_warning_days ?? 3
+    );
     res.json({ rows });
   } catch (err) {
     next(err);
@@ -79,7 +82,7 @@ router.patch("/:id", async (req, res, next) => {
   try {
     const existing = await quotes.getQuote(Number(req.params.id));
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (!["DRAFT", "SENT", "VIEWED"].includes(existing.status)) {
+    if (!["DRAFT", "SENT", "VIEWED", "EXPIRED"].includes(existing.status)) {
       return res.status(409).json({ error: "Offerten kan inte längre redigeras (redan besvarad eller omvandlad)" });
     }
     const quote = await quotes.updateQuote(Number(req.params.id), req.body ?? {});

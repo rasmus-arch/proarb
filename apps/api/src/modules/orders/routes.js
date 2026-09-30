@@ -44,6 +44,24 @@ router.post("/", async (req, res, next) => {
 
 // Before /:id so a scanned order_number (e.g. "ORD-0001") isn't parsed as
 // a numeric id — see Orderhantering (orderhantering.html/.js).
+router.get("/status-summary", async (req, res, next) => {
+  try {
+    res.json(await orders.getStatusSummary({ customerId: String(req.query.customerId ?? "") }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/bulk-invoice", async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter((n) => n > 0) : [];
+    if (ids.length === 0) return res.status(400).json({ error: "Välj minst en order" });
+    res.json({ results: await orders.invoiceOrders(ids) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/by-number/:orderNumber", async (req, res, next) => {
   try {
     const order = await orders.getOrderByNumber(req.params.orderNumber);
@@ -114,7 +132,12 @@ router.patch("/:id/lines", async (req, res, next) => {
     if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
       return res.status(400).json({ error: "Minst en rad krävs" });
     }
-    const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines);
+    const { referenceContactId, deliveryMethod, skipInventory } = req.body;
+    const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines, {
+      referenceContactId,
+      deliveryMethod: ["PICKUP", "SHIPPING"].includes(deliveryMethod) ? deliveryMethod : undefined,
+      skipInventory,
+    });
     res.json(order);
   } catch (err) {
     if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });

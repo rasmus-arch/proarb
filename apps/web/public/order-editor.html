@@ -12,7 +12,7 @@
     <main class="mx-auto max-w-4xl px-4 py-8">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 id="page-title" class="text-xl font-semibold text-slate-900">Ny order</h1>
+          <h1 id="page-title" class="page-title">Ny order</h1>
           <span id="status-badge" class="mt-1 hidden rounded-full px-2 py-0.5 text-xs font-medium"></span>
         </div>
         <div class="flex flex-col items-end gap-1">
@@ -59,6 +59,13 @@
             </select>
           </label>
         </div>
+        <label class="mt-4 flex items-start gap-2.5 text-sm">
+          <input id="skip-inventory" type="checkbox" class="mt-0.5" />
+          <span>
+            <span class="font-medium text-slate-900">Undanta från lagerhantering</span>
+            <span class="block text-slate-500">Ordern dras inte från lagersaldot och räknas inte med i inköpsförslag.</span>
+          </span>
+        </label>
       </section>
 
       <!-- Lines -->
@@ -90,7 +97,6 @@
                 <th class="py-2 pr-3 font-medium text-right">Summa ex moms</th>
                 <th class="py-2 pr-3 font-medium text-right">Marginal</th>
                 <th class="py-2 pr-3 font-medium w-52">Tryck (valfritt)</th>
-                <th class="py-2 pr-3 font-medium" title="Beställ ändå från leverantör, oavsett lagersaldo">Beställ ändå</th>
                 <th class="py-2 pr-3 font-medium"></th>
               </tr>
             </thead>
@@ -99,13 +105,14 @@
           <p id="lines-empty" class="py-4 text-center text-sm text-slate-500">Inga rader tillagda ännu.</p>
         </div>
 
-        <div class="mt-3 flex justify-end">
+        <div class="mt-3 flex flex-col items-end">
           <dl class="w-64 space-y-1 text-sm">
             <div class="flex justify-between"><dt class="text-slate-600">Delsumma ex moms</dt><dd id="totals-subtotal">0,00 kr</dd></div>
             <div class="flex justify-between"><dt class="text-slate-600">Moms</dt><dd id="totals-vat">0,00 kr</dd></div>
             <div class="flex justify-between font-semibold"><dt>Totalt</dt><dd id="totals-total">0,00 kr</dd></div>
             <div class="flex justify-between border-t border-slate-200 pt-1 text-slate-600"><dt>Marginal</dt><dd id="totals-margin">0,00 kr</dd></div>
           </dl>
+          <p id="margin-warning" class="mt-2 hidden text-right text-xs"></p>
         </div>
 
         <div id="save-lines-row" class="mt-3 hidden flex justify-end">

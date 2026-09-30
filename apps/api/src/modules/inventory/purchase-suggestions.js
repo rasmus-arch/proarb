@@ -5,8 +5,8 @@ import { DEFAULT_WAREHOUSE_ID } from "./service.js";
 //
 // Två källor räknas ihop till EN rad per variant (inte en rad per order +
 // en till för min-saldo, som annars gav dubbletter på inköpsordern):
-//  1. Ordrar som inte är klara, där raden är markerad "beställ ändå"
-//     (sourcing = PURCHASE) eller där lagret inte räcker.
+//  1. Ordrar som inte är klara där lagret inte räcker. Ordrar markerade
+//     "undanta från lagerhantering" räknas aldrig med.
 //  2. Varianter under sitt min-saldo.
 // Det som redan ligger på en öppen inköpsorder dras av, så inget föreslås
 // två gånger. Leverantör = produktens egen leverantör (products.supplier_id,
@@ -15,11 +15,12 @@ import { DEFAULT_WAREHOUSE_ID } from "./service.js";
 
 export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_ID } = {}) {
   const [orderRows] = await pool.query(
-    `SELECT ol.product_variant_id, ol.quantity, ol.sourcing, o.order_number, c.name AS customer_name
+    `SELECT ol.product_variant_id, ol.quantity, o.order_number, c.name AS customer_name
      FROM order_lines ol
      JOIN orders o ON o.id = ol.order_id
      JOIN customers c ON c.id = o.customer_id
      WHERE o.status NOT IN ('DELIVERED', 'CANCELLED', 'INVOICED')
+       AND o.skip_inventory = 0
        AND ol.product_variant_id IS NOT NULL
      ORDER BY o.created_at ASC`
   );
@@ -50,7 +51,7 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   // Per variant: how much open orders need beyond what's in stock, and why.
   const needs = new Map();
   function need(variantId) {
-    if (!needs.has(variantId)) needs.set(variantId, { orderQty: 0, forcedQty: 0, restockQty: 0, reasons: [] });
+    if (!needs.has(variantId)) needs.set(variantId, { orderQty: 0, restockQty: 0, reasons: [] });
     return needs.get(variantId);
   }
 
@@ -60,18 +61,13 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   for (const row of orderRows) {
     const qty = Number(row.quantity);
     const n = need(row.product_variant_id);
-    if (row.sourcing === "PURCHASE") {
-      n.forcedQty += qty;
-      n.reasons.push({ type: "order", order_number: row.order_number, customer_name: row.customer_name, quantity: qty, forced: true });
-      continue;
-    }
     const available = Math.max(0, stockLeft.get(row.product_variant_id) ?? 0);
     const covered = Math.min(available, qty);
     stockLeft.set(row.product_variant_id, available - covered);
     const missing = qty - covered;
     if (missing > 0) {
       n.orderQty += missing;
-      n.reasons.push({ type: "order", order_number: row.order_number, customer_name: row.customer_name, quantity: missing, forced: false });
+      n.reasons.push({ type: "order", order_number: row.order_number, customer_name: row.customer_name, quantity: missing });
     }
   }
 
@@ -84,7 +80,7 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   }
 
   const variantIds = [...needs.entries()]
-    .filter(([, n]) => n.orderQty + n.forcedQty + n.restockQty > 0)
+    .filter(([, n]) => n.orderQty + n.restockQty > 0)
     .map(([id]) => id);
   if (variantIds.length === 0) return [];
 
@@ -118,7 +114,7 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
 
     // Order shortfall must be bought; restock tops up on top of that. Both
     // are reduced by what's already on an open purchase order.
-    const needed = n.forcedQty + n.orderQty + n.restockQty;
+    const needed = n.orderQty + n.restockQty;
     const alreadyOnOrder = Math.min(onOrder.get(v.product_variant_id) ?? 0, needed);
     const suggested = needed - alreadyOnOrder;
     if (suggested <= 0) continue;

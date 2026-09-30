@@ -90,7 +90,6 @@ export async function createOrderFromTemplate(templateId, userId) {
         printDescription: l.print_description,
         printPrice: l.print_price,
         printDiscountPercent: l.print_discount_percent,
-        sourcing: "STOCK",
       })),
     },
     userId

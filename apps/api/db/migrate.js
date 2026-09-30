@@ -118,6 +118,19 @@ export async function run() {
     "ALTER TABLE customers ADD COLUMN fortnox_customer_number VARCHAR(20) NULL",
     "ALTER TABLE app_settings ADD COLUMN fortnox_token_expires_at DATETIME NULL",
     "ALTER TABLE app_settings ADD COLUMN fortnox_oauth_state VARCHAR(64) NULL",
+    "ALTER TABLE orders ADD COLUMN skip_inventory TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE app_settings ADD COLUMN quote_valid_days INT NOT NULL DEFAULT 10",
+    "ALTER TABLE app_settings ADD COLUMN quote_expiry_warning_days INT NOT NULL DEFAULT 3",
+    "ALTER TABLE app_settings ADD COLUMN margin_warning_percent DECIMAL(5,2) NOT NULL DEFAULT 25",
+    "ALTER TABLE app_settings ADD COLUMN margin_critical_percent DECIMAL(5,2) NOT NULL DEFAULT 10",
+    "ALTER TABLE app_settings ADD COLUMN pickup_reminder_days INT NOT NULL DEFAULT 7",
+    "ALTER TABLE app_settings ADD COLUMN default_payment_terms_days INT NOT NULL DEFAULT 30",
+    "ALTER TABLE app_settings ADD COLUMN default_tax_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 25",
+    "ALTER TABLE app_settings ADD COLUMN quote_number_prefix VARCHAR(10) NOT NULL DEFAULT 'OFF'",
+    "ALTER TABLE app_settings ADD COLUMN order_number_prefix VARCHAR(10) NOT NULL DEFAULT 'ORD'",
+    "ALTER TABLE app_settings ADD COLUMN order_ready_email_note VARCHAR(1000) NULL",
+    "ALTER TABLE app_settings ADD COLUMN purchase_order_email_note VARCHAR(1000) NULL",
+    "ALTER TABLE app_settings ADD COLUMN backup_keep_days INT NOT NULL DEFAULT 14",
   ];
   for (const statement of alters) {
     try {

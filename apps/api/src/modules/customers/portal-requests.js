@@ -221,7 +221,6 @@ export async function convertPortalOrderRequest(id, userId) {
         unitPrice: l.unit_price,
         discountPercent: l.discount_percent,
         taxRatePercent: l.tax_rate_percent,
-        sourcing: "STOCK",
       })),
     },
     userId

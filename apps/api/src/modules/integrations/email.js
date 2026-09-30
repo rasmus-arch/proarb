@@ -106,6 +106,7 @@ export async function sendQuoteReminderEmail({
   quoteNumber,
   publicUrl,
   totalIncVat,
+  validUntil,
   sellerName,
   sellerLogoUrl,
   brandColor,
@@ -115,6 +116,7 @@ export async function sendQuoteReminderEmail({
     quoteNumber,
     publicUrl,
     totalIncVat,
+    validUntil,
     sellerName,
     sellerLogoUrl,
     brandColor,
@@ -226,15 +228,18 @@ function buildQuoteEmailHtml({
   return emailShell({ preheader: `Offert ${quoteNumber} — ${money(totalIncVat)}`, bodyHtml });
 }
 
-function buildQuoteReminderEmailHtml({ customerName, quoteNumber, publicUrl, totalIncVat, sellerName, sellerLogoUrl, brandColor }) {
+function buildQuoteReminderEmailHtml({ customerName, quoteNumber, publicUrl, totalIncVat, validUntil, sellerName, sellerLogoUrl, brandColor }) {
   const color = brandColor || "#0f172a";
+  const validUntilText = validUntil
+    ? new Date(validUntil).toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric" })
+    : null;
   const bodyHtml = `
     ${sellerLogoUrl ? `<img src="${escapeHtml(sellerLogoUrl)}" alt="${escapeHtml(sellerName ?? "")}" style="max-height:36px;margin-bottom:16px;" />` : ""}
     <p style="margin:0 0 4px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:${color};">${escapeHtml(sellerName ?? "")}</p>
     <h1 style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:20px;color:#0f172a;">Påminnelse: Offert ${escapeHtml(quoteNumber)}</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:14px;color:#334155;line-height:1.6;">
       Hej ${escapeHtml(customerName ?? "")},<br /><br />
-      Vi ville bara påminna om att ni har en offert som väntar på svar. Klicka på knappen nedan för att se den igen.
+      Vi ville bara påminna om att ni har en offert som väntar på svar${validUntilText ? ` — den gäller till ${escapeHtml(validUntilText)}` : ""}. Klicka på knappen nedan för att se den igen.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
       <tr>

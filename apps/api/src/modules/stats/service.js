@@ -1,3 +1,4 @@
+import { expireOverdueQuotes } from "../quotes/service.js";
 import { pool } from "../../lib/db.js";
 
 function round2(n) {
@@ -194,6 +195,7 @@ export async function getMonthlyCategoryTrend(months = 12) {
 const OPEN_QUOTE_STATUSES = ["SENT", "VIEWED"];
 
 export async function getOpenQuotePipeline() {
+  await expireOverdueQuotes();
   const [rows] = await pool.query(
     `SELECT q.id, q.quote_number, q.status, q.sent_at, c.name AS customer_name,
             COALESCE(SUM(ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)), 0) AS total_value

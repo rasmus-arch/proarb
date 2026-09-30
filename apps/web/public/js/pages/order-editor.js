@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { loadMarginThresholds, marginCellHtml, renderMarginCell, marginLevel, marginSummaryText } from "../margin.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
 import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
 
@@ -28,6 +29,7 @@ const el = {
   customerNotesText: document.getElementById("customer-notes-text"),
   referenceSelect: document.getElementById("reference-select"),
   deliveryMethod: document.getElementById("delivery-method"),
+  skipInventory: document.getElementById("skip-inventory"),
   newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
   newPickupContactQuickBtn: document.getElementById("new-pickup-contact-quick-btn"),
@@ -125,10 +127,6 @@ function lineMargin(line) {
   return lineTotal(line) - Number(line.quantity) * Number(line.costPrice);
 }
 
-function marginLabel(margin) {
-  return margin === null ? "–" : money(margin);
-}
-
 function renderTotals() {
   const subtotal = state.lines.reduce((sum, l) => sum + lineTotal(l), 0);
   const vat = state.lines.reduce((sum, l) => sum + lineTotal(l) * (Number(l.taxRatePercent) / 100), 0);
@@ -142,6 +140,14 @@ function renderTotals() {
   const percent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
   const incomplete = margins.length < state.lines.length && state.lines.length > 0;
   el.totalsMargin.textContent = `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
+
+  const warningEl = document.getElementById("margin-warning");
+  const summary = marginSummaryText(state.lines.map((l) => marginLevel(lineMargin(l), lineTotal(l))));
+  warningEl.classList.toggle("hidden", !summary);
+  if (summary) {
+    warningEl.textContent = summary.text;
+    warningEl.className = `mt-2 text-right text-xs ${summary.level === "critical" ? "text-red-600" : "text-amber-700"}`;
+  }
 }
 
 const isNewOrder = () => !orderId;
@@ -173,10 +179,9 @@ function renderLines() {
             <td class="py-2 pr-3">${line.quantity}</td>
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
             <td class="py-2 pr-3">${line.discountPercent} %</td>
-            <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
-            <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+            <td class="py-2 pr-3 text-right" data-cell="total">${money(lineTotal(line))}</td>
+            ${marginCellHtml(lineMargin(line), lineTotal(line), money)}
             <td class="py-2 pr-3">${printSummary}</td>
-            <td class="py-2 pr-3 text-center">${line.sourcing === "PURCHASE" ? "✓" : ""}</td>
             <td></td>
           </tr>`;
       }
@@ -187,8 +192,8 @@ function renderLines() {
           <td class="py-2 pr-3"><input type="number" min="0.01" step="1" class="input" data-field="quantity" data-index="${index}" value="${line.quantity}" /></td>
           <td class="py-2 pr-3"><input type="number" min="0" step="0.01" class="input" data-field="unitPrice" data-index="${index}" value="${line.unitPrice}" /></td>
           <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
-          <td class="py-2 pr-3 text-right">${money(lineTotal(line))}</td>
-          <td class="py-2 pr-3 text-right text-slate-500">${marginLabel(lineMargin(line))}</td>
+          <td class="py-2 pr-3 text-right" data-cell="total">${money(lineTotal(line))}</td>
+          ${marginCellHtml(lineMargin(line), lineTotal(line), money)}
           <td class="py-2 pr-3">
             <input type="text" class="input" placeholder="Tryckbeskrivning (valfritt)" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
             <div class="mt-1 flex gap-1">
@@ -196,7 +201,6 @@ function renderLines() {
               <input type="number" min="0" max="100" step="1" class="input" placeholder="Rabatt %" data-field="printDiscountPercent" data-index="${index}" value="${line.printDiscountPercent || 0}" />
             </div>
           </td>
-          <td class="py-2 pr-3 text-center"><input type="checkbox" class="rounded border-slate-300" data-field="sourcingPurchase" data-index="${index}" ${line.sourcing === "PURCHASE" ? "checked" : ""} /></td>
           <td><button type="button" class="text-slate-400 hover:text-red-600" data-remove="${index}">✕</button></td>
         </tr>`;
     })
@@ -210,11 +214,6 @@ el.lineRows.addEventListener("input", (event) => {
   if (field === undefined) return;
   const line = state.lines[Number(index)];
 
-  if (field === "sourcingPurchase") {
-    line.sourcing = event.target.checked ? "PURCHASE" : "STOCK";
-    return;
-  }
-
   if (field === "printDescription") {
     line.printDescription = event.target.value;
     return;
@@ -227,8 +226,8 @@ el.lineRows.addEventListener("input", (event) => {
   renderTotals();
   if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent"].includes(field)) {
     const row = event.target.closest("tr");
-    row.querySelector("td:nth-last-child(5)").textContent = money(lineTotal(line));
-    row.querySelector("td:nth-last-child(4)").textContent = marginLabel(lineMargin(line));
+    row.querySelector('[data-cell="total"]').textContent = money(lineTotal(line));
+    renderMarginCell(row.querySelector('[data-cell="margin"]'), lineMargin(line), lineTotal(line), money);
   }
 });
 
@@ -254,7 +253,6 @@ function variantToLine(v) {
     printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
-    sourcing: "STOCK",
   };
 }
 
@@ -349,7 +347,6 @@ el.fritextForm.addEventListener("submit", (event) => {
     printDiscountPercent: Number(form.printDiscountPercent) || 0,
     taxRatePercent: Number(form.taxRatePercent) || 25,
     costPrice: null,
-    sourcing: "STOCK",
   });
   el.fritextDialog.close();
   renderLines();
@@ -396,7 +393,6 @@ el.newProductForm.addEventListener("submit", async (event) => {
       printDiscountPercent: 0,
       taxRatePercent: Number(product.tax_rate_percent),
       costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
-      sourcing: "STOCK",
     });
     el.newProductDialog.close();
     renderLines();
@@ -572,6 +568,7 @@ el.saveBtn.addEventListener("click", async () => {
     customerId: state.customerId,
     referenceContactId: el.referenceSelect.value || null,
     deliveryMethod: el.deliveryMethod.value,
+    skipInventory: el.skipInventory.checked,
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
       description: l.productVariantId ? null : l.description ?? l.name,
@@ -582,7 +579,6 @@ el.saveBtn.addEventListener("click", async () => {
       printDescription: l.printDescription || null,
       printPrice: l.printPrice ?? null,
       printDiscountPercent: l.printDiscountPercent || 0,
-      sourcing: l.sourcing,
     })),
   };
 
@@ -647,6 +643,9 @@ function renderActionButtons(order) {
     }
     try {
       await api.patch(`/orders/${order.id}/lines`, {
+        referenceContactId: el.referenceSelect.value || null,
+        deliveryMethod: el.deliveryMethod.value,
+        skipInventory: el.skipInventory.checked,
         lines: state.lines.map((l) => ({
           productVariantId: l.productVariantId,
           description: l.productVariantId ? null : l.description ?? l.name,
@@ -657,7 +656,6 @@ function renderActionButtons(order) {
           printDescription: l.printDescription || null,
           printPrice: l.printPrice ?? null,
           printDiscountPercent: l.printDiscountPercent || 0,
-          sourcing: l.sourcing,
         })),
       });
       location.reload();
@@ -804,6 +802,7 @@ function applyReadOnlyState() {
   el.lineSearchWrap.classList.toggle("hidden", !linesEditable);
   el.referenceSelect.disabled = !linesEditable;
   el.deliveryMethod.disabled = !linesEditable;
+  el.skipInventory.disabled = !linesEditable;
 
   // "Spara" (skapa ny order) är bara för en helt osparad order — en
   // befintlig sparas via "Spara ändringar" i åtgärdsknapparna istället
@@ -815,6 +814,7 @@ function applyReadOnlyState() {
 }
 
 async function init() {
+  await loadMarginThresholds();
   const suppliers = (await api.get("/suppliers")).rows;
   el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
@@ -831,7 +831,6 @@ async function init() {
       discountPercent: Number(l.discount_percent),
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
-      sourcing: l.sourcing,
       printDescription: l.print_description ?? "",
       printPrice: l.print_price === null || l.print_price === undefined ? null : Number(l.print_price),
       printDiscountPercent: Number(l.print_discount_percent ?? 0),
@@ -841,6 +840,7 @@ async function init() {
     el.statusBadge.textContent = ORDER_STATUS_LABELS[order.status] ?? order.status;
     el.statusBadge.className = `mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_COLORS[order.status] ?? ""}`;
     el.deliveryMethod.value = order.delivery_method;
+    el.skipInventory.checked = Boolean(order.skip_inventory);
 
     selectCustomer(order.customer_id, order.customer_name);
     await loadContacts(order.customer_id, order.reference_contact_id);

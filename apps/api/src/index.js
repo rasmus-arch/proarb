@@ -25,6 +25,7 @@ import inventoryRouter from "./modules/inventory/routes.js";
 import settingsRouter from "./modules/settings/routes.js";
 import statsRouter from "./modules/stats/routes.js";
 import bugReportsRouter from "./modules/bug-reports/routes.js";
+import backupsRouter from "./modules/backups/routes.js";
 import { uploadsRoot } from "./lib/uploads.js";
 import { requireAuth, requireRole } from "./lib/auth-middleware.js";
 import { run as runMigrations } from "../db/migrate.js";
@@ -76,6 +77,7 @@ app.use("/api/inventory", inventoryRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/stats", statsRouter);
 app.use("/api/bug-reports", bugReportsRouter);
+app.use("/api/backups", requireRole("ADMIN"), backupsRouter);
 
 // Public, no-login quote link shared with customers (see PLAN.md §3).
 app.get("/q/:token", renderPublicQuotePage);

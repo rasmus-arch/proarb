@@ -18,7 +18,7 @@
       </div>
 
       <!-- Nyckeltal -->
-      <section class="mt-6 card grid grid-cols-1 divide-y divide-slate-200 p-0 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <section class="mt-6 card grid grid-cols-1 divide-y divide-slate-200 overflow-hidden p-0 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         <div class="px-5 py-4">
           <p class="eyebrow">Omsättning denna månad</p>
           <p id="kpi-revenue" class="kpi mt-2">–</p>
@@ -28,10 +28,15 @@
           <p id="kpi-quotes" class="kpi mt-2">–</p>
           <p id="kpi-quotes-value" class="mt-1 text-xs text-slate-500"></p>
         </div>
-        <div class="px-5 py-4">
+        <a href="/ordrar.html?status=READY_FOR_PICKUP" class="px-5 py-4 transition-colors hover:bg-slate-50">
           <p class="eyebrow">Redo för upphämtning</p>
           <p id="kpi-ready-pickup" class="kpi mt-2">–</p>
-        </div>
+        </a>
+        <a id="kpi-uninvoiced-card" href="/ordrar.html?status=DELIVERED" class="px-5 py-4 transition-colors hover:bg-slate-50">
+          <p class="eyebrow">Utlämnat, ej fakturerat</p>
+          <p id="kpi-uninvoiced" class="kpi mt-2">–</p>
+          <p id="kpi-uninvoiced-count" class="mt-1 text-xs text-slate-500"></p>
+        </a>
       </section>
 
       <!-- Försäljning senaste 90 dagarna -->

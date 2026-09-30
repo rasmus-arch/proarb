@@ -161,6 +161,15 @@ export async function renderPublicQuotePage(req, res) {
           : ""
       }
     </div>
+    ${
+      quote.status === "EXPIRED"
+        ? `<p style="margin-top:16px;padding:12px 14px;border-radius:8px;background:#fdf8e7;color:#86640c;font-size:14px;">Offerten gick ut ${
+            quote.valid_until ? new Date(quote.valid_until).toLocaleDateString("sv-SE") : ""
+          }. Kontakta oss${settings?.seller_email ? ` på <a href="mailto:${escapeHtml(settings.seller_email)}" style="color:inherit;">${escapeHtml(settings.seller_email)}</a>` : ""} så skickar vi en uppdaterad offert.</p>`
+        : canRespond && quote.valid_until
+          ? `<p style="margin-top:12px;color:#64748b;font-size:13px;">Offerten gäller till ${new Date(quote.valid_until).toLocaleDateString("sv-SE")}.</p>`
+          : ""
+    }
     <p id="response-message" style="margin-top:12px;"></p>
   </div>
 

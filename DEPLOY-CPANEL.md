@@ -130,6 +130,44 @@ och `package-lock.json` i `apps/api` och kör *Run NPM Install* igen.
 - Gå direkt till *Inställningar → Användare* och byt lösenordet (eller
   skapa ett nytt ADMIN-konto och inaktivera det gamla).
 
+## 7. Nattlig säkerhetskopia (cPanel → Cron Jobs)
+
+Appen har ett eget backup-skript som dumpar hela databasen (gzippad SQL)
+och kopierar uppladdade filer (loggor, produktbilder). Kopiorna hamnar i
+`~/proarb-backups/` i ert hemkonto — utanför webbroten, inte nåbara från
+webben. Hur många dagar databaskopior sparas styrs under
+*Inställningar → Säkerhetskopior* (standard 14). Där finns också knappen
+*Skapa säkerhetskopia nu* och nedladdning av de senaste kopiorna.
+
+Lägg upp ett cron-jobb (*Common Settings*: en gång per dag, välj t.ex.
+kl 03:00) med kommandot nedan. Byt `ANVÄNDARE`, sökvägar och de fyra
+DB-värdena mot era (samma som i steg 4). Node-sökvägen ser ni överst i
+*Setup Node.js App* ("Enter to the virtual environment…") — versionen
+(här `22`) ska matcha den ni valde:
+
+```
+cd /home/ANVÄNDARE/proarb/apps/api && DB_HOST=localhost DB_USER=... DB_PASSWORD='...' DB_NAME=... /home/ANVÄNDARE/nodevenv/proarb/apps/api/22/bin/node scripts/backup.js
+```
+
+Fyll i e-postadressen överst på Cron Jobs-sidan så får ni ett mejl om
+något går fel.
+
+**Viktigt:** kopiorna ligger på samma server som appen. Ladda ner en
+kopia då och då (Inställningar → Säkerhetskopior → *Ladda ner*) eller
+aktivera cPanels egen backup till extern lagring, så att ni klarar er
+även om hela kontot skulle försvinna.
+
+**Återställa** (via cPanel → Terminal, eller phpMyAdmin → Import med den
+uppackade filen):
+
+```
+gunzip -c ~/proarb-backups/proarb-db-ÅÅÅÅ-MM-DD_TTMM.sql.gz | mysql -u DB_USER -p DB_NAME
+```
+
+Filen ersätter alla tabeller med innehållet från kopian. Uppladdade filer
+återställs genom att kopiera `~/proarb-backups/uploads/` tillbaka till
+`apps/api/uploads/`.
+
 ## Felsökning
 
 - **"Cannot find package 'express'" i felloggen**: `node_modules` i

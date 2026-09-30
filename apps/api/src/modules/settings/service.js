@@ -12,9 +12,19 @@ export async function getSettings() {
 // are sensitive, unlike SMTP/Fortnox credentials in getSettings().
 export async function getBranding() {
   const [[branding]] = await pool.query(
-    `SELECT seller_name, seller_logo_path, inactive_customer_months, auto_print_order_slip FROM app_settings WHERE id = 1`
+    `SELECT seller_name, seller_logo_path, inactive_customer_months, auto_print_order_slip,
+            margin_warning_percent, margin_critical_percent, quote_expiry_warning_days, quote_valid_days,
+            pickup_reminder_days, default_tax_rate_percent, default_payment_terms_days
+     FROM app_settings WHERE id = 1`
   );
   return branding;
+}
+
+// Prefixet hamnar i streckkoden på ordersedeln — bara A–Z/0–9, versaler.
+function cleanPrefix(value) {
+  if (value === undefined) return undefined;
+  const cleaned = String(value).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+  return cleaned || undefined;
 }
 
 export async function updateSettings(data) {
@@ -47,6 +57,18 @@ export async function updateSettings(data) {
     fortnox_refresh_token: data.fortnoxRefreshToken,
     github_issues_token: data.githubIssuesToken,
     github_issues_repo: data.githubIssuesRepo,
+    quote_valid_days: data.quoteValidDays,
+    quote_expiry_warning_days: data.quoteExpiryWarningDays,
+    margin_warning_percent: data.marginWarningPercent,
+    margin_critical_percent: data.marginCriticalPercent,
+    pickup_reminder_days: data.pickupReminderDays,
+    default_payment_terms_days: data.defaultPaymentTermsDays,
+    default_tax_rate_percent: data.defaultTaxRatePercent,
+    quote_number_prefix: cleanPrefix(data.quoteNumberPrefix),
+    order_number_prefix: cleanPrefix(data.orderNumberPrefix),
+    order_ready_email_note: data.orderReadyEmailNote,
+    purchase_order_email_note: data.purchaseOrderEmailNote,
+    backup_keep_days: data.backupKeepDays,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

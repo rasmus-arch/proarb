@@ -37,6 +37,18 @@ function formatMoney(value) {
   return `${Number(value).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
 }
 
+let expiryWarningDays = 3;
+
+function expiryHint(q) {
+  if (!q.valid_until || !["SENT", "VIEWED"].includes(q.status)) return "";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(`${q.valid_until.slice(0, 10)}T00:00:00`) - today) / 86400000);
+  if (days > expiryWarningDays) return "";
+  const text = days <= 0 ? "Går ut idag" : `Går ut om ${days} ${days === 1 ? "dag" : "dagar"}`;
+  return `<div class="mt-0.5 text-xs text-amber-700">${text}</div>`;
+}
+
 function renderRows(quotes) {
   rowsEl.innerHTML = quotes
     .map(
@@ -46,6 +58,7 @@ function renderRows(quotes) {
         <td class="py-2 pr-4">${escapeHtml(q.customer_name)}</td>
         <td class="py-2 pr-4">
           <span class="rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[q.status] ?? ""}">${STATUS_LABELS[q.status] ?? q.status}</span>
+          ${expiryHint(q)}
         </td>
         <td class="py-2 pr-4 text-slate-500">${new Date(q.created_at).toLocaleDateString("sv-SE")}</td>
         <td class="py-2 pr-4 text-right">${formatMoney(q.total_amount)}</td>
@@ -88,4 +101,10 @@ searchEl.addEventListener("input", () => {
 });
 statusEl.addEventListener("change", () => loadQuotes(1));
 
-loadQuotes();
+api
+  .get("/settings/branding")
+  .then((b) => {
+    expiryWarningDays = Number(b.quote_expiry_warning_days ?? 3);
+  })
+  .catch(() => {})
+  .finally(() => loadQuotes());

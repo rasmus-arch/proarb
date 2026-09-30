@@ -46,7 +46,37 @@ const el = {
   nuPassword: document.getElementById("nu-password"),
   nuRole: document.getElementById("nu-role"),
   userError: document.getElementById("user-error"),
+  quoteValidDays: document.getElementById("s-quote-valid-days"),
+  quoteWarningDays: document.getElementById("s-quote-warning-days"),
+  marginWarning: document.getElementById("s-margin-warning"),
+  marginCritical: document.getElementById("s-margin-critical"),
+  quotePrefix: document.getElementById("s-quote-prefix"),
+  orderPrefix: document.getElementById("s-order-prefix"),
+  defaultTerms: document.getElementById("s-default-terms"),
+  defaultVat: document.getElementById("s-default-vat"),
+  pickupReminderDays: document.getElementById("s-pickup-reminder-days"),
+  orderReadyNote: document.getElementById("s-order-ready-note"),
+  poNote: document.getElementById("s-po-note"),
+  backupKeepDays: document.getElementById("s-backup-keep-days"),
+  saveBar: document.getElementById("save-bar"),
 };
+
+// --- Flikar -----------------------------------------------------------------
+
+const tabButtons = [...document.querySelectorAll("[data-settings-tab]")];
+const panels = [...document.querySelectorAll("[data-settings-panel]")];
+
+function activateTab(key) {
+  if (!panels.some((p) => p.dataset.settingsPanel === key)) key = "foretag";
+  tabButtons.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.settingsTab === key)));
+  panels.forEach((p) => p.classList.toggle("hidden", p.dataset.settingsPanel !== key));
+  // Användare sparas direkt per rad — ingen gemensam Spara-knapp där.
+  el.saveBar.classList.toggle("hidden", key === "anvandare");
+  if (key === "sakerhetskopior") loadBackups();
+  history.replaceState(null, "", `${location.pathname}${location.search}#${key}`);
+}
+
+tabButtons.forEach((b) => b.addEventListener("click", () => activateTab(b.dataset.settingsTab)));
 
 function applySettings(settings) {
   el.name.value = settings.seller_name ?? "";
@@ -76,6 +106,18 @@ function applySettings(settings) {
   applyFortnoxStatus(settings);
   el.githubRepo.value = settings.github_issues_repo ?? "";
   el.githubToken.value = settings.github_issues_token ?? "";
+  el.quoteValidDays.value = settings.quote_valid_days ?? 10;
+  el.quoteWarningDays.value = settings.quote_expiry_warning_days ?? 3;
+  el.marginWarning.value = settings.margin_warning_percent ?? 25;
+  el.marginCritical.value = settings.margin_critical_percent ?? 10;
+  el.quotePrefix.value = settings.quote_number_prefix ?? "OFF";
+  el.orderPrefix.value = settings.order_number_prefix ?? "ORD";
+  el.defaultTerms.value = settings.default_payment_terms_days ?? 30;
+  el.defaultVat.value = settings.default_tax_rate_percent ?? 25;
+  el.pickupReminderDays.value = settings.pickup_reminder_days ?? 7;
+  el.orderReadyNote.value = settings.order_ready_email_note ?? "";
+  el.poNote.value = settings.purchase_order_email_note ?? "";
+  el.backupKeepDays.value = settings.backup_keep_days ?? 14;
 
   if (settings.seller_logo_path) {
     el.logoPreview.src = `/uploads/${settings.seller_logo_path}`;
@@ -120,8 +162,21 @@ el.saveBtn.addEventListener("click", async () => {
       fortnoxClientSecret: el.fortnoxClientSecret.value || null,
       githubIssuesRepo: el.githubRepo.value || null,
       githubIssuesToken: el.githubToken.value || null,
+      quoteValidDays: Number(el.quoteValidDays.value) || 10,
+      quoteExpiryWarningDays: Number(el.quoteWarningDays.value) || 0,
+      marginWarningPercent: Number(el.marginWarning.value) || 0,
+      marginCriticalPercent: Number(el.marginCritical.value) || 0,
+      quoteNumberPrefix: el.quotePrefix.value,
+      orderNumberPrefix: el.orderPrefix.value,
+      defaultPaymentTermsDays: Number(el.defaultTerms.value) || 0,
+      defaultTaxRatePercent: el.defaultVat.value === "" ? 25 : Number(el.defaultVat.value),
+      pickupReminderDays: Number(el.pickupReminderDays.value) || 7,
+      orderReadyEmailNote: el.orderReadyNote.value || null,
+      purchaseOrderEmailNote: el.poNote.value || null,
+      backupKeepDays: Number(el.backupKeepDays.value) || 14,
     });
     el.saveSuccess.textContent = "Sparat.";
+    setTimeout(() => el.saveSuccess.classList.add("hidden"), 2500);
     el.saveSuccess.classList.remove("hidden");
   } catch (err) {
     el.saveError.textContent = err.message;
@@ -264,6 +319,52 @@ el.newUserForm.addEventListener("submit", async (event) => {
     el.userError.classList.remove("hidden");
   }
 });
+
+// --- Säkerhetskopior ----------------------------------------------------------
+
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function loadBackups() {
+  const list = document.getElementById("backup-list");
+  const status = document.getElementById("backup-status");
+  try {
+    const { rows, directory } = await api.get("/backups");
+    status.textContent = rows.length
+      ? `Senaste: ${new Date(rows[0].created_at).toLocaleString("sv-SE")}`
+      : "Inga säkerhetskopior ännu.";
+    list.innerHTML = rows
+      .map(
+        (b) => `
+        <li class="flex items-center justify-between py-2">
+          <span>${new Date(b.created_at).toLocaleString("sv-SE")} <span class="ml-2 text-slate-500">${formatBytes(b.size)}</span></span>
+          <a class="link text-sm" href="/api/backups/${encodeURIComponent(b.name)}" download>Ladda ner</a>
+        </li>`
+      )
+      .join("");
+    list.title = directory ?? "";
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+document.getElementById("backup-now-btn").addEventListener("click", async (event) => {
+  const status = document.getElementById("backup-status");
+  event.target.disabled = true;
+  status.textContent = "Skapar säkerhetskopia…";
+  try {
+    await api.post("/backups", {});
+    await loadBackups();
+  } catch (err) {
+    status.textContent = err.message;
+  } finally {
+    event.target.disabled = false;
+  }
+});
+
+activateTab(location.hash.slice(1) || "foretag");
 
 try {
   await Promise.all([loadSettings(), loadUsers()]);

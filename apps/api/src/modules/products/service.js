@@ -1,6 +1,7 @@
 import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
 import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { getSettings } from "../settings/service.js";
 
 // Fallback for quick-created products (e.g. from the quote/order/kassa line
 // builder) where the user hasn't typed an article number themselves.
@@ -163,7 +164,7 @@ export async function createProduct(data) {
       supplierId,
       data.printable ? 1 : 0,
       data.unit ?? "st",
-      data.taxRatePercent ?? 25,
+      data.taxRatePercent ?? (await getSettings())?.default_tax_rate_percent ?? 25,
       data.basePrice,
       data.costPrice ?? null,
     ]

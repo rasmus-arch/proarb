@@ -603,7 +603,7 @@ function reasonChips(line) {
       if (r.type === "restock") {
         return `<span class="chip">Min-saldo ${r.quantity_on_hand}/${r.reorder_point}</span>`;
       }
-      return `<span class="chip${r.forced ? " chip-accent" : ""}" title="${escapeHtml(r.customer_name)}">${escapeHtml(r.order_number)} · ${r.quantity} st${r.forced ? " · beställ ändå" : ""}</span>`;
+      return `<span class="chip" title="${escapeHtml(r.customer_name)}">${escapeHtml(r.order_number)} · ${r.quantity} st</span>`;
     })
     .join("");
 }

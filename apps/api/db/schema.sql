@@ -97,6 +97,28 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- callback-anropet, nollställs direkt efter).
   fortnox_token_expires_at   DATETIME NULL,
   fortnox_oauth_state        VARCHAR(64) NULL,
+  -- Offerter: standardgiltighet och hur många dagar innan utgång de flaggas
+  -- (lista + påminnelse).
+  quote_valid_days           INT NOT NULL DEFAULT 10,
+  quote_expiry_warning_days  INT NOT NULL DEFAULT 3,
+  -- Marginalvarning på offert-/orderrader: gul under warning, röd under
+  -- critical (och alltid röd under inköpspris).
+  margin_warning_percent     DECIMAL(5,2) NOT NULL DEFAULT 25,
+  margin_critical_percent    DECIMAL(5,2) NOT NULL DEFAULT 10,
+  -- Dagar som en order får stå "Redo för utlämning" innan den flaggas.
+  pickup_reminder_days       INT NOT NULL DEFAULT 7,
+  -- Standardvärden för nya kunder/produkter.
+  default_payment_terms_days INT NOT NULL DEFAULT 30,
+  default_tax_rate_percent   DECIMAL(5,2) NOT NULL DEFAULT 25,
+  -- Prefix för offert-/ordernummer (OFF-0001, ORD-0001).
+  quote_number_prefix        VARCHAR(10) NOT NULL DEFAULT 'OFF',
+  order_number_prefix        VARCHAR(10) NOT NULL DEFAULT 'ORD',
+  -- Egen text i mejlen "order redo"/påminnelse (t.ex. öppettider) och i
+  -- inköpsordrar som mejlas till leverantören.
+  order_ready_email_note     VARCHAR(1000) NULL,
+  purchase_order_email_note  VARCHAR(1000) NULL,
+  -- Hur många dagars databaskopior som sparas (se scripts/backup.js).
+  backup_keep_days           INT NOT NULL DEFAULT 14,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -484,6 +506,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Slutar fungera (redirect till proarb.se) så fort ordern är DELIVERED/
   -- INVOICED/CANCELLED, oavsett om det skedde via scan eller i appen.
   pickup_qr_token      VARCHAR(64) NULL UNIQUE,
+  -- "Undanta från lagerhantering": ordern drar aldrig från lagersaldot vid
+  -- utlämning, returer lägger inget tillbaka och den räknas inte i
+  -- inköpsförslag (t.ex. varor som köps in direkt till kunden).
+  skip_inventory       TINYINT(1) NOT NULL DEFAULT 0,
   created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
@@ -520,6 +546,8 @@ CREATE TABLE IF NOT EXISTS order_lines (
   -- STOCK (default): fine to fulfil from current lagersaldo. PURCHASE:
   -- always order this in specifically for this order, even if there's
   -- stock on hand — always shows up in inköpsförslag (Fas 5).
+  -- Oanvänd sedan "beställ ändå" ersattes av orders.skip_inventory; kvar
+  -- för äldre rader.
   sourcing           ENUM('STOCK', 'PURCHASE') NOT NULL DEFAULT 'STOCK',
   print_status       ENUM('WAITING', 'IN_PRODUCTION', 'READY') NOT NULL DEFAULT 'WAITING',
   CONSTRAINT fk_ol_order FOREIGN KEY (order_id) REFERENCES orders(id),

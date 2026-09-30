@@ -11,22 +11,22 @@ import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
 // skapas i, så UPDATE-radlåset på app_settings förhindrar dubbletter.
 async function nextQuoteNumber(connection) {
   await connection.query(`UPDATE app_settings SET next_quote_number = next_quote_number + 1 WHERE id = 1`);
-  const [[{ next_quote_number }]] = await connection.query(
-    `SELECT next_quote_number FROM app_settings WHERE id = 1`
+  const [[{ next_quote_number, quote_number_prefix }]] = await connection.query(
+    `SELECT next_quote_number, quote_number_prefix FROM app_settings WHERE id = 1`
   );
-  return `OFF-${String(next_quote_number - 1).padStart(4, "0")}`;
+  return `${quote_number_prefix || "OFF"}-${String(next_quote_number - 1).padStart(4, "0")}`;
 }
 
 function newPublicToken() {
   return crypto.randomBytes(24).toString("hex");
 }
 
-// Offerter är giltiga 10 dagar som standard om inget annat anges — säljaren
-// kan alltid ändra datumet innan den skickas.
-const DEFAULT_VALID_DAYS = 10;
-function defaultValidUntil() {
+// Standardgiltighet styrs i Inställningar (quote_valid_days) — säljaren kan
+// alltid ändra datumet innan offerten skickas.
+async function defaultValidUntil(connection) {
+  const [[{ quote_valid_days }]] = await connection.query(`SELECT quote_valid_days FROM app_settings WHERE id = 1`);
   const d = new Date();
-  d.setDate(d.getDate() + DEFAULT_VALID_DAYS);
+  d.setDate(d.getDate() + (Number(quote_valid_days) || 10));
   return d.toISOString().slice(0, 10);
 }
 
@@ -51,6 +51,7 @@ function lineMargin(line) {
 }
 
 export async function listQuotes({ search = "", status = "", customerId = "", page = 1, pageSize = 25 }) {
+  await expireOverdueQuotes();
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
   const statusClause = status ? "AND q.status = ?" : "";
@@ -145,6 +146,7 @@ async function loadQuoteHeader(where, param) {
 }
 
 export async function getQuote(id) {
+  await expireOverdueQuotes();
   const quote = await loadQuoteHeader("q.id", id);
   if (!quote) return null;
   const lines = await loadQuoteLines(id);
@@ -153,6 +155,7 @@ export async function getQuote(id) {
 }
 
 export async function getQuoteByToken(token) {
+  await expireOverdueQuotes();
   const quote = await loadQuoteHeader("q.public_token", token);
   if (!quote) return null;
   const lines = await loadQuoteLines(quote.id);
@@ -174,7 +177,7 @@ export async function createQuote(data, userId) {
         quoteNumber,
         data.customerId,
         data.referenceContactId ?? null,
-        data.validUntil ?? defaultValidUntil(),
+        data.validUntil ?? (await defaultValidUntil(connection)),
         newPublicToken(),
         data.notes ?? null,
         userId,
@@ -250,6 +253,17 @@ export async function updateQuote(id, data) {
       await insertLines(connection, id, data.lines);
     }
 
+    // En utgången offert öppnas igen när den får ett nytt giltighetsdatum
+    // framåt i tiden — kunden kan då svara via samma länk igen.
+    const [reopened] = await connection.query(
+      `UPDATE quotes SET status = IF(viewed_at IS NULL, 'SENT', 'VIEWED')
+       WHERE id = ? AND status = 'EXPIRED' AND valid_until >= CURDATE()`,
+      [id]
+    );
+    if (reopened.affectedRows > 0) {
+      await connection.query(`INSERT INTO quote_events (quote_id, type) VALUES (?, 'REOPENED')`, [id]);
+    }
+
     await connection.commit();
     return getQuote(id);
   } catch (err) {
@@ -258,6 +272,26 @@ export async function updateQuote(id, data) {
   } finally {
     connection.release();
   }
+}
+
+// Skickade offerter vars "Giltig till" har passerat blir Utgången. Körs
+// lättviktigt när offerter läses (högst en gång i minuten) istället för
+// via ett schemalagt jobb — cPanel-appen kan sova när ingen använder den.
+let lastExpiryRun = 0;
+export async function expireOverdueQuotes({ force = false } = {}) {
+  if (!force && Date.now() - lastExpiryRun < 60_000) return;
+  lastExpiryRun = Date.now();
+  const [rows] = await pool.query(
+    `SELECT id FROM quotes
+     WHERE status IN ('SENT', 'VIEWED') AND valid_until IS NOT NULL AND valid_until < CURDATE()`
+  );
+  if (rows.length === 0) return;
+  const ids = rows.map((r) => r.id);
+  await pool.query(`UPDATE quotes SET status = 'EXPIRED' WHERE id IN (?)`, [ids]);
+  await pool.query(
+    `INSERT INTO quote_events (quote_id, type) VALUES ${ids.map(() => "(?, 'EXPIRED')").join(",")}`,
+    ids
+  );
 }
 
 export async function recordEvent(quoteId, type, meta = null) {
@@ -345,21 +379,29 @@ export async function markViewed(quoteId) {
 // knapp, se sendQuoteReminder nedan.
 // ---------------------------------------------------------------------
 
-export async function listQuotesNeedingReminder(reminderDaysAfter) {
+// Obesvarade offerter att påminna om: skickade för X dagar sedan, eller
+// som går ut inom Y dagar (även om de skickades nyligen) — båda utan att
+// redan ha fått en påminnelse.
+export async function listQuotesNeedingReminder(reminderDaysAfter, expiryWarningDays = 3) {
+  await expireOverdueQuotes();
   const [rows] = await pool.query(
-    `SELECT q.id, q.quote_number, q.status, q.sent_at, c.id AS customer_id, c.name AS customer_name
+    `SELECT q.id, q.quote_number, q.status, q.sent_at, q.valid_until, c.id AS customer_id, c.name AS customer_name,
+            (q.valid_until IS NOT NULL AND q.valid_until <= DATE_ADD(CURDATE(), INTERVAL ? DAY)) AS expiring_soon
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
      WHERE q.status IN ('SENT', 'VIEWED')
        AND q.sent_at IS NOT NULL
-       AND q.sent_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
+       AND (
+         q.sent_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
+         OR (q.valid_until IS NOT NULL AND q.valid_until <= DATE_ADD(CURDATE(), INTERVAL ? DAY))
+       )
        AND NOT EXISTS (
          SELECT 1 FROM quote_events qe WHERE qe.quote_id = q.id AND qe.type = 'REMINDER_SENT'
        )
-     ORDER BY q.sent_at ASC`,
-    [reminderDaysAfter]
+     ORDER BY q.valid_until IS NULL, q.valid_until ASC, q.sent_at ASC`,
+    [expiryWarningDays, reminderDaysAfter, expiryWarningDays]
   );
-  return rows;
+  return rows.map((r) => ({ ...r, expiring_soon: Boolean(r.expiring_soon) }));
 }
 
 // Skickar en riktig påminnelse till kunden (samma e-postmotor som "Maila
@@ -384,6 +426,7 @@ export async function sendQuoteReminder(id, publicUrl) {
       quoteNumber: quote.quote_number,
       publicUrl,
       totalIncVat: quote.totals.total_inc_vat,
+      validUntil: quote.valid_until,
       sellerName: settings?.seller_name,
       sellerLogoUrl: settings?.seller_logo_path ? `${new URL(publicUrl).origin}/uploads/${settings.seller_logo_path}` : null,
       brandColor: settings?.brand_color,
