@@ -69,6 +69,7 @@ function renderNav(user, branding) {
               <div class="text-xs text-slate-500">${escapeHtml(user.email ?? "")} · ${escapeHtml(user.role)}</div>
             </div>
             <div class="my-1 border-t border-slate-100"></div>
+            <button type="button" id="nav-password-btn" role="menuitem" class="block w-full rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-50">Byt lösenord</button>
             <button type="button" id="nav-bugreport-btn" role="menuitem" class="block w-full rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-50">Rapportera problem</button>
             <button type="button" id="nav-logout-btn" role="menuitem" class="block w-full rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-50">Logga ut</button>
           </div>
@@ -99,6 +100,16 @@ function renderNav(user, branding) {
     location.href = "/login.html";
   });
 
+  document.getElementById("nav-password-btn").addEventListener("click", () => {
+    setMenu(false);
+    const dialog = ensurePasswordDialog();
+    dialog.querySelector("form").reset();
+    dialog.querySelector("[data-error]").classList.add("hidden");
+    dialog.querySelector("[data-done]").classList.add("hidden");
+    dialog.querySelector("form").classList.remove("hidden");
+    dialog.showModal();
+  });
+
   document.getElementById("nav-bugreport-btn").addEventListener("click", () => {
     setMenu(false);
     const dialog = ensureBugReportDialog();
@@ -108,6 +119,70 @@ function renderNav(user, branding) {
     dialog.querySelector("#bugreport-error").classList.add("hidden");
     dialog.showModal();
   });
+}
+
+function ensurePasswordDialog() {
+  const existing = document.getElementById("password-dialog");
+  if (existing) return existing;
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `<dialog id="password-dialog" class="w-full max-w-sm rounded-lg p-0">
+      <div class="card m-0">
+        <h2 class="text-lg font-semibold tracking-tight text-slate-900">Byt lösenord</h2>
+        <form class="mt-3 grid gap-3">
+          <label class="block text-sm">
+            <span class="text-slate-700">Nuvarande lösenord</span>
+            <input name="current" type="password" required autocomplete="current-password" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Nytt lösenord (minst 8 tecken)</span>
+            <input name="next" type="password" required minlength="8" autocomplete="new-password" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Upprepa nytt lösenord</span>
+            <input name="repeat" type="password" required minlength="8" autocomplete="new-password" class="input mt-1" />
+          </label>
+          <p data-error class="hidden text-sm text-red-600"></p>
+          <div class="mt-2 flex justify-end gap-2">
+            <button type="button" data-cancel class="btn-secondary">Avbryt</button>
+            <button type="submit" class="btn">Spara</button>
+          </div>
+        </form>
+        <div data-done class="hidden">
+          <p class="mt-3 text-sm text-slate-700">Lösenordet är bytt. Andra inloggade enheter har loggats ut.</p>
+          <div class="mt-5 flex justify-end"><button type="button" data-cancel class="btn">Stäng</button></div>
+        </div>
+      </div>
+    </dialog>`
+  );
+  const dialog = document.getElementById("password-dialog");
+  const form = dialog.querySelector("form");
+  const error = dialog.querySelector("[data-error]");
+  dialog.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => dialog.close()));
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    error.classList.add("hidden");
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (data.next !== data.repeat) {
+      error.textContent = "De nya lösenorden matchar inte.";
+      error.classList.remove("hidden");
+      return;
+    }
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: data.current, newPassword: data.next }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      error.textContent = body.error ?? "Kunde inte byta lösenord.";
+      error.classList.remove("hidden");
+      return;
+    }
+    form.classList.add("hidden");
+    dialog.querySelector("[data-done]").classList.remove("hidden");
+  });
+  return dialog;
 }
 
 // Injected once into the page body (not the nav header itself) so every

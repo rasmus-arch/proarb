@@ -13,7 +13,7 @@ function notConfigured() {
   return { ok: false, reason: "NOT_CONFIGURED", note: "E-post är inte konfigurerat ännu." };
 }
 
-async function dispatch({ settings, to, subject, html } = {}) {
+async function dispatch({ settings, to, subject, html, attachments } = {}) {
   if (!isEmailConfigured(settings)) return notConfigured();
   if (!to) return { ok: false, reason: "NO_RECIPIENT", note: "Mottagarens e-postadress saknas." };
 
@@ -35,6 +35,7 @@ async function dispatch({ settings, to, subject, html } = {}) {
       to,
       subject,
       html,
+      attachments,
       from: settings.smtp_from_email || settings.smtp_username,
     });
     return { ok: true };
@@ -45,12 +46,28 @@ async function dispatch({ settings, to, subject, html } = {}) {
 
 // Called when staff marks an order "Redo för utlämning" with the
 // "skicka mail" option checked.
-export async function sendOrderReadyEmail({ settings, to, customerName, orderNumber }) {
+function noteHtml(note) {
+  return note ? `<p style="white-space:pre-line;">${escapeHtml(note)}</p>` : "";
+}
+
+export async function sendOrderReadyEmail({ settings, to, customerName, orderNumber, note }) {
   const html = buildSimpleEmailHtml({
     heading: "Din order är redo för avhämtning",
-    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Din order <strong>${escapeHtml(orderNumber)}</strong> är redo för avhämtning i butiken.</p>`,
+    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Din order <strong>${escapeHtml(orderNumber)}</strong> är redo för avhämtning i butiken.</p>${noteHtml(note)}`,
   });
   return dispatch({ settings, to, subject: `Order ${orderNumber} är redo för avhämtning`, html });
+}
+
+// Påminnelse när en order stått redo en tid utan att hämtas.
+export async function sendPickupReminderEmail({ settings, to, customerName, orderNumber, readySince, note }) {
+  const since = readySince ? new Date(readySince).toLocaleDateString("sv-SE", { day: "numeric", month: "long" }) : null;
+  const html = buildSimpleEmailHtml({
+    heading: "Påminnelse: din order väntar på dig",
+    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Din order <strong>${escapeHtml(orderNumber)}</strong> har väntat på avhämtning${
+      since ? ` sedan ${escapeHtml(since)}` : ""
+    }. Välkommen in och hämta den!</p>${noteHtml(note)}`,
+  });
+  return dispatch({ settings, to, subject: `Påminnelse: order ${orderNumber} väntar på avhämtning`, html });
 }
 
 // Called from "Skicka påminnelse" på Översikt → Inaktiva kunder — en
@@ -259,4 +276,33 @@ function buildQuoteReminderEmailHtml({ customerName, quoteNumber, publicUrl, tot
     </p>`;
 
   return emailShell({ preheader: `Påminnelse: Offert ${quoteNumber} väntar på svar`, bodyHtml });
+}
+
+export async function sendPasswordResetEmail({ settings, to, name, resetUrl, validMinutes }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Återställ ditt lösenord",
+    body: `<p>Hej ${escapeHtml(name)},</p>
+      <p>Någon (förhoppningsvis du) har bett om att återställa lösenordet till ProArb. Klicka på länken nedan för att välja ett nytt. Länken gäller i ${validMinutes} minuter och kan bara användas en gång.</p>
+      <p><a href="${escapeHtml(resetUrl)}" style="color:#1c1b19;font-weight:600;">Välj nytt lösenord</a></p>
+      <p style="color:#78736a;font-size:12px;">Har du inte bett om det här kan du bortse från mejlet — lösenordet ändras inte.</p>`,
+  });
+  return dispatch({ settings, to, subject: "Återställ lösenord till ProArb", html });
+}
+
+export async function sendPurchaseOrderEmail({ settings, to, supplierName, contactName, poNumber, customerNumber, note, pdf }) {
+  const html = buildSimpleEmailHtml({
+    heading: `Inköpsorder ${poNumber}`,
+    body: `<p>Hej${contactName ? ` ${escapeHtml(contactName)}` : ""},</p>
+      <p>Bifogat finns inköpsorder <strong>${escapeHtml(poNumber)}</strong> från ${escapeHtml(settings?.seller_name ?? "oss")}${
+        customerNumber ? ` (kundnr ${escapeHtml(customerNumber)})` : ""
+      }. Bekräfta gärna leveransdatum.</p>${noteHtml(note)}
+      <p>Vänliga hälsningar<br />${escapeHtml(settings?.seller_name ?? "")}</p>`,
+  });
+  return dispatch({
+    settings,
+    to,
+    subject: `Inköpsorder ${poNumber} – ${settings?.seller_name ?? ""}`.trim(),
+    html,
+    attachments: [{ filename: `${poNumber}.pdf`, content: pdf, contentType: "application/pdf" }],
+  });
 }

@@ -4,7 +4,7 @@ import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { assertValidLines } from "../../lib/lines.js";
 import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
-import { sendOrderReadyEmail } from "../integrations/email.js";
+import { sendOrderReadyEmail, sendPickupReminderEmail } from "../integrations/email.js";
 import { getSettings } from "../settings/service.js";
 
 // Sekventiella ordernummer (ORD-0001, ORD-0002, ...) istället för
@@ -424,7 +424,10 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
     throw new Error("INVALID_TRANSITION");
   }
 
-  await pool.query(`UPDATE orders SET status = ? WHERE id = ?`, [newStatus, id]);
+  await pool.query(
+    `UPDATE orders SET status = ?, ready_at = IF(? = 'READY_FOR_PICKUP', NOW(), ready_at) WHERE id = ?`,
+    [newStatus, newStatus, id]
+  );
 
   let notification = null;
   if (newStatus === "READY_FOR_PICKUP" && sendEmail) {
@@ -435,6 +438,7 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
         to: order.customer_email,
         customerName: order.customer_name,
         orderNumber: order.order_number,
+        note: settings?.order_ready_email_note,
       });
       notification = result.ok ? { sent: true } : { sent: false, reason: result.note ?? result.reason };
     } catch (err) {
@@ -559,4 +563,41 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   }
 
   return getOrder(orderId);
+}
+
+// Ordrar som stått "Redo för utlämning" längre än X dagar (Inställningar →
+// Påminnelser). Äldre ordrar utan ready_at faller tillbaka på updated_at.
+export async function listUnpickedOrders(days) {
+  const [rows] = await pool.query(
+    `SELECT o.id, o.order_number, o.pickup_reminder_sent_at, c.name AS customer_name, c.email AS customer_email,
+            COALESCE(o.ready_at, o.updated_at) AS ready_since,
+            DATEDIFF(NOW(), COALESCE(o.ready_at, o.updated_at)) AS days_waiting
+     FROM orders o
+     JOIN customers c ON c.id = o.customer_id
+     WHERE o.status = 'READY_FOR_PICKUP'
+       AND COALESCE(o.ready_at, o.updated_at) <= DATE_SUB(NOW(), INTERVAL ? DAY)
+     ORDER BY ready_since ASC`,
+    [days]
+  );
+  return rows;
+}
+
+export async function sendPickupReminder(id) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  if (order.status !== "READY_FOR_PICKUP") throw new Error("NOT_READY");
+  if (!order.customer_email) throw new Error("NO_CUSTOMER_EMAIL");
+  const settings = await getSettings();
+  const result = await sendPickupReminderEmail({
+    settings,
+    to: order.customer_email,
+    customerName: order.reference_name || order.customer_name,
+    orderNumber: order.order_number,
+    readySince: order.ready_at ?? order.updated_at,
+    note: settings?.order_ready_email_note,
+  });
+  if (result.ok) {
+    await pool.query(`UPDATE orders SET pickup_reminder_sent_at = NOW() WHERE id = ?`, [id]);
+  }
+  return { sent: result.ok, reason: result.note ?? result.reason };
 }

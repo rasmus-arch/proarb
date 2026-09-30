@@ -202,6 +202,49 @@ async function loadKpis() {
   document.getElementById("kpi-uninvoiced-card").classList.toggle("bg-accent-50", uninvoiced.count > 0);
 }
 
+const unpickedSection = document.getElementById("unpicked-section");
+const unpickedList = document.getElementById("unpicked-list");
+
+async function loadUnpicked() {
+  const { rows } = await api.get("/orders/unpicked");
+  unpickedSection.classList.toggle("hidden", rows.length === 0);
+  unpickedList.innerHTML = rows
+    .map(
+      (o) => `
+      <li class="flex items-center justify-between gap-3 py-2 text-sm">
+        <div>
+          <a href="/order-editor.html?id=${o.id}" class="link">${escapeHtml(o.order_number)}</a>
+          <span class="ml-2 text-slate-600">${escapeHtml(o.customer_name)}</span>
+          <div class="text-xs text-slate-500">Redo i ${o.days_waiting} dagar${
+            o.pickup_reminder_sent_at ? ` · påmind ${new Date(o.pickup_reminder_sent_at).toLocaleDateString("sv-SE")}` : ""
+          }</div>
+        </div>
+        <span class="flex items-center gap-2">
+          <span class="hidden text-xs text-red-600" data-error></span>
+          <button type="button" class="btn-secondary" data-pickup-reminder="${o.id}" ${o.customer_email ? "" : 'disabled title="Kunden saknar e-post"'}>Påminn</button>
+        </span>
+      </li>`
+    )
+    .join("");
+}
+
+unpickedList.addEventListener("click", async (event) => {
+  const id = event.target.dataset.pickupReminder;
+  if (id === undefined) return;
+  const errorEl = event.target.closest("li").querySelector("[data-error]");
+  event.target.disabled = true;
+  errorEl.classList.add("hidden");
+  try {
+    const result = await api.post(`/orders/${id}/pickup-reminder`, {});
+    if (result.sent) return loadUnpicked();
+    errorEl.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+  } catch (err) {
+    errorEl.textContent = err.message;
+  }
+  errorEl.classList.remove("hidden");
+  event.target.disabled = false;
+});
+
 async function loadReminders() {
   const { rows } = await api.get("/quotes/reminders");
   section.classList.toggle("hidden", rows.length === 0);
@@ -370,6 +413,7 @@ loadGreeting();
 loadSalesChart();
 loadKpis();
 loadReminders();
+loadUnpicked();
 loadPortalRequests();
 loadInactiveCustomers();
 loadLowStock();

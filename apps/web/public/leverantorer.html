@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Leverantörer</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="produkter">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-6xl px-4 py-8">
+      <a href="/produkter.html" class="text-sm text-slate-500 hover:text-slate-900">← Produkter</a>
+      <div class="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 class="page-title">Leverantörer</h1>
+          <p class="mt-1 text-sm text-slate-600">E-post används när inköpsordrar skickas. Leveranstiden ger ett väntat datum på ordern.</p>
+        </div>
+        <button type="button" id="new-supplier-btn" class="btn">Ny leverantör</button>
+      </div>
+
+      <div class="mt-5 overflow-x-auto card">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead>
+            <tr>
+              <th class="py-2 pr-4">Namn</th>
+              <th class="py-2 pr-4">Kontakt</th>
+              <th class="py-2 pr-4">Vårt kundnr</th>
+              <th class="py-2 pr-4 text-right">Leveranstid</th>
+              <th class="py-2 pr-4 text-right">Produkter</th>
+              <th class="py-2 pr-4 text-right">Öppna inköp</th>
+              <th class="py-2"></th>
+            </tr>
+          </thead>
+          <tbody id="supplier-rows" class="divide-y divide-slate-100"></tbody>
+        </table>
+        <p id="supplier-empty" class="hidden py-6 text-center text-sm text-slate-500">Inga leverantörer ännu.</p>
+      </div>
+    </main>
+
+    <dialog id="supplier-dialog" class="w-full max-w-lg rounded-lg p-0">
+      <form id="supplier-form" class="card m-0">
+        <h2 id="supplier-dialog-title" class="text-lg font-semibold tracking-tight text-slate-900">Leverantör</h2>
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="block text-sm sm:col-span-2">
+            <span class="text-slate-700">Namn *</span>
+            <input name="name" required class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post för beställningar</span>
+            <input name="email" type="email" class="input mt-1" placeholder="order@leverantor.se" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Telefon</span>
+            <input name="phone" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Kontaktperson</span>
+            <input name="contactName" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Vårt kundnummer hos dem</span>
+            <input name="customerNumber" class="input mt-1" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Leveranstid (dagar)</span>
+            <input name="leadTimeDays" type="number" min="0" class="input mt-1" />
+          </label>
+          <label class="block text-sm sm:col-span-2">
+            <span class="text-slate-700">Anteckningar</span>
+            <textarea name="notes" rows="2" class="input mt-1" placeholder="Minsta order, fraktfritt över …"></textarea>
+          </label>
+        </div>
+        <p id="supplier-error" class="mt-3 hidden text-sm text-red-600"></p>
+        <div class="mt-5 flex items-center justify-between gap-2">
+          <button type="button" id="delete-supplier-btn" class="hidden text-sm text-red-600 hover:underline">Ta bort</button>
+          <span class="ml-auto flex gap-2">
+            <button type="button" id="cancel-supplier-btn" class="btn-secondary">Avbryt</button>
+            <button type="submit" class="btn">Spara</button>
+          </span>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/leverantorer.js"></script>
+  </body>
+</html>

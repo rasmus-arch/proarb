@@ -75,6 +75,10 @@ I samma vy, under *Environment Variables*, lägg till **alla fyra**:
 
 Rör inte `PORT` — cPanel/Passenger sätter den automatiskt.
 
+**Rekommenderat — `APP_URL`**: sätt till appens adress, t.ex.
+`https://fokus.proarb.se`. Används i länken i "Glömt lösenord"-mejlet så
+att den alltid pekar på rätt domän.
+
 **Valfritt — demodata**: lägg även till `SEED_DEMO_DATA` = `true` om ni
 vill ha exempel-kunder/offerter/order/tryckorder (för att visa flödet
 kund → offert → order → tryckorder) automatiskt vid nästa seedning.

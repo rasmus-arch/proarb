@@ -54,7 +54,8 @@
 
       <!-- Inköpsordrar: översikt över alla inköpsordrar och deras status -->
       <section id="tab-inkopsordrar" class="tab-panel mt-4 hidden">
-        <div class="flex justify-end">
+        <div class="flex justify-end gap-2">
+          <a href="/leverantorer.html" class="btn-secondary">Leverantörer</a>
           <button type="button" id="new-po-btn" class="btn">Ny inköpsorder</button>
         </div>
         <div class="mt-3 overflow-x-auto card">
@@ -95,10 +96,18 @@
         <div id="po-detail-view" class="hidden">
           <button type="button" id="po-back-btn" class="link text-sm">← Tillbaka till listan</button>
           <div class="mt-2 card">
-            <div class="flex items-center justify-between">
-              <h2 id="po-detail-title" class="text-sm font-medium text-slate-900"></h2>
-              <span id="po-detail-status" class="rounded-full px-2 py-0.5 text-xs font-medium"></span>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 id="po-detail-title" class="section-title"></h2>
+                <p id="po-detail-meta" class="mt-0.5 text-xs text-slate-500"></p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="po-detail-status" class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"></span>
+                <a id="po-pdf-link" href="#" target="_blank" class="btn-secondary">PDF</a>
+                <button type="button" id="po-send-btn" class="btn">Skicka till leverantör</button>
+              </div>
             </div>
+            <p id="po-send-message" class="mt-2 hidden text-sm"></p>
             <div class="mt-3 max-w-xs">
               <label class="block text-sm">
                 <span class="text-slate-700">Skanna streckkod för att ta emot 1 st</span>

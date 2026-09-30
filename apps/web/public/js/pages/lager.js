@@ -145,8 +145,15 @@ const LineStatusColors = {
 function poRowHtml(po) {
   return `
     <tr class="cursor-pointer hover:bg-slate-50" data-po="${po.id}">
-      <td class="py-2 pr-3 font-medium text-slate-900">${escapeHtml(po.supplier_name)}</td>
-      <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}</td>
+      <td class="py-2 pr-3">
+        <div class="font-medium text-slate-900">${escapeHtml(po.supplier_name)}</div>
+        <div class="text-xs text-slate-500">${escapeHtml(po.po_number ?? "")}</div>
+      </td>
+      <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}${
+        po.sent_at
+          ? `<div class="text-xs text-slate-500">Skickad ${new Date(po.sent_at).toLocaleDateString("sv-SE")}</div>`
+          : `<div class="text-xs text-amber-700">Ej skickad</div>`
+      }</td>
       <td class="py-2 pr-3 text-right">${po.total_received_qty} / ${po.total_qty}</td>
       <td class="py-2 pr-3 text-slate-500">${new Date(po.created_at).toLocaleDateString("sv-SE")}</td>
     </tr>`;
@@ -237,11 +244,43 @@ function poLineRowHtml(l) {
 
 async function renderPoDetail() {
   const po = await api.get(`/inventory/purchase-orders/${currentPoId}`);
-  document.getElementById("po-detail-title").textContent = `Inköpsorder – ${po.supplier_name}`;
+  document.getElementById("po-detail-title").textContent = `${po.po_number} · ${po.supplier_name}`;
+  document.getElementById("po-detail-meta").textContent = [
+    `Skapad ${new Date(po.created_at).toLocaleDateString("sv-SE")}`,
+    po.sent_at ? `skickad ${new Date(po.sent_at).toLocaleDateString("sv-SE")} till ${po.sent_to}` : "inte skickad till leverantören",
+    po.expected_date ? `väntas ${new Date(po.expected_date).toLocaleDateString("sv-SE")}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  document.getElementById("po-pdf-link").href = `/api/inventory/purchase-orders/${po.id}/pdf`;
+  const sendBtn = document.getElementById("po-send-btn");
+  sendBtn.textContent = po.sent_at ? "Skicka igen" : "Skicka till leverantör";
+  sendBtn.className = po.sent_at ? "btn-secondary" : "btn";
+  sendBtn.dataset.supplierEmail = po.supplier_email ?? "";
   document.getElementById("po-detail-status").textContent = POStatusLabels[po.status] ?? po.status;
   document.getElementById("po-line-rows").innerHTML = po.lines.map(poLineRowHtml).join("");
   document.getElementById("po-submit-receiving-btn").classList.toggle("hidden", po.status === "RECEIVED");
 }
+
+document.getElementById("po-send-btn").addEventListener("click", async (event) => {
+  const message = document.getElementById("po-send-message");
+  const suggested = event.target.dataset.supplierEmail;
+  const to = prompt("Skicka inköpsordern (PDF) till:", suggested);
+  if (to === null) return;
+  event.target.disabled = true;
+  message.classList.add("hidden");
+  try {
+    const result = await api.post(`/inventory/purchase-orders/${currentPoId}/send`, { to });
+    message.textContent = result.sent ? `Skickad till ${result.to}.` : `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+    message.className = `mt-2 text-sm ${result.sent ? "text-green-700" : "text-red-600"}`;
+    if (result.sent) await renderPoDetail();
+  } catch (err) {
+    message.textContent = err.message;
+    message.className = "mt-2 text-sm text-red-600";
+  }
+  message.classList.remove("hidden");
+  event.target.disabled = false;
+});
 
 document.getElementById("po-back-btn").addEventListener("click", () => {
   poDetailView.classList.add("hidden");

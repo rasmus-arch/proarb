@@ -43,6 +43,19 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- a real provider/Fortnox app is ready; both stubs treat those columns
 -- being empty as "not configured yet" and only start actually sending
 -- once dispatch()/the Fortnox calls are implemented for real.
+-- Engångslänkar för "Glömt lösenord". Bara en hash av token sparas, så en
+-- läckt databaskopia räcker inte för att ta över ett konto.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  user_id     INT NOT NULL,
+  token_hash  CHAR(64) NOT NULL UNIQUE,
+  expires_at  DATETIME NOT NULL,
+  used_at     DATETIME NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_pwreset_user FOREIGN KEY (user_id) REFERENCES users(id),
+  INDEX idx_pwreset_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS app_settings (
   id                    INT PRIMARY KEY DEFAULT 1,
   seller_name           VARCHAR(255) NOT NULL DEFAULT 'Mitt företag',
@@ -228,8 +241,15 @@ CREATE TABLE IF NOT EXISTS brands (
 CREATE TABLE IF NOT EXISTS suppliers (
   id    INT PRIMARY KEY AUTO_INCREMENT,
   name  VARCHAR(255) NOT NULL,
+  -- Dit inköpsordrar mejlas (Lager → Inköpsordrar → Skicka).
   email VARCHAR(255) NULL,
-  phone VARCHAR(50) NULL
+  phone VARCHAR(50) NULL,
+  contact_name    VARCHAR(255) NULL,
+  -- Vårt kundnummer hos leverantören — står på inköpsordern.
+  customer_number VARCHAR(100) NULL,
+  -- Normal leveranstid; ger ett "väntas"-datum när en inköpsorder skickas.
+  lead_time_days  INT NULL,
+  notes           TEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- NOTE: base_price / cost_price (here and on all order/quote/sale lines
@@ -510,6 +530,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- utlämning, returer lägger inget tillbaka och den räknas inte i
   -- inköpsförslag (t.ex. varor som köps in direkt till kunden).
   skip_inventory       TINYINT(1) NOT NULL DEFAULT 0,
+  -- När ordern blev "Redo för utlämning", och när kunden senast fick en
+  -- påminnelse om att hämta den (Översikt → Ej hämtade ordrar).
+  ready_at             DATETIME NULL,
+  pickup_reminder_sent_at DATETIME NULL,
   created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
@@ -629,6 +653,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   supplier_id   INT NOT NULL,
   status        VARCHAR(30) NOT NULL DEFAULT 'ORDERED',
   expected_date DATE NULL,
+  -- När/till vem inköpsordern mejlades till leverantören.
+  sent_at       DATETIME NULL,
+  sent_to       VARCHAR(255) NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_po_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

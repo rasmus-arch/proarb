@@ -62,6 +62,26 @@ router.post("/bulk-invoice", async (req, res, next) => {
   }
 });
 
+router.get("/unpicked", async (req, res, next) => {
+  try {
+    const settings = await getSettings();
+    res.json({ rows: await orders.listUnpickedOrders(settings?.pickup_reminder_days ?? 7) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/pickup-reminder", async (req, res, next) => {
+  try {
+    res.json(await orders.sendPickupReminder(Number(req.params.id)));
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NOT_READY") return res.status(409).json({ error: "Ordern är inte redo för utlämning" });
+    if (err.message === "NO_CUSTOMER_EMAIL") return res.status(400).json({ error: "Kunden saknar e-postadress" });
+    next(err);
+  }
+});
+
 router.get("/by-number/:orderNumber", async (req, res, next) => {
   try {
     const order = await orders.getOrderByNumber(req.params.orderNumber);

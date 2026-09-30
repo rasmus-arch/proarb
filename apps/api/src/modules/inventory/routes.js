@@ -3,6 +3,9 @@ import * as inventory from "./service.js";
 import * as purchaseOrders from "./purchase-orders.js";
 import * as stockCounts from "./stock-counts.js";
 import { getPurchaseSuggestions } from "./purchase-suggestions.js";
+import { generatePurchaseOrderPdf } from "./po-pdf.js";
+import { sendPurchaseOrderEmail } from "../integrations/email.js";
+import { getSettings } from "../settings/service.js";
 import { requireRole } from "../../lib/auth-middleware.js";
 
 // Fas 5: lagersaldo, inleverans (PO + streckkod), inventering (juridiskt
@@ -103,6 +106,41 @@ router.get("/purchase-orders/:id", async (req, res, next) => {
     if (!po) return res.status(404).json({ error: "Not found" });
     res.json(po);
   } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/purchase-orders/:id/pdf", async (req, res, next) => {
+  try {
+    const po = await purchaseOrders.getPurchaseOrder(Number(req.params.id));
+    if (!po) return res.status(404).json({ error: "Not found" });
+    const pdf = await generatePurchaseOrderPdf(po, { settings: await getSettings() });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${po.po_number}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/purchase-orders/:id/send", async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const po = await purchaseOrders.getPurchaseOrder(id);
+    if (!po) return res.status(404).json({ error: "Not found" });
+    const settings = await getSettings();
+    const pdf = await generatePurchaseOrderPdf(po, { settings });
+    const result = await purchaseOrders.sendPurchaseOrder(id, {
+      to: req.body?.to,
+      pdf,
+      settings,
+      sendEmail: sendPurchaseOrderEmail,
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.message === "NO_SUPPLIER_EMAIL") {
+      return res.status(400).json({ error: "Leverantören saknar e-postadress — lägg till den under Leverantörer" });
+    }
     next(err);
   }
 });

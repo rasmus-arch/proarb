@@ -1,11 +1,15 @@
 import { pool } from "../../lib/db.js";
 import { recordMovement } from "./service.js";
 
+export function purchaseOrderNumber(id) {
+  return `IO-${String(id).padStart(4, "0")}`;
+}
+
 export async function listPurchaseOrders({ status = "" }) {
   const where = status ? "WHERE po.status = ?" : "";
   const params = status ? [status] : [];
   const [rows] = await pool.query(
-    `SELECT po.id, po.status, po.expected_date, po.created_at, s.id AS supplier_id, s.name AS supplier_name,
+    `SELECT po.id, po.status, po.expected_date, po.created_at, po.sent_at, s.id AS supplier_id, s.name AS supplier_name,
             COALESCE(SUM(pol.quantity), 0) AS total_qty,
             COALESCE(SUM(pol.received_qty), 0) AS total_received_qty
      FROM purchase_orders po
@@ -16,27 +20,32 @@ export async function listPurchaseOrders({ status = "" }) {
      ORDER BY po.created_at DESC`,
     params
   );
-  return rows;
+  return rows.map((r) => ({ ...r, po_number: purchaseOrderNumber(r.id) }));
 }
 
 export async function getPurchaseOrder(id) {
   const [[po]] = await pool.query(
-    `SELECT po.*, s.name AS supplier_name FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = ?`,
+    `SELECT po.*, s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone,
+            s.contact_name AS supplier_contact_name, s.customer_number AS supplier_customer_number,
+            s.lead_time_days AS supplier_lead_time_days
+     FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = ?`,
     [id]
   );
   if (!po) return null;
 
   const [lines] = await pool.query(
-    `SELECT pol.*, v.sku, v.barcode, v.color, v.size, p.name AS product_name
+    `SELECT pol.*, v.sku, v.barcode, v.color, v.size, p.name AS product_name, p.article_number,
+            ps.supplier_sku
      FROM purchase_order_lines pol
      JOIN product_variants v ON v.id = pol.product_variant_id
      JOIN products p ON p.id = v.product_id
+     LEFT JOIN product_suppliers ps ON ps.product_id = p.id AND ps.supplier_id = ?
      WHERE pol.purchase_order_id = ?
      ORDER BY pol.id ASC`,
-    [id]
+    [po.supplier_id, id]
   );
 
-  return { ...po, lines };
+  return { ...po, po_number: purchaseOrderNumber(po.id), lines };
 }
 
 export async function createPurchaseOrder({ supplierId, expectedDate, lines }) {
@@ -198,4 +207,34 @@ export async function submitReceiving(poId, { lines, warehouseId, userId }) {
   } finally {
     connection.release();
   }
+}
+
+// Mejlar inköpsordern som PDF till leverantören. Sätter ett väntat
+// leveransdatum utifrån leverantörens leveranstid om inget är satt.
+export async function sendPurchaseOrder(id, { to, pdf, settings, sendEmail }) {
+  const po = await getPurchaseOrder(id);
+  if (!po) throw new Error("PO_NOT_FOUND");
+  const recipient = String(to ?? po.supplier_email ?? "").trim();
+  if (!recipient) throw new Error("NO_SUPPLIER_EMAIL");
+
+  const result = await sendEmail({
+    settings,
+    to: recipient,
+    supplierName: po.supplier_name,
+    contactName: po.supplier_contact_name,
+    poNumber: po.po_number,
+    customerNumber: po.supplier_customer_number,
+    note: settings?.purchase_order_email_note,
+    pdf,
+  });
+  if (!result.ok) return { sent: false, reason: result.note ?? result.reason };
+
+  await pool.query(
+    `UPDATE purchase_orders
+     SET sent_at = NOW(), sent_to = ?,
+         expected_date = COALESCE(expected_date, IF(? IS NULL, NULL, DATE_ADD(CURDATE(), INTERVAL ? DAY)))
+     WHERE id = ?`,
+    [recipient, po.supplier_lead_time_days, po.supplier_lead_time_days ?? 0, id]
+  );
+  return { sent: true, to: recipient };
 }
