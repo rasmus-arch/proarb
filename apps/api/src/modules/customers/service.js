@@ -175,8 +175,11 @@ export async function updateCustomer(id, data) {
   return getCustomer(id);
 }
 
+// "Ta bort" en kund döljer den (active = 0) istället för att radera den —
+// kundens ordrar, offerter och fakturor finns kvar och ska fortsätta visa
+// vem de gällde. Portallänken slutar fungera direkt.
 export async function deactivateCustomer(id) {
-  await pool.query(`UPDATE customers SET active = 0 WHERE id = ?`, [id]);
+  await pool.query(`UPDATE customers SET active = 0, portal_token = NULL WHERE id = ?`, [id]);
 }
 
 export async function addContact(customerId, data) {

@@ -581,6 +581,41 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   return getOrder(orderId);
 }
 
+// Bara avbrutna ordrar går att ta bort. En avbruten order har aldrig
+// lämnats ut, så den har inga lagerrörelser, fakturor eller returer — bara
+// rader. Kom den från en offert öppnas offerten igen (Accepterad) så att
+// den kan omvandlas på nytt.
+export async function deleteOrder(id) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  if (order.status !== "CANCELLED") throw new Error("ORDER_NOT_CANCELLED");
+  if (order.pickups.length > 0 || order.invoices.length > 0 || order.has_returns) {
+    throw new Error("ORDER_HAS_HISTORY");
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query(`UPDATE portal_order_requests SET order_id = NULL WHERE order_id = ?`, [id]);
+    await connection.query(`DELETE FROM order_lines WHERE order_id = ?`, [id]);
+    await connection.query(`DELETE FROM orders WHERE id = ?`, [id]);
+    if (order.quote_id) {
+      await connection.query(
+        `UPDATE quotes SET status = 'ACCEPTED'
+         WHERE id = ? AND status = 'CONVERTED'
+           AND NOT EXISTS (SELECT 1 FROM orders WHERE quote_id = ?)`,
+        [order.quote_id, order.quote_id]
+      );
+    }
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
 // Ordrar som stått "Redo för utlämning" längre än X dagar (Inställningar →
 // Påminnelser). Äldre ordrar utan ready_at faller tillbaka på updated_at.
 export async function listUnpickedOrders(days) {
@@ -590,7 +625,7 @@ export async function listUnpickedOrders(days) {
             DATEDIFF(NOW(), COALESCE(o.ready_at, o.updated_at)) AS days_waiting
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
-     WHERE o.status = 'READY_FOR_PICKUP'
+     WHERE o.status = 'READY_FOR_PICKUP' AND c.active = 1
        AND COALESCE(o.ready_at, o.updated_at) <= DATE_SUB(NOW(), INTERVAL ? DAY)
      ORDER BY ready_since ASC`,
     [days]

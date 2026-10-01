@@ -692,7 +692,22 @@ function renderActionButtons(order) {
       .join("") +
     `<button type="button" id="duplicate-btn" class="btn-secondary">Duplicera</button>` +
     `<button type="button" id="save-template-btn" class="btn-secondary">Spara som mall</button>` +
-    `<button type="button" id="print-slip-btn" class="btn-secondary">Skriv ut ordersedel</button>`;
+    `<button type="button" id="print-slip-btn" class="btn-secondary">Skriv ut ordersedel</button>` +
+    (order.status === "CANCELLED"
+      ? `<button type="button" id="delete-order-btn" class="btn-secondary text-red-600">Ta bort order</button>`
+      : "");
+
+  // Bara avbrutna ordrar kan tas bort (kontrolleras även i API:t).
+  document.getElementById("delete-order-btn")?.addEventListener("click", async () => {
+    if (!confirm(`Ta bort order ${order.order_number}? Det går inte att ångra.`)) return;
+    try {
+      await api.delete(`/orders/${order.id}`);
+      location.href = "/ordrar.html?status=CANCELLED";
+    } catch (err) {
+      el.formError.textContent = err.message;
+      el.formError.classList.remove("hidden");
+    }
+  });
 
   // Sparaknappen för radändringar står under marginalen istället för i
   // åtgärdsraden högst upp — den hör ihop med raderna/summeringen den

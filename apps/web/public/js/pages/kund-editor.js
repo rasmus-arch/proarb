@@ -33,6 +33,7 @@ const el = {
   notes: document.getElementById("f-notes"),
   cash: document.getElementById("f-cash"),
   saveBtn: document.getElementById("save-btn"),
+  deleteBtn: document.getElementById("delete-customer-btn"),
   saveError: document.getElementById("save-error"),
   contactRows: document.getElementById("contact-rows"),
   contactsEmpty: document.getElementById("contacts-empty"),
@@ -333,6 +334,27 @@ function renderAssortment(rows) {
     })
     .join("");
 }
+
+// Kunden döljs (raderas inte) — ordrar, offerter och fakturor finns kvar.
+// Bara för administratörer, samma behörighet som API:t kräver.
+api
+  .get("/auth/me")
+  .then(({ user }) => el.deleteBtn.classList.toggle("hidden", user?.role !== "ADMIN"))
+  .catch(() => {});
+
+el.deleteBtn.addEventListener("click", async () => {
+  const ok = confirm(
+    `Ta bort ${el.name.value || "kunden"}?\n\nKunden försvinner från kundlistan, sökningen och påminnelserna, och portallänken slutar fungera. Kundens ordrar, offerter och fakturor finns kvar.`
+  );
+  if (!ok) return;
+  try {
+    await api.delete(`/customers/${customerId}`);
+    location.href = "/kunder.html";
+  } catch (err) {
+    el.saveError.textContent = err.message;
+    el.saveError.classList.remove("hidden");
+  }
+});
 
 el.saveBtn.addEventListener("click", async () => {
   el.saveError.classList.add("hidden");

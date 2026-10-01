@@ -24,7 +24,7 @@ async function findExact(q) {
   const [[product]] = await pool.query(`SELECT id, name FROM products WHERE article_number = ?`, [q]);
   if (product) return { type: "product", id: product.id, label: product.name };
 
-  const [[customer]] = await pool.query(`SELECT id, name FROM customers WHERE customer_number = ?`, [q]);
+  const [[customer]] = await pool.query(`SELECT id, name FROM customers WHERE customer_number = ? AND active = 1`, [q]);
   if (customer) return { type: "customer", id: customer.id, label: customer.name };
 
   return null;

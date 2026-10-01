@@ -57,6 +57,7 @@ function renderRows(orders) {
         <td class="py-2 pr-4 text-right">${formatMoney(o.total_amount)}</td>
         <td class="py-2 pr-4 text-right">
           <button type="button" class="link text-xs whitespace-nowrap" data-reorder="${o.id}">Beställ igen</button>
+          ${o.status === "CANCELLED" ? `<button type="button" class="ml-3 text-xs text-slate-500 hover:text-red-600" data-delete="${o.id}" data-number="${escapeHtml(o.order_number)}">Ta bort</button>` : ""}
         </td>
       </tr>`
     )
@@ -80,6 +81,17 @@ rowsEl.addEventListener("click", async (event) => {
     if (box.checked) selected.add(id);
     else selected.delete(id);
     updateBulkBar();
+    return;
+  }
+  const deleteBtn = event.target.closest("button[data-delete]");
+  if (deleteBtn) {
+    if (!confirm(`Ta bort order ${deleteBtn.dataset.number}? Det går inte att ångra.`)) return;
+    try {
+      await api.delete(`/orders/${deleteBtn.dataset.delete}`);
+      deleteBtn.closest("tr").remove();
+    } catch (err) {
+      alert(err.message);
+    }
     return;
   }
   const reorderBtn = event.target.closest("button[data-reorder]");

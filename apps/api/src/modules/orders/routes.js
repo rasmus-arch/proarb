@@ -171,6 +171,22 @@ router.patch("/:id/lines", async (req, res, next) => {
   }
 });
 
+router.delete("/:id", async (req, res, next) => {
+  try {
+    await orders.deleteOrder(Number(req.params.id));
+    res.status(204).end();
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "ORDER_NOT_CANCELLED") {
+      return res.status(409).json({ error: "Bara avbrutna ordrar kan tas bort. Avbryt ordern först." });
+    }
+    if (err.message === "ORDER_HAS_HISTORY") {
+      return res.status(409).json({ error: "Ordern har utlämningar eller fakturor och kan inte tas bort." });
+    }
+    next(err);
+  }
+});
+
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });

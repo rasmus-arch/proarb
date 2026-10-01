@@ -392,7 +392,7 @@ export async function listQuotesNeedingReminder(reminderDaysAfter, expiryWarning
             (q.valid_until IS NOT NULL AND q.valid_until <= DATE_ADD(CURDATE(), INTERVAL ? DAY)) AS expiring_soon
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
-     WHERE q.status IN ('SENT', 'VIEWED')
+     WHERE q.status IN ('SENT', 'VIEWED') AND c.active = 1
        AND q.sent_at IS NOT NULL
        AND (
          q.sent_at <= DATE_SUB(NOW(), INTERVAL ? DAY)
