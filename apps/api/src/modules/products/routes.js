@@ -5,6 +5,7 @@ import multer from "multer";
 import * as products from "./service.js";
 import { importProductsCsv } from "./import.js";
 import { createLogoUpload, uploadsRoot, PRODUCT_IMAGE_EXTENSIONS } from "../../lib/uploads.js";
+import { suggestVariants, generateBarcodeSheetPdf } from "./barcode-sheet.js";
 
 // Fas 1: sökbar produkt-/variantlista, fullt CRUD på produkt+varianter,
 // slå upp variant via streckkod (kassan) och bulkimport från CSV.
@@ -33,6 +34,27 @@ router.get("/search", async (req, res, next) => {
     const rows = await products.searchVariants(String(req.query.q ?? ""), Number(req.query.limit) || 15, customerId);
     res.json({ rows });
   } catch (err) {
+    next(err);
+  }
+});
+
+// Streckkodsark för kassadisken (Produkter → Streckkodsark).
+router.get("/barcode-sheet/suggestions", async (req, res, next) => {
+  try {
+    res.json({ rows: await suggestVariants({ days: Number(req.query.days) || 90, limit: Number(req.query.limit) || 30 }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/barcode-sheet", async (req, res, next) => {
+  try {
+    const pdf = await generateBarcodeSheetPdf(Array.isArray(req.body?.variantIds) ? req.body.variantIds : []);
+    res.set("Content-Type", "application/pdf");
+    res.set("Content-Disposition", 'inline; filename="streckkodsark.pdf"');
+    res.send(pdf);
+  } catch (err) {
+    if (err.message === "NO_VARIANTS") return res.status(400).json({ error: "Välj minst en produkt" });
     next(err);
   }
 });

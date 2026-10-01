@@ -471,3 +471,116 @@ loadProducts();
     datalistsReady.then(() => openEditDialog(editId));
   }
 }
+
+
+// --- Streckkodsark -----------------------------------------------------------
+
+const sheet = {
+  dialog: document.getElementById("barcode-sheet-dialog"),
+  search: document.getElementById("barcode-sheet-search"),
+  results: document.getElementById("barcode-sheet-results"),
+  list: document.getElementById("barcode-sheet-list"),
+  empty: document.getElementById("barcode-sheet-empty"),
+  error: document.getElementById("barcode-sheet-error"),
+  count: document.getElementById("barcode-sheet-count"),
+  items: [],
+};
+
+function sheetLabel(v) {
+  return [v.name, [v.color, v.size].filter(Boolean).join(" / ")].filter(Boolean).join(" · ");
+}
+
+function renderSheetList() {
+  sheet.empty.classList.toggle("hidden", sheet.items.length > 0);
+  sheet.list.innerHTML = sheet.items
+    .map(
+      (item, index) => `
+      <li class="flex items-center gap-2 py-1.5">
+        <input type="checkbox" class="rounded border-slate-300" data-sheet-check="${index}" ${item.checked ? "checked" : ""} />
+        <span class="flex-1 text-slate-900">${escapeHtml(sheetLabel(item))}</span>
+        <span class="text-xs text-slate-500">${escapeHtml(item.barcode || item.sku || "")}${item.sold_qty ? ` · ${item.sold_qty} sålda` : ""}</span>
+      </li>`
+    )
+    .join("");
+  const selected = sheet.items.filter((i) => i.checked).length;
+  sheet.count.textContent = `${selected} valda · ${Math.max(1, Math.ceil(selected / 24))} sida${selected > 24 ? "or" : ""}`;
+}
+
+document.getElementById("barcode-sheet-btn").addEventListener("click", async () => {
+  sheet.error.classList.add("hidden");
+  sheet.search.value = "";
+  sheet.results.innerHTML = "";
+  sheet.items = [];
+  renderSheetList();
+  sheet.dialog.showModal();
+  const { rows } = await api.get("/products/barcode-sheet/suggestions?days=90&limit=30");
+  sheet.items = rows.map((r) => ({ ...r, checked: true }));
+  renderSheetList();
+});
+
+document.getElementById("barcode-sheet-cancel").addEventListener("click", () => sheet.dialog.close());
+
+sheet.list.addEventListener("change", (event) => {
+  const index = event.target.dataset.sheetCheck;
+  if (index === undefined) return;
+  sheet.items[Number(index)].checked = event.target.checked;
+  renderSheetList();
+});
+
+let sheetSearchTimer;
+sheet.search.addEventListener("input", () => {
+  clearTimeout(sheetSearchTimer);
+  const q = sheet.search.value.trim();
+  if (!q) {
+    sheet.results.innerHTML = "";
+    return;
+  }
+  sheetSearchTimer = setTimeout(async () => {
+    const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}&limit=10`);
+    sheet.results.innerHTML = rows
+      .map(
+        (v) => `<button type="button" class="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50" data-sheet-add='${JSON.stringify(v).replace(/'/g, "&#39;")}'>
+          ${escapeHtml(sheetLabel(v))} <span class="text-xs text-slate-500">${escapeHtml(v.barcode || v.sku || "")}</span>
+        </button>`
+      )
+      .join("");
+  }, 200);
+});
+
+sheet.results.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-sheet-add]");
+  if (!btn) return;
+  const v = JSON.parse(btn.dataset.sheetAdd);
+  const existing = sheet.items.find((i) => i.variant_id === v.variant_id);
+  if (existing) existing.checked = true;
+  else sheet.items.push({ ...v, checked: true });
+  sheet.search.value = "";
+  sheet.results.innerHTML = "";
+  renderSheetList();
+});
+
+document.getElementById("barcode-sheet-create").addEventListener("click", async () => {
+  sheet.error.classList.add("hidden");
+  const variantIds = sheet.items.filter((i) => i.checked).map((i) => i.variant_id);
+  if (variantIds.length === 0) {
+    sheet.error.textContent = "Välj minst en produkt.";
+    sheet.error.classList.remove("hidden");
+    return;
+  }
+  // Öppna fliken direkt (inom klicket) så att popup-blockerare inte stoppar den.
+  const tab = window.open("", "_blank");
+  const res = await fetch("/api/products/barcode-sheet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ variantIds }),
+  });
+  if (!res.ok) {
+    tab?.close();
+    sheet.error.textContent = (await res.json().catch(() => ({}))).error ?? "Kunde inte skapa PDF:en.";
+    sheet.error.classList.remove("hidden");
+    return;
+  }
+  const url = URL.createObjectURL(await res.blob());
+  if (tab) tab.location.href = url;
+  else window.open(url, "_blank");
+});

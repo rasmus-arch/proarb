@@ -20,6 +20,7 @@
         <div class="flex gap-2">
           <a href="/leverantorer.html" class="btn-secondary">Leverantörer</a>
           <a href="/produktpaket.html" class="btn-secondary">Produktpaket</a>
+          <button id="barcode-sheet-btn" class="btn-secondary">Streckkodsark</button>
           <button id="import-btn" class="btn-secondary">Importera CSV</button>
           <button id="new-product-btn" class="btn">Ny produkt</button>
         </div>
@@ -50,7 +51,32 @@
         </p>
       </div>
       <div id="pager"></div>
-    </main>
+    
+    <!-- Streckkodsark för kassadisken -->
+    <dialog id="barcode-sheet-dialog" class="w-full max-w-xl rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-semibold tracking-tight text-slate-900">Streckkodsark</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          En A4 med streckkoder att ha vid kassadisken (24 per sida). Förvalt är de mest sålda varianterna de senaste 90
+          dagarna — bocka av eller sök fram fler.
+        </p>
+        <div class="relative mt-3">
+          <input id="barcode-sheet-search" class="input" placeholder="Sök produkt att lägga till…" autocomplete="off" />
+          <div id="barcode-sheet-results" class="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg empty:hidden"></div>
+        </div>
+        <ul id="barcode-sheet-list" class="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto text-sm"></ul>
+        <p id="barcode-sheet-empty" class="hidden py-3 text-center text-sm text-slate-500">Ingen försäljning senaste 90 dagarna — sök fram produkter ovan.</p>
+        <p id="barcode-sheet-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-4 flex items-center justify-between gap-2">
+          <span id="barcode-sheet-count" class="text-sm text-slate-500"></span>
+          <div class="flex gap-2">
+            <button type="button" id="barcode-sheet-cancel" class="btn-secondary">Stäng</button>
+            <button type="button" id="barcode-sheet-create" class="btn">Skapa PDF</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+</main>
 
     <!-- New product dialog -->
     <dialog id="new-product-dialog" class="w-full max-w-2xl rounded-lg p-0 backdrop:bg-slate-900/40">

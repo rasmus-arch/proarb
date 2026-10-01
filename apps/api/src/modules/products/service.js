@@ -78,7 +78,8 @@ const STOCK_SELECT = `COALESCE((SELECT sl.quantity_on_hand FROM stock_levels sl
      WHERE sl.product_variant_id = v.id AND sl.warehouse_id = ${Number(DEFAULT_WAREHOUSE_ID)}), 0) AS quantity_on_hand`;
 
 // Used by the POS / warehouse scanning flows: look up a sellable variant
-// directly by the barcode a scanner just read.
+// directly by the barcode a scanner just read. SKU räknas också — det är
+// vad streckkodsarket kodar för varianter utan egen streckkod.
 export async function findVariantByBarcode(barcode, customerId = null) {
   const [[variant]] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
@@ -88,8 +89,10 @@ export async function findVariantByBarcode(barcode, customerId = null) {
             ${PRINT_PREFILL_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
-     WHERE v.barcode = ? AND v.active = 1`,
-    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, barcode]
+     WHERE (v.barcode = ? OR v.sku = ?) AND v.active = 1
+     ORDER BY v.barcode = ? DESC
+     LIMIT 1`,
+    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, barcode, barcode, barcode]
   );
   return variant ?? null;
 }
