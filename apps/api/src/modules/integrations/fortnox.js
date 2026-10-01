@@ -145,6 +145,23 @@ async function fortnoxRequest(settings, path, { method = "GET", body } = {}) {
     });
 
   let res = await send();
+  // Åtgärder som /invoices/{nr}/email eller /bookkeep är GET eller PUT
+  // beroende på åtgärd. Svarar Fortnox 405 (fel metod) provas den andra
+  // en gång, så en felgissning här aldrig stoppar flödet.
+  const isAction = /^\/[a-z]+\/[^/?]+\/[a-z]+$/i.test(path);
+  if (res.status === 405 && isAction && (method === "GET" || method === "PUT")) {
+    const other = method === "GET" ? "PUT" : "GET";
+    console.warn(`Fortnox ${method} ${path} -> 405, provar ${other}`);
+    res = await fetch(`${API_BASE}${path}`, {
+      method: other,
+      headers: {
+        Authorization: `Bearer ${fresh.fortnox_access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: other === "PUT" ? "{}" : undefined,
+    });
+  }
   // 401 trots att token inte borde ha gått ut (t.ex. återkallad, eller
   // kapad före kolumnfixen): förnya en gång och försök igen.
   if (res.status === 401) {
@@ -492,7 +509,11 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
 // informational, Fortnox doesn't require it to accept the credit.
 export async function createCreditInvoice({ settings, customerId, lines, orderId, originalExternalRef } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
-  const invoiceRows = buildInvoiceRows(lines);
+  // En kreditering i Fortnox är en faktura med negativa antal.
+  const invoiceRows = buildInvoiceRows(lines).map((row) => ({
+    ...row,
+    DeliveredQuantity: String(-Math.abs(Number(row.DeliveredQuantity))),
+  }));
   if (invoiceRows.length === 0) throw new Error("Returen har inga rader att kreditera.");
 
   const { customerNumber, settings: settingsAfter } = await findOrCreateFortnoxCustomer(settings, customerId);
@@ -502,7 +523,6 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
     body: {
       Invoice: {
         CustomerNumber: customerNumber,
-        Credit: true,
         CreditInvoiceReference: originalExternalRef || undefined,
         YourOrderNumber: orderId != null ? String(orderId) : undefined,
         InvoiceRows: invoiceRows,
@@ -518,7 +538,8 @@ export async function sendCustomerInvoice({ settings, externalRef } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   if (!externalRef) return { ok: false, reason: "NO_REF", note: "Ingen Fortnox-faktura att skicka." };
   await step("Kunde inte mejla fakturan från Fortnox", () =>
-    fortnoxRequest(settings, `/invoices/${externalRef}/email`, { method: "PUT", body: {} })
+    // Fortnox skickar fakturan som e-post på GET (inte PUT).
+    fortnoxRequest(settings, `/invoices/${encodeURIComponent(externalRef)}/email`)
   );
   return { ok: true };
 }
