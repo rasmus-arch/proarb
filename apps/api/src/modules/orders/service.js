@@ -10,7 +10,7 @@ import {
   lineTotal as sharedLineTotal,
   sqlLineTotal,
 } from "../../lib/lines.js";
-import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
+import { completeCashInvoice, createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
 import { sendOrderReadyEmail, sendPickupReminderEmail } from "../integrations/email.js";
 import { getSettings } from "../settings/service.js";
 
@@ -626,9 +626,12 @@ async function syncInvoiceToFortnox(invoiceId, order, { cash }) {
       cash,
     });
     if (result.ok) {
+      // Ett kontantköp som skapades men inte blev bokfört/betalt markeras
+      // FAILED (med fakturanumret kvar) så att det kan slutföras med
+      // "Skicka till Fortnox igen".
       await pool.query(
-        `UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ?, status_note = ? WHERE id = ?`,
-        [result.externalRef ?? null, result.invoiceNumber ?? null, result.note ?? null, invoiceId]
+        `UPDATE invoices SET status = ?, external_ref = ?, invoice_number = ?, status_note = ? WHERE id = ?`,
+        [cash && result.note ? "FAILED" : "SYNCED", result.externalRef ?? null, result.invoiceNumber ?? null, result.note ?? null, invoiceId]
       );
     } else {
       await pool.query(`UPDATE invoices SET status = 'PENDING', status_note = ? WHERE id = ?`, [
@@ -652,6 +655,25 @@ export async function retryOrderInvoice(orderId) {
     (inv) => inv.type !== "CREDIT_INVOICE" && !inv.invoice_number && inv.status !== "SYNCED"
   );
   if (!invoice) {
+    // Kontantköp som finns i Fortnox men inte blev bokfört/betalt.
+    const unfinishedCash = order.invoices.find(
+      (inv) => inv.type === "CASH_INVOICE" && inv.invoice_number && (inv.status !== "SYNCED" || inv.status_note)
+    );
+    if (unfinishedCash) {
+      let note;
+      try {
+        const result = await completeCashInvoice({ settings: await getSettings(), documentNumber: unfinishedCash.invoice_number });
+        note = result.ok ? null : result.note ?? result.reason;
+      } catch (err) {
+        note = err.message;
+      }
+      await pool.query(`UPDATE invoices SET status = ?, status_note = ? WHERE id = ?`, [
+        note ? "FAILED" : "SYNCED",
+        note,
+        unfinishedCash.id,
+      ]);
+      return getOrder(orderId);
+    }
     // Fakturan finns i Fortnox men utskicket misslyckades när ordern
     // markerades Fakturerad — skicka bara ut den igen.
     const unsent = order.invoices.find(

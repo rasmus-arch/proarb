@@ -699,8 +699,11 @@ function invoiceHistoryItem(inv) {
   if (inv.status === "SYNCED" && inv.sent_at) state += " · skickad till kunden";
   // Allt som inte kom fram (inte skapad, eller skapad men inte utskickad)
   // kan försökas igen — t.ex. efter att Fortnox anslutits på nytt.
+  // Kontantköp med anteckning = skapat men inte bokfört/betalt (äldre
+  // ordrar kan ha status SYNCED med en sådan anteckning).
+  const unfinishedCash = inv.type === "CASH_INVOICE" && inv.invoice_number && inv.status_note;
   const retry =
-    inv.type !== "CREDIT_INVOICE" && inv.status !== "SYNCED"
+    inv.type !== "CREDIT_INVOICE" && (inv.status !== "SYNCED" || unfinishedCash)
       ? ` <button type="button" class="link ml-1 text-xs" data-retry-invoice>Skicka till Fortnox igen</button>`
       : "";
   return `<li>${new Date(inv.created_at).toLocaleString("sv-SE")} – ${label}${number}: ${state}${retry}</li>`;

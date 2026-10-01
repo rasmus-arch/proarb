@@ -182,7 +182,11 @@ async function fortnoxRequest(settings, path, { method = "GET", body } = {}) {
     }
     if (res.status === 403) {
       throw new Error(
-        `Fortnox nekade åtkomst (403)${data?.ErrorInformation?.message ? `: ${data.ErrorInformation.message}` : ""}. Kontrollera att Fortnox-appen har behörighet till kunder och fakturor och att användaren som anslöt har rätt licens.`
+        `Fortnox nekade åtkomst (403)${
+          (data?.ErrorInformation?.message ?? data?.ErrorInformation?.Message)
+            ? `: ${String(data.ErrorInformation.message ?? data.ErrorInformation.Message).replace(/\.$/, "")}`
+            : ""
+        }. Kontrollera att Fortnox-appen har behörigheterna Kund, Faktura och Betalningar, och att användaren som anslöt har licens för Fakturering och Bokföring.`
       );
     }
     // Fortnox felsvar: { ErrorInformation: { error, message, code } } —
@@ -456,51 +460,79 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
   const created = { ok: true, invoiceNumber: documentNumber, externalRef: documentNumber };
   if (!cash) return created;
 
-  // Fakturan finns redan i Fortnox även om något av stegen nedan skulle
-  // misslyckas — rapportera det som en anteckning, inte som ett fel, så att
-  // den inte skapas en gång till.
-  let current = settingsAfterInvoice;
+  // Fakturan finns nu i Fortnox — bokföring/betalning som inte går igenom
+  // rapporteras som en anteckning (inte som ett fel), så att den inte
+  // skapas en gång till. "Skicka till Fortnox igen" kör completeCashInvoice
+  // igen för det som saknas.
+  const completion = await completeCashInvoice({ settings: settingsAfterInvoice, documentNumber });
+  return { ...created, note: completion.note };
+}
+
+// Slutför ett kontantköp i Fortnox utifrån fakturans faktiska läge där
+// (går att köra flera gånger): bokför fakturan om den inte är bokförd, och
+// — när betalsättet är en egen kod som SW — registrerar och bokför
+// betalningen för det som återstår. Kontrollerar efteråt att Fortnox
+// verkligen visar fakturan som bokförd. note = null när allt är klart.
+export async function completeCashInvoice({ settings, documentNumber } = {}) {
+  if (!isFortnoxConfigured(settings)) return notConfigured();
+  const paymentCode = String(settings.fortnox_cash_payment_way || "SW").trim().toUpperCase();
+  const withModeOfPayment = !CASH_INVOICE_PAYMENT_WAYS.has(paymentCode);
+  const path = `/invoices/${encodeURIComponent(documentNumber)}`;
+  let current = settings;
+
+  const load = async () => {
+    const { data, settings: next } = await fortnoxRequest(current, path);
+    current = next;
+    return data.Invoice ?? {};
+  };
+
+  let invoice;
   try {
-    ({ settings: current } = await fortnoxRequest(current, `/invoices/${documentNumber}/bookkeep`, {
-      method: "PUT",
-      body: {},
-    }));
+    invoice = await load();
+    if (!invoice.Booked) {
+      ({ settings: current } = await fortnoxRequest(current, `${path}/bookkeep`, { method: "PUT", body: {} }));
+      invoice = await load();
+    }
   } catch (err) {
-    return { ...created, note: `Fakturan skapades men kunde inte bokföras: ${err.message}` };
+    return { ok: false, note: `Fakturan skapades men kunde inte bokföras: ${err.message}` };
   }
-  if (asCashInvoice) return created;
+  if (!invoice.Booked) {
+    return {
+      ok: false,
+      note: "Fakturan skapades men Fortnox visar den inte som bokförd. Kontrollera att användaren som anslöt har licens för bokföring.",
+    };
+  }
+  if (!withModeOfPayment) return { ok: true, note: null };
+
+  const balance = Number(invoice.Balance ?? invoice.Total ?? 0);
+  if (!(balance > 0)) return { ok: true, note: null };
 
   let payment;
   try {
-    const total = Number(data.Invoice.Total);
     ({ data: payment, settings: current } = await fortnoxRequest(current, "/invoicepayments", {
       method: "POST",
       body: {
         InvoicePayment: {
           InvoiceNumber: Number(documentNumber),
-          Amount: total,
-          AmountCurrency: total,
+          Amount: balance,
+          AmountCurrency: balance,
           PaymentDate: today(),
           ModeOfPayment: paymentCode,
         },
       },
     }));
   } catch (err) {
-    return {
-      ...created,
-      note: `Fakturan skapades men betalningen (${paymentCode}) kunde inte registreras: ${err.message}`,
-    };
+    return { ok: false, note: `Bokförd, men betalningen (${paymentCode}) kunde inte registreras: ${err.message}` };
   }
-  // Bokförs betalningar automatiskt i Fortnox är den redan bokförd — då
-  // är det inget fel.
+  // Bokförs betalningar automatiskt i Fortnox är den redan bokförd.
   if (!payment?.InvoicePayment?.Booked) {
     try {
       await fortnoxRequest(current, `/invoicepayments/${payment.InvoicePayment.Number}/bookkeep`, { method: "PUT", body: {} });
     } catch (err) {
-      return { ...created, note: `Betald med ${paymentCode}, men betalningen kunde inte bokföras: ${err.message}` };
+      return { ok: false, note: `Betald med ${paymentCode}, men betalningen kunde inte bokföras: ${err.message}` };
     }
   }
-  return created;
+  return { ok: true, note: null };
 }
 
 // Credits back a previously sent customer invoice on a full/partial
