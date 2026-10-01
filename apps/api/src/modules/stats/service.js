@@ -26,11 +26,30 @@ function defaultRange({ from, to }) {
 const SALE_SOURCE_CTE = `
   WITH sale_source AS (
     SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent,
-           o.created_at, o.customer_id
-    FROM order_lines ol JOIN orders o ON o.id = ol.order_id
+           o.id AS order_id, o.created_at, o.customer_id,
+           CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE sp.cost_price END AS cost_price,
+           EXISTS (
+             SELECT 1 FROM order_lines fx
+             WHERE fx.order_id = o.id AND fx.product_variant_id IS NULL AND fx.cost_price IS NULL
+           ) AS margin_excluded
+    FROM order_lines ol
+    JOIN orders o ON o.id = ol.order_id
+    LEFT JOIN product_variants sv ON sv.id = ol.product_variant_id
+    LEFT JOIN products sp ON sp.id = sv.product_id
     WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
   )
 `;
+
+// Rader som räknas in i marginalen: inköpspris känt OCH ordern har ingen
+// fritextrad utan inköpspris (en sådan order utesluts helt — annars skulle
+// fritextradens försäljning se ut som ren vinst eller dra ner procenten).
+const MARGIN_LINE = "(ss.margin_excluded = 0 AND ss.cost_price IS NOT NULL)";
+const LINE_REVENUE = "ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)";
+// Per grupp (produkt/kategori/kund): NULL när någon rad saknar inköpspris
+// eller allt i gruppen ligger i uteslutna ordrar.
+const GROUP_MARGIN = `CASE WHEN MAX(ss.margin_excluded = 0 AND ss.cost_price IS NULL) = 1 OR MIN(ss.margin_excluded) = 1
+                 THEN NULL
+                 ELSE SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} - ss.quantity * ss.cost_price ELSE 0 END) END`;
 
 function rangeParams(range) {
   return [range.from, range.to];
@@ -41,26 +60,28 @@ export async function getSummary(rangeInput) {
   const [[row]] = await pool.query(
     `${SALE_SOURCE_CTE}
      SELECT
-       COALESCE(SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)), 0) AS revenue_ex_vat,
-       SUM(CASE WHEN p.cost_price IS NOT NULL
-                THEN ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price
-                ELSE 0 END) AS margin_amount,
-       SUM(CASE WHEN p.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
+       COALESCE(SUM(${LINE_REVENUE}), 0) AS revenue_ex_vat,
+       COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} - ss.quantity * ss.cost_price ELSE 0 END), 0) AS margin_amount,
+       COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} ELSE 0 END), 0) AS margin_revenue,
+       SUM(CASE WHEN ss.margin_excluded = 0 AND ss.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
+       COUNT(DISTINCT CASE WHEN ss.margin_excluded = 1 THEN ss.order_id END) AS excluded_orders,
        COUNT(*) AS line_count
-     FROM sale_source ss
-     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
-     LEFT JOIN products p ON p.id = v.product_id`,
+     FROM sale_source ss`,
     rangeParams(range)
   );
 
   const revenue = Number(row.revenue_ex_vat);
   const margin = Number(row.margin_amount);
+  const marginRevenue = Number(row.margin_revenue);
   return {
     range,
     revenue_ex_vat: round2(revenue),
     margin_amount: round2(margin),
-    margin_percent: revenue > 0 ? round2((margin / revenue) * 100) : 0,
-    margin_incomplete: Number(row.lines_missing_cost) > 0,
+    // Procenten räknas bara på den försäljning som ingår i marginalen.
+    margin_percent: marginRevenue > 0 ? round2((margin / marginRevenue) * 100) : 0,
+    margin_incomplete: Number(row.lines_missing_cost) > 0 || Number(row.excluded_orders) > 0,
+    lines_missing_cost: Number(row.lines_missing_cost),
+    excluded_orders: Number(row.excluded_orders),
   };
 }
 
@@ -102,9 +123,7 @@ export async function getTopProducts(rangeInput, limit = 20) {
      SELECT p.id AS product_id, p.name,
             SUM(ss.quantity) AS total_qty,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
-            CASE WHEN MAX(p.cost_price IS NULL) = 0
-                 THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
-                 ELSE NULL END AS margin_amount
+            ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
      JOIN product_variants v ON v.id = ss.product_variant_id
      JOIN products p ON p.id = v.product_id
@@ -128,9 +147,7 @@ export async function getTopCategories(rangeInput, limit = 20) {
      SELECT COALESCE(pc.id, 0) AS category_id, COALESCE(pc.name, 'Okategoriserad') AS name,
             SUM(ss.quantity) AS total_qty,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
-            CASE WHEN MAX(p.cost_price IS NULL) = 0
-                 THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
-                 ELSE NULL END AS margin_amount
+            ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
@@ -242,9 +259,7 @@ export async function getTopCustomers(rangeInput, limit = 20) {
     `${SALE_SOURCE_CTE}
      SELECT c.id AS customer_id, c.name,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
-            CASE WHEN MAX(p.cost_price IS NULL) = 0
-                 THEN SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100) - ss.quantity * p.cost_price)
-                 ELSE NULL END AS margin_amount
+            ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id

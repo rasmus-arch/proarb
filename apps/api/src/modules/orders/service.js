@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
-import { assertValidLines } from "../../lib/lines.js";
+import { assertValidLines, hasUnpricedFreeTextLine, lineCostPrice } from "../../lib/lines.js";
 import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
 import { sendOrderReadyEmail, sendPickupReminderEmail } from "../integrations/email.js";
 import { getSettings } from "../settings/service.js";
@@ -65,6 +65,8 @@ function summarizeTotals(lines) {
     margin_amount: round2(marginAmount),
     margin_percent: subtotal > 0 ? round2((marginAmount / subtotal) * 100) : 0,
     margin_incomplete: margins.length < lines.length,
+    // Fritextrad utan inköpspris: marginalen för ordern går inte att räkna.
+    margin_excluded: hasUnpricedFreeTextLine(lines),
   };
 }
 
@@ -177,7 +179,8 @@ async function loadOrderLines(orderId) {
   const [lines] = await pool.query(
     `SELECT ol.*, COALESCE(p.name, ol.description) AS product_name,
             COALESCE(p.tax_rate_percent, ol.tax_rate_percent) AS tax_rate_percent,
-            p.cost_price, v.sku, v.color, v.size
+            CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE p.cost_price END AS cost_price,
+            v.sku, v.color, v.size
      FROM order_lines ol
      LEFT JOIN product_variants v ON v.id = ol.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
@@ -250,8 +253,8 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -263,6 +266,7 @@ async function insertOrderLines(connection, orderId, lines) {
         line.printDescription ?? line.print_description ?? null,
         line.printPrice ?? line.print_price ?? null,
         line.printDiscountPercent ?? line.print_discount_percent ?? 0,
+        lineCostPrice(line),
         sortOrder++,
       ]
     );

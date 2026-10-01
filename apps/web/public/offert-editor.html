@@ -158,6 +158,11 @@
               <input name="printDiscountPercent" type="number" min="0" max="100" step="1" value="0" class="input mt-1" />
             </label>
           </div>
+          <label class="block text-sm">
+            <span class="text-slate-700">Inköpspris ex moms (per st)</span>
+            <input name="costPrice" type="number" min="0" step="0.01" class="input mt-1" />
+            <span class="mt-1 block text-xs text-slate-500">Används för marginalen. Lämnas det tomt räknas ordern inte med i marginalen.</span>
+          </label>
         </div>
         <div class="mt-5 flex justify-end gap-2">
           <button type="button" id="cancel-fritext-btn" class="btn-secondary">Avbryt</button>

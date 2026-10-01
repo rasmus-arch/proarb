@@ -1,5 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { getOrder, createOrder } from "./service.js";
+import { lineCostPrice } from "../../lib/lines.js";
 
 // "Program" — a named, reusable set of order lines per customer (e.g.
 // "Vinteruniform 2026"), not a copy of one specific past order. Saved
@@ -39,8 +40,8 @@ export async function saveOrderAsTemplate(orderId, name, userId) {
     for (const line of order.lines) {
       await connection.query(
         `INSERT INTO order_template_lines
-           (template_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (template_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           templateId,
           line.product_variant_id,
@@ -52,6 +53,7 @@ export async function saveOrderAsTemplate(orderId, name, userId) {
           line.print_description,
           line.print_price,
           line.print_discount_percent,
+          lineCostPrice(line),
           sortOrder++,
         ]
       );
@@ -90,6 +92,7 @@ export async function createOrderFromTemplate(templateId, userId) {
         printDescription: l.print_description,
         printPrice: l.print_price,
         printDiscountPercent: l.print_discount_percent,
+        costPrice: l.cost_price,
       })),
     },
     userId

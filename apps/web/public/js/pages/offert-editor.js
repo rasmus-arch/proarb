@@ -118,7 +118,17 @@ function renderTotals() {
 
   const percent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
   const incomplete = margins.length < state.lines.length && state.lines.length > 0;
-  el.totalsMargin.textContent = `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
+  // En fritextrad utan inköpspris gör marginalen okänd för hela
+  // ordern/offerten — den räknas då inte heller med i statistiken.
+  const excluded = state.lines.some((l) => !l.productVariantId && (l.costPrice === null || l.costPrice === undefined));
+  el.totalsMargin.textContent = excluded
+    ? "Räknas inte"
+    : `${money(marginAmount)} (${percent.toFixed(1)} %)${incomplete ? " *" : ""}`;
+  el.totalsMargin.title = excluded
+    ? "En fritextrad saknar inköpspris — fyll i det för att räkna marginalen. Utan det räknas den här ordern inte med i marginalstatistiken."
+    : incomplete
+      ? "* En eller flera produkter saknar inköpspris"
+      : "";
 
   const warningEl = document.getElementById("margin-warning");
   const summary = marginSummaryText(state.lines.map((l) => marginLevel(lineMargin(l), lineTotal(l))));
@@ -181,7 +191,11 @@ function renderLines() {
 
   el.lineRows.innerHTML = state.lines
     .map((line, index) => {
-      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>`;
+      const costInput =
+        !line.productVariantId && isEditable()
+          ? `<label class="mt-1 flex items-center gap-1.5 text-xs text-slate-500">Inköpspris <input type="number" min="0" step="0.01" class="input w-24 py-1 text-xs" placeholder="saknas" data-field="costPrice" data-index="${index}" value="${line.costPrice ?? ""}" /></label>`
+          : "";
+      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>${costInput}`;
 
       if (!isEditable()) {
         const printSummary = line.printDescription
@@ -229,6 +243,8 @@ el.lineRows.addEventListener("input", (event) => {
   const line = state.lines[Number(index)];
   if (field === "printDescription") {
     line.printDescription = event.target.value;
+  } else if (field === "costPrice") {
+    line.costPrice = event.target.value === "" ? null : Number(event.target.value);
   } else if (field === "printPrice") {
     line.printPrice = event.target.value === "" ? null : Number(event.target.value);
   } else {
@@ -238,7 +254,7 @@ el.lineRows.addEventListener("input", (event) => {
   // Only the total/margin cells need refreshing on numeric edits — patch
   // them in place rather than a full re-render so the input being typed
   // into doesn't lose focus.
-  if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent"].includes(field)) {
+  if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent", "costPrice"].includes(field)) {
     const row = event.target.closest("tr");
     row.querySelector('[data-cell="total"]').textContent = money(lineTotal(line));
     renderMarginCell(row.querySelector('[data-cell="margin"]'), lineMargin(line), lineTotal(line), money);
@@ -327,7 +343,7 @@ el.fritextForm.addEventListener("submit", (event) => {
     printPrice: form.printPrice ? Number(form.printPrice) : null,
     printDiscountPercent: Number(form.printDiscountPercent) || 0,
     taxRatePercent: Number(form.taxRatePercent) || 25,
-    costPrice: null,
+    costPrice: form.costPrice === "" || form.costPrice === undefined ? null : Number(form.costPrice),
   });
   el.fritextDialog.close();
   renderLines();
@@ -551,6 +567,7 @@ el.saveBtn.addEventListener("click", async () => {
       printDescription: l.printDescription || null,
       printPrice: l.printPrice ?? null,
       printDiscountPercent: l.printDiscountPercent || 0,
+      costPrice: l.productVariantId ? null : l.costPrice ?? null,
     })),
   };
 

@@ -141,6 +141,9 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN backup_keep_days INT NOT NULL DEFAULT 14",
     "ALTER TABLE customers ADD COLUMN is_cash_customer TINYINT(1) NOT NULL DEFAULT 0",
     "ALTER TABLE app_settings ADD COLUMN fortnox_cash_payment_way VARCHAR(20) NULL",
+    "ALTER TABLE order_lines ADD COLUMN cost_price DECIMAL(10,2) NULL",
+    "ALTER TABLE quote_lines ADD COLUMN cost_price DECIMAL(10,2) NULL",
+    "ALTER TABLE order_template_lines ADD COLUMN cost_price DECIMAL(10,2) NULL",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

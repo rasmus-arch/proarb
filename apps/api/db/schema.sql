@@ -490,6 +490,9 @@ CREATE TABLE IF NOT EXISTS quote_lines (
   print_description  VARCHAR(255) NULL,
   print_price        DECIMAL(10,2) NULL,
   print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Inköpspris på en fritextrad (katalograder använder produktens).
+  -- NULL på en fritextrad = ordern räknas inte med i marginalen.
+  cost_price             DECIMAL(10,2) NULL,
   sort_order         INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_ql_quote FOREIGN KEY (quote_id) REFERENCES quotes(id),
   CONSTRAINT fk_ql_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
@@ -573,6 +576,9 @@ CREATE TABLE IF NOT EXISTS order_lines (
   print_description  VARCHAR(255) NULL,
   print_price        DECIMAL(10,2) NULL,
   print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Inköpspris på en fritextrad (katalograder använder produktens).
+  -- NULL på en fritextrad = ordern räknas inte med i marginalen.
+  cost_price             DECIMAL(10,2) NULL,
   sort_order         INT NOT NULL DEFAULT 0,
   -- STOCK (default): fine to fulfil from current lagersaldo. PURCHASE:
   -- always order this in specifically for this order, even if there's
@@ -863,6 +869,9 @@ CREATE TABLE IF NOT EXISTS order_template_lines (
   print_description       VARCHAR(255) NULL,
   print_price             DECIMAL(10,2) NULL,
   print_discount_percent  DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Inköpspris på en fritextrad (katalograder använder produktens).
+  -- NULL på en fritextrad = ordern räknas inte med i marginalen.
+  cost_price             DECIMAL(10,2) NULL,
   sort_order              INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_otl_template FOREIGN KEY (template_id) REFERENCES order_templates(id),
   CONSTRAINT fk_otl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),

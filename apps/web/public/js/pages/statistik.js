@@ -51,6 +51,14 @@ async function loadSummary() {
   el.summaryMargin.textContent = money(summary.margin_amount);
   el.summaryMarginPercent.textContent = `${summary.margin_percent.toFixed(1)} %`;
   el.summaryIncompleteNote.classList.toggle("hidden", !summary.margin_incomplete);
+  const notes = [];
+  if (summary.excluded_orders > 0) {
+    notes.push(
+      `${summary.excluded_orders} ${summary.excluded_orders === 1 ? "order har" : "ordrar har"} en fritextrad utan inköpspris och räknas inte med i marginalen.`
+    );
+  }
+  if (summary.lines_missing_cost > 0) notes.push("Vissa produkter saknar inköpspris och räknas inte med i marginalen.");
+  el.summaryIncompleteNote.textContent = `* ${notes.join(" ")}`;
 }
 
 async function loadTopProducts() {

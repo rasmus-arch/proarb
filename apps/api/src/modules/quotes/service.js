@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
-import { assertValidLines } from "../../lib/lines.js";
+import { assertValidLines, hasUnpricedFreeTextLine, lineCostPrice } from "../../lib/lines.js";
 import { getSettings } from "../settings/service.js";
 import { sendQuoteEmail, sendQuoteReminderEmail } from "../integrations/email.js";
 import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
@@ -93,7 +93,8 @@ async function loadQuoteLines(quoteId) {
   const [lines] = await pool.query(
     `SELECT ql.*, COALESCE(p.name, ql.description) AS product_name,
             COALESCE(p.tax_rate_percent, ql.tax_rate_percent) AS tax_rate_percent,
-            p.cost_price, p.image_url, v.sku, v.color, v.size, v.barcode
+            CASE WHEN ql.product_variant_id IS NULL THEN ql.cost_price ELSE p.cost_price END AS cost_price,
+            p.image_url, v.sku, v.color, v.size, v.barcode
      FROM quote_lines ql
      LEFT JOIN product_variants v ON v.id = ql.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
@@ -121,6 +122,7 @@ function summarizeTotals(lines) {
     margin_amount: round2(marginAmount),
     margin_percent: subtotal > 0 ? round2((marginAmount / subtotal) * 100) : 0,
     margin_incomplete: marginLines.length < lines.length,
+    margin_excluded: hasUnpricedFreeTextLine(lines),
   };
 }
 
@@ -202,8 +204,8 @@ async function insertLines(connection, quoteId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO quote_lines
-         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quoteId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -215,6 +217,7 @@ async function insertLines(connection, quoteId, lines) {
         line.printDescription ?? line.print_description ?? null,
         line.printPrice ?? line.print_price ?? null,
         line.printDiscountPercent ?? line.print_discount_percent ?? 0,
+        lineCostPrice(line),
         sortOrder++,
       ]
     );
