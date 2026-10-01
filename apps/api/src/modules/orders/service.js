@@ -511,6 +511,18 @@ async function sendOrderInvoiceFromFortnox(orderId) {
   if (!invoice) return { sent: false, reason: "Ingen faktura hittades för ordern." };
   // Kontantfakturor är redan betalda och ska aldrig skickas till någon.
   if (invoice.type === "CASH_INVOICE") return { sent: false, reason: "Kontantfaktura — skickas inte." };
+  // Fortnox kan inte mejla en faktura till en kund utan e-postadress.
+  const [[recipient]] = await pool.query(
+    `SELECT COALESCE(NULLIF(c.invoice_email, ''), NULLIF(c.email, '')) AS email
+     FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`,
+    [orderId]
+  );
+  if (!recipient?.email) {
+    const reason = "Kunden saknar e-postadress — fakturan finns i Fortnox men måste skickas därifrån (eller lägg till e-post på kunden och försök igen).";
+    // FAILED så att "Skicka till Fortnox igen" visas när e-post lagts till.
+    await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [reason, invoice.id]);
+    return { sent: false, reason };
+  }
 
   try {
     const settings = await getSettings();

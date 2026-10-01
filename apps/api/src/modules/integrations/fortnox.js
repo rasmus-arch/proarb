@@ -165,10 +165,47 @@ async function fortnoxRequest(settings, path, { method = "GET", body } = {}) {
         `Fortnox nekade åtkomst (403)${data?.ErrorInformation?.message ? `: ${data.ErrorInformation.message}` : ""}. Kontrollera att Fortnox-appen har behörighet till kunder och fakturor och att användaren som anslöt har rätt licens.`
       );
     }
-    const message = data?.ErrorInformation?.message || data?.error_description || `Fortnox API-fel (${res.status})`;
-    throw new Error(message);
+    // Fortnox felsvar: { ErrorInformation: { error, message, code } } —
+    // ibland med stor bokstav (Message/Code). Hela svaret loggas så att det
+    // syns i serverloggen (cPanel: stderr.log i appens mapp).
+    const info = data?.ErrorInformation ?? data?.errorInformation ?? {};
+    const text = info.message ?? info.Message ?? data?.message ?? data?.error_description;
+    const code = info.code ?? info.Code;
+    console.warn(
+      `Fortnox ${method} ${path} -> ${res.status}: ${JSON.stringify(data)}${res.status === 400 && body ? ` | skickat: ${JSON.stringify(body)}` : ""}`
+    );
+    const err = new Error(
+      `Fortnox svarade ${res.status}${code ? ` (kod ${code})` : ""}: ${text || "okänt fel — se serverloggen"}`
+    );
+    err.fortnoxStatus = res.status;
+    err.fortnoxText = String(text ?? "");
+    throw err;
   }
   return { data, settings: fresh };
+}
+
+// Lägger till vilket steg som gick fel ("Kunde inte skapa fakturan: …").
+async function step(label, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    err.message = `${label}: ${err.message}`;
+    throw err;
+  }
+}
+
+// Fortnox vill ha organisationsnummer som NNNNNN-NNNN. 12 siffror
+// (med sekel, t.ex. 19/20 före personnummer) kortas till 10. Annat
+// format skickas inte alls hellre än att stoppa faktureringen.
+export function normalizeOrgNumber(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  const ten = digits.length === 12 ? digits.slice(2) : digits;
+  return ten.length === 10 ? `${ten.slice(0, 6)}-${ten.slice(6)}` : undefined;
+}
+
+function validEmail(value) {
+  const email = String(value ?? "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
 }
 
 // --- Customers ----------------------------------------------------------
@@ -184,21 +221,32 @@ async function findOrCreateFortnoxCustomer(settings, customerId) {
     return { customerNumber: customer.fortnox_customer_number, settings };
   }
 
-  const { data, settings: settingsAfter } = await fortnoxRequest(settings, "/customers", {
-    method: "POST",
-    body: {
-      Customer: {
-        Name: customer.name,
-        OrganisationNumber: customer.org_number || undefined,
-        Email: customer.invoice_email || customer.email || undefined,
-        Address1: customer.address || undefined,
-        ZipCode: customer.postal_code || undefined,
-        City: customer.city || undefined,
-        CountryCode: customer.country || "SE",
-        Phone1: customer.phone || undefined,
-      },
-    },
-  });
+  const fields = {
+    Name: customer.name,
+    OrganisationNumber: normalizeOrgNumber(customer.org_number),
+    Email: validEmail(customer.invoice_email) ?? validEmail(customer.email),
+    Address1: customer.address || undefined,
+    ZipCode: customer.postal_code || undefined,
+    City: customer.city || undefined,
+    CountryCode: customer.country || "SE",
+    Phone1: customer.phone || undefined,
+  };
+  const create = (customerFields) =>
+    fortnoxRequest(settings, "/customers", { method: "POST", body: { Customer: customerFields } });
+
+  let response;
+  try {
+    response = await step("Kunde inte skapa kunden i Fortnox", () => create(fields));
+  } catch (err) {
+    // Ett organisationsnummer Fortnox inte godtar (t.ex. felaktig
+    // kontrollsiffra) ska inte stoppa faktureringen — skapa kunden utan.
+    if (err.fortnoxStatus === 400 && fields.OrganisationNumber && /organisation/i.test(err.fortnoxText)) {
+      response = await step("Kunde inte skapa kunden i Fortnox", () => create({ ...fields, OrganisationNumber: undefined }));
+    } else {
+      throw err;
+    }
+  }
+  const { data, settings: settingsAfter } = response;
   const customerNumber = data.Customer.CustomerNumber;
   await pool.query(`UPDATE customers SET fortnox_customer_number = ? WHERE id = ?`, [customerNumber, customer.id]);
   return { customerNumber, settings: settingsAfter };
@@ -275,7 +323,8 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
         DueDate: new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }),
       }
     : {};
-  const { data, settings: settingsAfterInvoice } = await fortnoxRequest(settingsAfter, "/invoices", {
+  const { data, settings: settingsAfterInvoice } = await step("Kunde inte skapa fakturan i Fortnox", () =>
+    fortnoxRequest(settingsAfter, "/invoices", {
     method: "POST",
     body: {
       Invoice: {
@@ -285,7 +334,7 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
         ...cashFields,
       },
     },
-  });
+  }));
   const documentNumber = data.Invoice.DocumentNumber;
 
   if (cash) {
@@ -316,7 +365,8 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
   if (invoiceRows.length === 0) throw new Error("Returen har inga rader att kreditera.");
 
   const { customerNumber, settings: settingsAfter } = await findOrCreateFortnoxCustomer(settings, customerId);
-  const { data } = await fortnoxRequest(settingsAfter, "/invoices", {
+  const { data } = await step("Kunde inte skapa kreditfakturan i Fortnox", () =>
+    fortnoxRequest(settingsAfter, "/invoices", {
     method: "POST",
     body: {
       Invoice: {
@@ -327,7 +377,7 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
         InvoiceRows: invoiceRows,
       },
     },
-  });
+  }));
   return { ok: true, invoiceNumber: data.Invoice.DocumentNumber, externalRef: data.Invoice.DocumentNumber };
 }
 
@@ -336,6 +386,8 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
 export async function sendCustomerInvoice({ settings, externalRef } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   if (!externalRef) return { ok: false, reason: "NO_REF", note: "Ingen Fortnox-faktura att skicka." };
-  await fortnoxRequest(settings, `/invoices/${externalRef}/email`, { method: "PUT", body: {} });
+  await step("Kunde inte mejla fakturan från Fortnox", () =>
+    fortnoxRequest(settings, `/invoices/${externalRef}/email`, { method: "PUT", body: {} })
+  );
   return { ok: true };
 }
