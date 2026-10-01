@@ -3,6 +3,8 @@ import { pool } from "../../lib/db.js";
 import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
 import { sendInactiveCustomerReminderEmail } from "../integrations/email.js";
+import { sqlLineTotal } from "../../lib/lines.js";
+import { customerDiscountSelect } from "../../lib/customer-pricing.js";
 
 function nextCustomerNumber() {
   // Simple time-based number; good enough until a real sequence/counter
@@ -39,12 +41,10 @@ async function getCustomerStats(id) {
   const [[totals]] = await pool.query(
     `SELECT
        COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' THEN
-         ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
-         + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+         ${sqlLineTotal("ol")}
        ELSE 0 END), 0) AS total_purchased_all_time,
        COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' AND YEAR(o.created_at) = YEAR(CURDATE()) THEN
-         ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
-         + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
+         ${sqlLineTotal("ol")}
        ELSE 0 END), 0) AS total_purchased_this_year,
        MAX(CASE WHEN o.status <> 'CANCELLED' THEN o.created_at ELSE NULL END) AS last_order_at
      FROM orders o
@@ -293,13 +293,10 @@ export async function getOrCreatePortalToken(customerId) {
 // over a rule on the product's supplier. Shared by getCustomerByPortalToken
 // and listAssortment below so both the customer-facing "Mina sidor" page
 // and the staff-facing picker in kund-editor.html show the same number.
-export const ASSORTMENT_DISCOUNT_SELECT = `
-  COALESCE(
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
-    0
-  ) AS discount_percent
-`;
+// Kundens rabatt (discount_percent + discount_amount) — se
+// lib/customer-pricing.js. Används av Sortilog, portalbeställningar och
+// offertförslag.
+export const assortmentDiscountSelect = (customerId) => customerDiscountSelect(customerId);
 
 // "Mina sidor" (portal.js) shows this customer's curated assortment
 // instead of their offert-/orderhistorik — see customer_assortment below.
@@ -314,10 +311,11 @@ export async function getCustomerByPortalToken(token) {
   // turns it on (see portal.js) — fetched unconditionally here since it's
   // cheap and the caller decides whether to render it.
   const [products] = await pool.query(
-    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url, p.discontinued,
+    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url, p.discontinued, p.tax_rate_percent,
+            ca.print_description, ca.print_price, ca.print_discount_percent,
             v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
             sl.quantity_on_hand,
-            ${ASSORTMENT_DISCOUNT_SELECT}
+            ${assortmentDiscountSelect(customer.id)}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
@@ -326,7 +324,7 @@ export async function getCustomerByPortalToken(token) {
        -- Utgångna varianter visas bara så länge det finns något kvar.
        AND (p.discontinued = 0 OR COALESCE(sl.quantity_on_hand, 0) > 0)
      ORDER BY p.name ASC, v.color ASC, v.size ASC`,
-    [customer.id, customer.id, DEFAULT_WAREHOUSE_ID, customer.id]
+    [DEFAULT_WAREHOUSE_ID, customer.id]
   );
 
   const [orders] = await pool.query(
@@ -355,15 +353,16 @@ export async function listAssortment(customerId) {
     `SELECT ca.id, p.id AS product_id, p.article_number, p.name, p.base_price,
             COUNT(v.id) AS variant_count,
             ca.print_description, ca.print_price, ca.print_discount_percent,
-            ${ASSORTMENT_DISCOUNT_SELECT}
+            ca.discount_percent AS assortment_discount_percent, ca.discount_amount AS assortment_discount_amount,
+            ${assortmentDiscountSelect(customerId)}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      WHERE ca.customer_id = ?
      GROUP BY ca.id, p.id, p.article_number, p.name, p.base_price, p.supplier_id,
-              ca.print_description, ca.print_price, ca.print_discount_percent
+              ca.print_description, ca.print_price, ca.print_discount_percent, ca.discount_percent, ca.discount_amount
      ORDER BY p.name ASC`,
-    [customerId, customerId, customerId]
+    [customerId]
   );
   return rows;
 }
@@ -378,11 +377,27 @@ export async function addToAssortment(customerId, productId) {
 
 // Förifyllt tryck för en produkt i kundens sortiment (se products/service.js
 // PRINT_PREFILL_SELECT för var det sedan läses ut, vid sök/skanning).
-export async function updateAssortmentPrint(customerId, productId, { printDescription, printPrice, printDiscountPercent }) {
+// Även kundens rabatt på produkten (% eller kr/st; tomt = stående rabatt).
+export async function updateAssortmentPrint(
+  customerId,
+  productId,
+  { printDescription, printPrice, printDiscountPercent, discountPercent, discountAmount }
+) {
+  const optional = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
+  const amount = optional(discountAmount);
   await pool.query(
-    `UPDATE customer_assortment SET print_description = ?, print_price = ?, print_discount_percent = ?
+    `UPDATE customer_assortment
+     SET print_description = ?, print_price = ?, print_discount_percent = ?, discount_percent = ?, discount_amount = ?
      WHERE customer_id = ? AND product_id = ?`,
-    [printDescription || null, printPrice ?? null, printDiscountPercent ?? 0, customerId, productId]
+    [
+      printDescription || null,
+      optional(printPrice),
+      Number(printDiscountPercent) || 0,
+      amount > 0 ? null : optional(discountPercent),
+      amount > 0 ? amount : null,
+      customerId,
+      productId,
+    ]
   );
   return listAssortment(customerId);
 }

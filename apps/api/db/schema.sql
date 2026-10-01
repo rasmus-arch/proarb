@@ -349,6 +349,10 @@ CREATE TABLE IF NOT EXISTS customer_assortment (
   print_description      VARCHAR(255) NULL,
   print_price             DECIMAL(10,2) NULL,
   print_discount_percent  DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Kundens rabatt på just den här produkten: % eller kr/st. Båda NULL =
+  -- kundens stående rabatt gäller (se lib/customer-pricing.js).
+  discount_percent        DECIMAL(5,2) NULL,
+  discount_amount         DECIMAL(10,2) NULL,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_cust_assortment_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
   CONSTRAINT fk_cust_assortment_product FOREIGN KEY (product_id) REFERENCES products(id),
@@ -395,7 +399,13 @@ CREATE TABLE IF NOT EXISTS portal_order_request_lines (
   quantity           DECIMAL(10,2) NOT NULL,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Rabatt i kronor per styck (avdrag på à-priset), se lib/lines.js.
+  discount_amount  DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_rate_percent   DECIMAL(5,2) NOT NULL DEFAULT 25,
+  -- Tryck från kundens sortiment, fryst vid inskick som priset.
+  print_description      VARCHAR(255) NULL,
+  print_price            DECIMAL(10,2) NULL,
+  print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
   CONSTRAINT fk_porl_request FOREIGN KEY (request_id) REFERENCES portal_order_requests(id),
   CONSTRAINT fk_porl_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -488,6 +498,8 @@ CREATE TABLE IF NOT EXISTS quote_lines (
   quantity           DECIMAL(10,2) NOT NULL,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Rabatt i kronor per styck (avdrag på à-priset), se lib/lines.js.
+  discount_amount  DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
   -- Tryck är valfritt per rad: fylls print_description i räknas
@@ -571,6 +583,8 @@ CREATE TABLE IF NOT EXISTS order_lines (
   delivered_qty      DECIMAL(10,2) NOT NULL DEFAULT 0,
   unit_price         DECIMAL(10,2) NOT NULL,
   discount_percent   DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Rabatt i kronor per styck (avdrag på à-priset), se lib/lines.js.
+  discount_amount  DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_rate_percent   DECIMAL(5,2) NULL,
   print_method_id    INT NULL,
   -- Tryck är valfritt per rad: fylls print_description i räknas
@@ -848,6 +862,8 @@ CREATE TABLE IF NOT EXISTS order_return_lines (
   quantity         DECIMAL(10,2) NOT NULL,
   unit_price       DECIMAL(10,2) NOT NULL,
   discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Rabatt i kronor per styck (avdrag på à-priset), se lib/lines.js.
+  discount_amount  DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_rate_percent DECIMAL(5,2) NOT NULL DEFAULT 25,
   print_price            DECIMAL(10,2) NULL,
   print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -878,6 +894,8 @@ CREATE TABLE IF NOT EXISTS order_template_lines (
   quantity                DECIMAL(10,2) NOT NULL,
   unit_price              DECIMAL(10,2) NOT NULL,
   discount_percent        DECIMAL(5,2) NOT NULL DEFAULT 0,
+  -- Rabatt i kronor per styck (avdrag på à-priset), se lib/lines.js.
+  discount_amount  DECIMAL(10,2) NOT NULL DEFAULT 0,
   tax_rate_percent        DECIMAL(5,2) NULL,
   print_description       VARCHAR(255) NULL,
   print_price             DECIMAL(10,2) NULL,

@@ -303,6 +303,8 @@ router.patch("/:id/assortment/:productId", async (req, res, next) => {
       printDescription: req.body?.printDescription,
       printPrice: req.body?.printPrice === "" || req.body?.printPrice === undefined ? null : Number(req.body.printPrice),
       printDiscountPercent: Number(req.body?.printDiscountPercent) || 0,
+      discountPercent: req.body?.discountPercent,
+      discountAmount: req.body?.discountAmount,
     });
     res.json({ rows });
   } catch (err) {

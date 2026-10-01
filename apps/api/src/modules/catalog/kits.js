@@ -1,4 +1,5 @@
 import { pool } from "../../lib/db.js";
+import { customerDiscountSelect } from "../../lib/customer-pricing.js";
 
 // Produktpaket: en generisk, återanvändbar kombination av produkter (t.ex.
 // "Nyanställd-kit") som går att lägga till i valfri offert/order med ett
@@ -6,13 +7,10 @@ import { pool } from "../../lib/db.js";
 // name, color, size, sku, price_override, base_price, cost_price,
 // tax_rate_percent, suggested_discount_percent) — så frontendens befintliga
 // "variant -> radobjekt"-mappning funkar oförändrad på ett paketets rader.
-const DISCOUNT_SELECT = `
-  COALESCE(
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
-    0
-  ) AS suggested_discount_percent
-`;
+// Sortimentets rabatt (% eller kr/st) går före stående rabatter, se
+// lib/customer-pricing.js.
+const discountSelect = (customerId) =>
+  customerDiscountSelect(customerId, { percentAs: "suggested_discount_percent", amountAs: "suggested_discount_amount" });
 
 export async function listKits() {
   const [rows] = await pool.query(
@@ -37,13 +35,13 @@ export async function getKit(id, customerId = null) {
     `SELECT kl.id AS kit_line_id, kl.quantity AS kit_quantity,
             v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
             p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent,
-            ${DISCOUNT_SELECT}
+            ${discountSelect(customerId)}
      FROM product_kit_lines kl
      JOIN product_variants v ON v.id = kl.product_variant_id
      JOIN products p ON p.id = v.product_id
      WHERE kl.kit_id = ?
      ORDER BY kl.sort_order ASC`,
-    [customerId ?? 0, customerId ?? 0, id]
+    [id]
   );
 
   return { ...kit, lines };

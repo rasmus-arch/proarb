@@ -38,7 +38,7 @@ const SALE_SOURCE_CTE = `
     WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
   ),
   sale_source AS (
-    SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent, 0 AS is_print,
+    SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent, ol.discount_amount, 0 AS is_print,
            o.id AS order_id, o.created_at, o.customer_id, o.margin_excluded,
            CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE sp.cost_price END AS cost_price
     FROM order_lines ol
@@ -46,7 +46,7 @@ const SALE_SOURCE_CTE = `
     LEFT JOIN product_variants sv ON sv.id = ol.product_variant_id
     LEFT JOIN products sp ON sp.id = sv.product_id
     UNION ALL
-    SELECT NULL, ol.quantity, ol.print_price, ol.print_discount_percent, 1,
+    SELECT NULL, ol.quantity, ol.print_price, ol.print_discount_percent, 0, 1,
            o.id, o.created_at, o.customer_id, o.margin_excluded,
            NULL
     FROM order_lines ol
@@ -61,8 +61,9 @@ const SALE_SOURCE_CTE = `
 // dra ner procenten).
 const MARGIN_LINE = "(ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NOT NULL)";
 const LINE_GROSS = "ss.quantity * ss.unit_price";
-const LINE_REVENUE = "ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)";
-const LINE_DISCOUNT = "ss.quantity * ss.unit_price * ss.discount_percent / 100";
+// Rabatt i % och/eller kr/st (discount_amount), se lib/lines.js.
+const LINE_REVENUE = "ss.quantity * (ss.unit_price * (1 - ss.discount_percent / 100) - ss.discount_amount)";
+const LINE_DISCOUNT = "ss.quantity * (ss.unit_price * ss.discount_percent / 100 + ss.discount_amount)";
 // Per grupp (produkt/kategori/kund): NULL när någon (icke-tryck-)rad saknar
 // inköpspris eller inget i gruppen alls kan räknas.
 const GROUP_MARGIN = `CASE WHEN MAX(ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NULL) = 1
@@ -127,7 +128,7 @@ export async function getDailySalesTrend(days = 90) {
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
      SELECT DATE_FORMAT(ss.created_at, '%Y-%m-%d') AS day,
-            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
+            SUM(${LINE_REVENUE}) AS revenue_ex_vat
      FROM sale_source ss
      GROUP BY day`,
     [fromStr, toStr]
@@ -178,7 +179,7 @@ export async function getTopCategories(rangeInput, limit = 20) {
     `${SALE_SOURCE_CTE}
      SELECT ${CATEGORY_ID} AS category_id, ${CATEGORY_NAME} AS name,
             SUM(ss.quantity) AS total_qty,
-            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
+            SUM(${LINE_REVENUE}) AS revenue_ex_vat,
             ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
@@ -215,7 +216,7 @@ export async function getMonthlyCategoryTrend(months = 12) {
      SELECT DATE_FORMAT(ss.created_at, '%Y-%m') AS month,
             ${CATEGORY_ID} AS category_id, ${CATEGORY_NAME} AS category_name,
             SUM(ss.quantity) AS total_qty,
-            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
+            SUM(${LINE_REVENUE}) AS revenue_ex_vat
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
@@ -247,7 +248,7 @@ export async function getOpenQuotePipeline() {
   await expireOverdueQuotes();
   const [rows] = await pool.query(
     `SELECT q.id, q.quote_number, q.status, q.sent_at, c.name AS customer_name,
-            COALESCE(SUM(ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)), 0) AS total_value
+            COALESCE(SUM(ql.quantity * (ql.unit_price * (1 - ql.discount_percent / 100) - ql.discount_amount)), 0) AS total_value
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
      LEFT JOIN quote_lines ql ON ql.quote_id = q.id
@@ -290,7 +291,7 @@ export async function getTopCustomers(rangeInput, limit = 20) {
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
      SELECT c.id AS customer_id, c.name,
-            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
+            SUM(${LINE_REVENUE}) AS revenue_ex_vat,
             ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id

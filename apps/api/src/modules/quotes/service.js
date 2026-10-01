@@ -1,9 +1,16 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
-import { assertValidLines, hasUnpricedFreeTextLine, lineCostPrice } from "../../lib/lines.js";
+import {
+  assertValidLines,
+  hasUnpricedFreeTextLine,
+  lineCostPrice,
+  lineDiscountAmount,
+  lineTotal as sharedLineTotal,
+  sqlLineTotal,
+} from "../../lib/lines.js";
 import { getSettings } from "../settings/service.js";
 import { sendQuoteEmail, sendQuoteReminderEmail } from "../integrations/email.js";
-import { ASSORTMENT_DISCOUNT_SELECT } from "../customers/service.js";
+import { assortmentDiscountSelect } from "../customers/service.js";
 
 // Sekventiella offertnummer (OFF-0001, OFF-0002, ...) istället för
 // slumpmässiga tidsstämplar — samma mönster som nextOrderNumber i
@@ -35,12 +42,7 @@ async function defaultValidUntil(connection) {
 // follows the line's own quantity, no separate tryckantal) — always ex
 // moms, per PLAN.md.
 function lineTotal(line) {
-  const productTotal = Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
-  const printTotal =
-    line.print_price === null || line.print_price === undefined
-      ? 0
-      : Number(line.quantity) * Number(line.print_price) * (1 - Number(line.print_discount_percent ?? 0) / 100);
-  return productTotal + printTotal;
+  return sharedLineTotal(line);
 }
 
 // null when the product has no cost_price set — margin for that line is
@@ -63,10 +65,7 @@ export async function listQuotes({ search = "", status = "", customerId = "", pa
   const [rows] = await pool.query(
     `SELECT q.id, q.quote_number, q.status, q.valid_until, q.created_at, q.sent_at,
             c.id AS customer_id, c.name AS customer_name,
-            COALESCE(SUM(
-              ql.quantity * ql.unit_price * (1 - ql.discount_percent / 100)
-              + IFNULL(ql.quantity * ql.print_price * (1 - ql.print_discount_percent / 100), 0)
-            ), 0) AS total_amount
+            COALESCE(SUM(${sqlLineTotal("ql")}), 0) AS total_amount
      FROM quotes q
      JOIN customers c ON c.id = q.customer_id
      LEFT JOIN quote_lines ql ON ql.quote_id = q.id
@@ -204,8 +203,8 @@ async function insertLines(connection, quoteId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO quote_lines
-         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (quote_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, discount_amount, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quoteId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -218,6 +217,7 @@ async function insertLines(connection, quoteId, lines) {
         line.printPrice ?? line.print_price ?? null,
         line.printDiscountPercent ?? line.print_discount_percent ?? 0,
         lineCostPrice(line),
+        lineDiscountAmount(line),
         sortOrder++,
       ]
     );
@@ -507,7 +507,7 @@ export async function getSuggestedProducts(quoteId, limit = 3) {
   const [suggestions] = await pool.query(
     `SELECT p.id AS product_id, p.name, p.image_url, p.base_price, p.tax_rate_percent,
             COUNT(*) AS score,
-            ${ASSORTMENT_DISCOUNT_SELECT}
+            ${assortmentDiscountSelect(customerId)}
      FROM order_lines ol1
      JOIN product_variants v1 ON v1.id = ol1.product_variant_id AND v1.product_id IN (${ownPlaceholders})
      JOIN order_lines ol2 ON ol2.order_id = ol1.order_id AND ol2.id <> ol1.id
@@ -516,7 +516,7 @@ export async function getSuggestedProducts(quoteId, limit = 3) {
      GROUP BY p.id, p.name, p.image_url, p.base_price, p.tax_rate_percent
      ORDER BY score DESC
      LIMIT ?`,
-    [customerId, customerId, ...productIds, ...productIds, limit]
+    [...productIds, ...productIds, limit]
   );
   if (suggestions.length === 0) return [];
 
@@ -535,13 +535,17 @@ export async function getSuggestedProducts(quoteId, limit = 3) {
     image_url: s.image_url,
     tax_rate_percent: s.tax_rate_percent,
     discount_percent: Number(s.discount_percent) || 0,
+    discount_amount: Number(s.discount_amount) || 0,
     variants: variants
       .filter((v) => v.product_id === s.product_id)
       .map((v) => ({
         id: v.id,
         color: v.color,
         size: v.size,
-        price: round2(Number(v.price_override ?? s.base_price) * (1 - (Number(s.discount_percent) || 0) / 100)),
+        price: round2(
+          Number(v.price_override ?? s.base_price) * (1 - (Number(s.discount_percent) || 0) / 100) -
+            (Number(s.discount_amount) || 0)
+        ),
       })),
   }));
 }
@@ -564,11 +568,11 @@ export async function addSuggestedLineToQuote(token, { productVariantId, quantit
   const [[priced]] = await pool.query(
     `SELECT v.id AS variant_id, v.color, v.size, v.price_override,
             p.name, p.base_price, p.tax_rate_percent,
-            ${ASSORTMENT_DISCOUNT_SELECT}
+            ${assortmentDiscountSelect(quote.customer_id)}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE v.id = ? AND v.active = 1 AND p.active = 1`,
-    [quote.customer_id, quote.customer_id, productVariantId]
+    [productVariantId]
   );
   if (!priced) throw new Error("INVALID_LINE");
 
@@ -583,14 +587,15 @@ export async function addSuggestedLineToQuote(token, { productVariantId, quantit
       [quote.id]
     );
     await pool.query(
-      `INSERT INTO quote_lines (quote_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO quote_lines (quote_id, product_variant_id, quantity, unit_price, discount_percent, discount_amount, tax_rate_percent, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quote.id,
         priced.variant_id,
         qty,
         Number(priced.price_override ?? priced.base_price),
         Number(priced.discount_percent) || 0,
+        Number(priced.discount_amount) || 0,
         Number(priced.tax_rate_percent),
         maxSort + 1,
       ]

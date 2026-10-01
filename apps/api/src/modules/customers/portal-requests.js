@@ -1,6 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { createOrder } from "../orders/service.js";
-import { ASSORTMENT_DISCOUNT_SELECT, addContact } from "./service.js";
+import { assortmentDiscountSelect, addContact } from "./service.js";
 
 // Self-service beställning från "Mina sidor" (portal.js): kunden väljer
 // antal ur sitt kurerade sortiment och skickar in. Pris/rabatt räknas
@@ -43,12 +43,13 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
 
       const [[priced]] = await connection.query(
         `SELECT v.id AS variant_id, v.price_override, p.base_price, p.tax_rate_percent,
-                ${ASSORTMENT_DISCOUNT_SELECT}
+                ca.print_description, ca.print_price, ca.print_discount_percent,
+                ${assortmentDiscountSelect(customer.id)}
          FROM product_variants v
          JOIN products p ON p.id = v.product_id
          JOIN customer_assortment ca ON ca.product_id = p.id AND ca.customer_id = ?
          WHERE v.id = ? AND v.active = 1 AND p.active = 1`,
-        [customer.id, customer.id, customer.id, line.productVariantId]
+        [customer.id, line.productVariantId]
       );
       // Not in this customer's curated assortment (or not a real/active
       // variant) — silently skipped rather than failing the whole request,
@@ -58,15 +59,21 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
 
       await connection.query(
         `INSERT INTO portal_order_request_lines
-           (request_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+           (request_id, product_variant_id, quantity, unit_price, discount_percent, discount_amount, tax_rate_percent,
+            print_description, print_price, print_discount_percent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           requestId,
           priced.variant_id,
           quantity,
           Number(priced.price_override ?? priced.base_price),
           Number(priced.discount_percent) || 0,
+          Number(priced.discount_amount) || 0,
           Number(priced.tax_rate_percent),
+          // Tryck från sortimentet följer med (pris fryst som produktpriset).
+          priced.print_price !== null && priced.print_price !== undefined ? priced.print_description || "Tryck" : null,
+          priced.print_price ?? null,
+          Number(priced.print_discount_percent) || 0,
         ]
       );
       linesInserted++;
@@ -122,10 +129,12 @@ export async function reorderFromOrder(token, orderId) {
     for (const line of orderLines) {
       const [[priced]] = await connection.query(
         `SELECT v.id AS variant_id, v.price_override, p.base_price, p.tax_rate_percent,
-                ${ASSORTMENT_DISCOUNT_SELECT}
+                ca.print_description, ca.print_price, ca.print_discount_percent,
+                ${assortmentDiscountSelect(customer.id)}
          FROM product_variants v JOIN products p ON p.id = v.product_id
+         LEFT JOIN customer_assortment ca ON ca.product_id = p.id AND ca.customer_id = ?
          WHERE v.id = ? AND v.active = 1 AND p.active = 1`,
-        [customer.id, customer.id, line.product_variant_id]
+        [customer.id, line.product_variant_id]
       );
       // Varianten är utgången/inaktiverad sedan förra ordern — hoppas
       // över istället för att stoppa hela återbeställningen.
@@ -133,15 +142,21 @@ export async function reorderFromOrder(token, orderId) {
 
       await connection.query(
         `INSERT INTO portal_order_request_lines
-           (request_id, product_variant_id, quantity, unit_price, discount_percent, tax_rate_percent)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+           (request_id, product_variant_id, quantity, unit_price, discount_percent, discount_amount, tax_rate_percent,
+            print_description, print_price, print_discount_percent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           requestId,
           priced.variant_id,
           line.quantity,
           Number(priced.price_override ?? priced.base_price),
           Number(priced.discount_percent) || 0,
+          Number(priced.discount_amount) || 0,
           Number(priced.tax_rate_percent),
+          // Tryck från sortimentet följer med (pris fryst som produktpriset).
+          priced.print_price !== null && priced.print_price !== undefined ? priced.print_description || "Tryck" : null,
+          priced.print_price ?? null,
+          Number(priced.print_discount_percent) || 0,
         ]
       );
       linesInserted++;
@@ -220,7 +235,11 @@ export async function convertPortalOrderRequest(id, userId) {
         quantity: l.quantity,
         unitPrice: l.unit_price,
         discountPercent: l.discount_percent,
+        discountAmount: l.discount_amount,
         taxRatePercent: l.tax_rate_percent,
+        printDescription: l.print_description,
+        printPrice: l.print_price,
+        printDiscountPercent: l.print_discount_percent,
       })),
     },
     userId

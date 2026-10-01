@@ -149,6 +149,16 @@ export async function run() {
     "ALTER TABLE stock_counts ADD COLUMN scope_type VARCHAR(20) NOT NULL DEFAULT 'FULL'",
     "ALTER TABLE stock_counts ADD COLUMN scope_id INT NULL",
     "ALTER TABLE stock_counts ADD COLUMN scope_label VARCHAR(255) NULL",
+    "ALTER TABLE quote_lines ADD COLUMN discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE order_lines ADD COLUMN discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE order_template_lines ADD COLUMN discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE order_return_lines ADD COLUMN discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE portal_order_request_lines ADD COLUMN discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE portal_order_request_lines ADD COLUMN print_description VARCHAR(255) NULL",
+    "ALTER TABLE portal_order_request_lines ADD COLUMN print_price DECIMAL(10,2) NULL",
+    "ALTER TABLE portal_order_request_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
+    "ALTER TABLE customer_assortment ADD COLUMN discount_percent DECIMAL(5,2) NULL",
+    "ALTER TABLE customer_assortment ADD COLUMN discount_amount DECIMAL(10,2) NULL",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

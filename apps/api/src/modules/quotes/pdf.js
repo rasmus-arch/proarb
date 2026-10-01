@@ -152,7 +152,12 @@ export function generateQuotePdf(quote, { publicUrl, settings } = {}) {
       doc.text(description, COLS[0].x, y, { width: COLS[0].width });
       doc.text(String(line.quantity), COLS[1].x, y, { width: COLS[1].width, align: "right" });
       doc.text(money(line.unit_price), COLS[2].x, y, { width: COLS[2].width, align: "right" });
-      doc.text(`${Number(line.discount_percent)} %`, COLS[3].x, y, { width: COLS[3].width, align: "right" });
+      doc.text(
+        Number(line.discount_amount) > 0 ? `${money(line.discount_amount)}/st` : `${Number(line.discount_percent)} %`,
+        COLS[3].x,
+        y,
+        { width: COLS[3].width, align: "right" }
+      );
       doc.text(money(line.line_total), COLS[4].x, y, { width: COLS[4].width, align: "right" });
 
       y += rowHeight;

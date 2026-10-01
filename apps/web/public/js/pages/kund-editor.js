@@ -289,6 +289,15 @@ el.templateRows.addEventListener("click", async (event) => {
   }
 });
 
+el.assortmentList?.addEventListener("change", (event) => {
+  const id = event.target.dataset.discountType;
+  if (id === undefined) return;
+  const input = el.assortmentList.querySelector(`[data-discount-value="${id}"]`);
+  input.disabled = event.target.value === "";
+  if (input.disabled) input.value = "";
+  else input.focus();
+});
+
 function renderAssortment(rows) {
   el.assortmentEmpty.classList.toggle("hidden", rows.length > 0);
   el.assortmentList.innerHTML = rows
@@ -298,9 +307,17 @@ function renderAssortment(rows) {
           ? `<span class="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Variabel produkt · ${p.variant_count} varianter</span>`
           : "";
       const discountBadge =
-        Number(p.discount_percent) > 0
-          ? `<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">-${p.discount_percent}% rabatt</span>`
-          : "";
+        Number(p.discount_amount) > 0
+          ? `<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">-${Number(p.discount_amount)} kr/st</span>`
+          : Number(p.discount_percent) > 0
+            ? `<span class="ml-2 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">-${Number(p.discount_percent)}% rabatt</span>`
+            : "";
+      // Egen rabatt i sortimentet (% eller kr/st) — annars gäller kundens
+      // stående rabatt (leverantör/produkt), som visas i badgen ovan.
+      const ownType =
+        Number(p.assortment_discount_amount) > 0 ? "amount" : p.assortment_discount_percent !== null ? "percent" : "";
+      const ownValue =
+        ownType === "amount" ? Number(p.assortment_discount_amount) : ownType === "percent" ? Number(p.assortment_discount_percent) : "";
       return `
       <li class="py-2 text-sm" data-assortment-product="${p.product_id}">
         <div class="flex items-center justify-between">
@@ -312,6 +329,17 @@ function renderAssortment(rows) {
           <button type="button" class="text-slate-400 hover:text-red-600" data-remove-assortment="${p.product_id}">✕</button>
         </div>
         <div class="mt-2 flex flex-wrap items-center gap-2">
+          <span class="w-14 text-xs text-slate-500">Rabatt</span>
+          <select class="input w-auto" data-discount-type="${p.product_id}">
+            <option value="" ${ownType === "" ? "selected" : ""}>Kundens stående rabatt</option>
+            <option value="percent" ${ownType === "percent" ? "selected" : ""}>Rabatt i %</option>
+            <option value="amount" ${ownType === "amount" ? "selected" : ""}>Rabatt i kr/st</option>
+          </select>
+          <input type="number" min="0" step="0.01" class="input w-24" placeholder="0" data-discount-value="${p.product_id}"
+            value="${ownValue}" ${ownType === "" ? "disabled" : ""} />
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+          <span class="w-14 text-xs text-slate-500">Tryck</span>
           <input
             type="text"
             class="input flex-1 min-w-[180px]"
@@ -328,7 +356,9 @@ function renderAssortment(rows) {
             data-print-price="${p.product_id}"
             value="${p.print_price ?? ""}"
           />
-          <button type="button" class="btn-secondary text-xs" data-save-print="${p.product_id}">Spara tryck</button>
+          <input type="number" min="0" max="100" step="0.01" class="input w-24" placeholder="Rabatt %" title="Rabatt på trycket i %"
+            data-print-discount="${p.product_id}" value="${Number(p.print_discount_percent) > 0 ? Number(p.print_discount_percent) : ""}" />
+          <button type="button" class="btn-secondary text-xs" data-save-print="${p.product_id}">Spara</button>
         </div>
       </li>`;
     })
@@ -591,13 +621,22 @@ el.assortmentList.addEventListener("click", async (event) => {
     const item = el.assortmentList.querySelector(`[data-assortment-product="${saveId}"]`);
     const description = item.querySelector(`[data-print-description="${saveId}"]`).value;
     const price = item.querySelector(`[data-print-price="${saveId}"]`).value;
-    await api.patch(`/customers/${customerId}/assortment/${saveId}`, {
+    const printDiscount = item.querySelector(`[data-print-discount="${saveId}"]`).value;
+    const discountType = item.querySelector(`[data-discount-type="${saveId}"]`).value;
+    const discountValue = item.querySelector(`[data-discount-value="${saveId}"]`).value;
+    const { rows } = await api.patch(`/customers/${customerId}/assortment/${saveId}`, {
       printDescription: description || null,
       printPrice: price === "" ? null : Number(price),
+      printDiscountPercent: Number(printDiscount) || 0,
+      discountPercent: discountType === "percent" ? Number(discountValue) || 0 : null,
+      discountAmount: discountType === "amount" ? Number(discountValue) || 0 : null,
     });
-    const originalLabel = event.target.textContent;
-    event.target.textContent = "Sparat!";
-    setTimeout(() => (event.target.textContent = originalLabel), 1500);
+    renderAssortment(rows);
+    const savedBtn = el.assortmentList.querySelector(`[data-save-print="${saveId}"]`);
+    if (savedBtn) {
+      savedBtn.textContent = "Sparat!";
+      setTimeout(() => (savedBtn.textContent = "Spara"), 1500);
+    }
   }
 });
 

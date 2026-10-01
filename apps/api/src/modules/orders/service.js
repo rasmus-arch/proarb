@@ -2,7 +2,14 @@ import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { getQuote } from "../quotes/service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
-import { assertValidLines, hasUnpricedFreeTextLine, lineCostPrice } from "../../lib/lines.js";
+import {
+  assertValidLines,
+  hasUnpricedFreeTextLine,
+  lineCostPrice,
+  lineDiscountAmount,
+  lineTotal as sharedLineTotal,
+  sqlLineTotal,
+} from "../../lib/lines.js";
 import { createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
 import { sendOrderReadyEmail, sendPickupReminderEmail } from "../integrations/email.js";
 import { getSettings } from "../settings/service.js";
@@ -33,12 +40,7 @@ function generateQrToken() {
 // print_price is set — tryck is optional per line, quantity always
 // follows the line's own quantity, no separate tryckantal).
 function lineTotal(line) {
-  const productTotal = Number(line.quantity) * Number(line.unit_price) * (1 - Number(line.discount_percent) / 100);
-  const printTotal =
-    line.print_price === null || line.print_price === undefined
-      ? 0
-      : Number(line.quantity) * Number(line.print_price) * (1 - Number(line.print_discount_percent ?? 0) / 100);
-  return productTotal + printTotal;
+  return sharedLineTotal(line);
 }
 
 // null when the product has no cost_price set — margin for that line is
@@ -98,10 +100,7 @@ export async function listOrders({ search = "", status = "", customerId = "", pa
     `SELECT o.id, o.order_number, o.status, o.delivery_method, o.created_at,
             c.id AS customer_id, c.name AS customer_name,
             (SELECT MAX(op.picked_up_at) FROM order_pickups op WHERE op.order_id = o.id) AS delivered_at,
-            COALESCE(SUM(
-              ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
-              + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
-            ), 0) AS total_amount
+            COALESCE(SUM(${sqlLineTotal("ol")}), 0) AS total_amount
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN order_lines ol ON ol.order_id = o.id
@@ -134,10 +133,7 @@ export async function getStatusSummary({ customerId = "" } = {}) {
 
   const [[uninvoiced]] = await pool.query(
     `SELECT COUNT(DISTINCT o.id) AS count,
-            COALESCE(SUM(
-              ol.quantity * ol.unit_price * (1 - ol.discount_percent / 100)
-              + IFNULL(ol.quantity * ol.print_price * (1 - ol.print_discount_percent / 100), 0)
-            ), 0) AS amount_ex_vat,
+            COALESCE(SUM(${sqlLineTotal("ol")}), 0) AS amount_ex_vat,
             MIN((SELECT MAX(op.picked_up_at) FROM order_pickups op WHERE op.order_id = o.id)) AS oldest_delivered_at
      FROM orders o
      LEFT JOIN order_lines ol ON ol.order_id = o.id
@@ -295,8 +291,8 @@ async function insertOrderLines(connection, orderId, lines) {
   for (const line of lines) {
     await connection.query(
       `INSERT INTO order_lines
-         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (order_id, product_variant_id, description, quantity, unit_price, discount_percent, tax_rate_percent, print_description, print_price, print_discount_percent, cost_price, discount_amount, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         line.productVariantId ?? line.product_variant_id ?? null,
@@ -309,6 +305,7 @@ async function insertOrderLines(connection, orderId, lines) {
         line.printPrice ?? line.print_price ?? null,
         line.printDiscountPercent ?? line.print_discount_percent ?? 0,
         lineCostPrice(line),
+        lineDiscountAmount(line),
         sortOrder++,
       ]
     );

@@ -91,6 +91,11 @@ function groupByProduct(products) {
         base_price: p.base_price,
         image_url: p.image_url,
         discount_percent: Number(p.discount_percent) || 0,
+        discount_amount: Number(p.discount_amount) || 0,
+        tax_rate_percent: Number(p.tax_rate_percent ?? 25),
+        print_description: p.print_description,
+        print_price: p.print_price === null || p.print_price === undefined ? null : Number(p.print_price),
+        print_discount_percent: Number(p.print_discount_percent) || 0,
         variants: [],
       });
     }
@@ -131,17 +136,43 @@ function imageHtml(imageUrl) {
     : "";
 }
 
-function priceHtml(price, discountPercent) {
-  if (discountPercent > 0) {
-    const discounted = Number(price) * (1 - discountPercent / 100);
+// Nettopris per styck efter kundens rabatt (% eller kr/st), samma regel
+// som lib/lines.js använder när beställningen blir en order.
+function netPrice(price, p) {
+  return Math.max(0, Number(price) * (1 - p.discount_percent / 100) - p.discount_amount);
+}
+
+function priceHtml(price, p) {
+  if (p.discount_percent > 0 || p.discount_amount > 0) {
+    const label = p.discount_amount > 0 ? `-${money(p.discount_amount)}/st` : `-${p.discount_percent}%`;
     return `<div style="text-align:right;white-space:nowrap;">
         <div style="text-decoration:line-through;color:#94a3b8;font-size:12px;">${money(price)}</div>
-        <div style="font-weight:600;">${money(discounted)}
-          <span style="display:inline-block;margin-left:4px;border-radius:9999px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:600;padding:1px 8px;">-${discountPercent}%</span>
+        <div style="font-weight:600;">${money(netPrice(price, p))}
+          <span style="display:inline-block;margin-left:4px;border-radius:9999px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:600;padding:1px 8px;">${label}</span>
         </div>
       </div>`;
   }
   return `<div style="text-align:right;white-space:nowrap;">${money(price)}</div>`;
+}
+
+// Tryck som kunden har i sitt sortiment (sätts av personalen) — följer med
+// beställningen och räknas med i sammanställningen.
+function printNetPrice(p) {
+  return p.print_price === null ? 0 : p.print_price * (1 - p.print_discount_percent / 100);
+}
+
+function printHtml(p) {
+  if (p.print_price === null) return "";
+  return `<div style="color:#475569;font-size:12px;margin-top:3px;">Tryck: ${escapeHtml(p.print_description || "Tryck")} · ${money(printNetPrice(p))}/st${
+    p.print_discount_percent > 0 ? ` <span style="color:#15803d;">(-${p.print_discount_percent}%)</span>` : ""
+  }</div>`;
+}
+
+// Det sammanställningen behöver per antal-ruta (räknas i webbläsaren;
+// priset räknas om på servern vid inskick, se portal-requests.js).
+function qtyDataAttrs(p, v) {
+  const label = [p.name, [v.color, v.size].filter(Boolean).join(" / ")].filter(Boolean).join(" – ");
+  return `data-label="${escapeHtml(label)}" data-unit="${netPrice(v.price, p).toFixed(2)}" data-print-unit="${printNetPrice(p).toFixed(2)}" data-tax="${p.tax_rate_percent}"`;
 }
 
 // GET /portal/:token — länken utan inloggning. Stängd när Inställningar →
@@ -207,12 +238,13 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
               <div>
                 <div style="font-weight:600;">${escapeHtml(p.name)}</div>
                 <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
+                ${printHtml(p)}
                 ${p.variants[0]?.discontinued ? `<div style="margin-top:4px;">${discontinuedBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : showStock && p.variants[0] ? `<div style="margin-top:4px;">${stockBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : ""}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
-              ${priceHtml(p.variants[0]?.price ?? p.base_price, p.discount_percent)}
-              ${variantId ? `<input type="number" min="0" step="1" placeholder="Antal" class="qty-input" data-variant-id="${variantId}" style="width:64px;" />` : ""}
+              ${priceHtml(p.variants[0]?.price ?? p.base_price, p)}
+              ${variantId ? `<input type="number" min="0" step="1" placeholder="Antal" class="qty-input" data-variant-id="${variantId}" ${qtyDataAttrs(p, p.variants[0])} style="width:64px;" />` : ""}
             </div>
           </div>
         </div>`;
@@ -235,8 +267,8 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
                 <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
                 ${v.discontinued ? `<td style="padding:4px 8px;">${discontinuedBadgeHtml(v.quantity_on_hand)}</td>` : showStock ? `<td style="padding:4px 8px;">${stockBadgeHtml(v.quantity_on_hand)}</td>` : ""}
-                ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>`}
-                <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" style="width:56px;" /></td>
+                ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p)}</td>`}
+                <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" ${qtyDataAttrs(p, v)} style="width:56px;" /></td>
               </tr>`
               )
               .join("")}
@@ -252,9 +284,10 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
                 <span style="font-weight:600;">${escapeHtml(p.name)}</span>
                 <span style="display:inline-block;margin-left:8px;border-radius:9999px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:500;padding:2px 9px;">${p.variants.length} varianter</span>
                 <div style="color:#64748b;font-size:12px;margin-top:2px;padding-left:19px;">${escapeHtml(p.article_number)}</div>
+                <div style="padding-left:19px;">${printHtml(p)}</div>
               </span>
             </div>
-            ${samePrice ? priceHtml(p.variants[0].price, p.discount_percent) : ""}
+            ${samePrice ? priceHtml(p.variants[0].price, p) : ""}
           </summary>
           <div style="margin-top:8px;">${variantTable}</div>
         </details>`;
@@ -367,6 +400,30 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             </div>
             <p id="contact-error" style="display:none;color:#dc2626;font-size:13px;margin:6px 0 0;"></p>
 
+            <div id="order-summary" style="display:none;margin-top:18px;border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#f8fafc;">
+              <div style="font-weight:600;font-size:14px;margin-bottom:8px;">Din beställning</div>
+              <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                  <tr style="color:#64748b;text-align:left;">
+                    <th style="padding:4px 6px;font-weight:500;">Produkt</th>
+                    <th style="padding:4px 6px;font-weight:500;text-align:right;">Antal</th>
+                    <th style="padding:4px 6px;font-weight:500;text-align:right;">à-pris</th>
+                    <th style="padding:4px 6px;font-weight:500;text-align:right;">Tryck/st</th>
+                    <th style="padding:4px 6px;font-weight:500;text-align:right;">Summa</th>
+                  </tr>
+                </thead>
+                <tbody id="order-summary-rows"></tbody>
+              </table>
+              <div style="margin-top:10px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:13px;display:grid;grid-template-columns:1fr auto;gap:3px 16px;max-width:320px;margin-left:auto;">
+                <span style="color:#64748b;">Produkter</span><span id="sum-products" style="text-align:right;"></span>
+                <span style="color:#64748b;">Tryck</span><span id="sum-print" style="text-align:right;"></span>
+                <span style="color:#64748b;">Summa ex moms</span><span id="sum-ex" style="text-align:right;"></span>
+                <span style="color:#64748b;">Moms</span><span id="sum-vat" style="text-align:right;"></span>
+                <span style="font-weight:700;">Totalt inkl moms</span><span id="sum-total" style="text-align:right;font-weight:700;"></span>
+              </div>
+              <p style="color:#94a3b8;font-size:11px;margin:8px 0 0;">Preliminärt — vi bekräftar beställningen innan den blir en order.</p>
+            </div>
+
             <p id="order-error" style="display:none;color:#dc2626;font-size:13px;margin:10px 0 0;"></p>
             <p id="order-success" style="display:none;color:#15803d;font-size:13px;margin:10px 0 0;">Tack! Din beställning är skickad — vi hör av oss.</p>
             <div style="margin-top:12px;">
@@ -392,6 +449,50 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
   </div>
 
   <script>
+    (function () {
+      var summary = document.getElementById("order-summary");
+      if (!summary) return;
+      function kr(n) {
+        return n.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
+      }
+      function esc(s) {
+        var d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+      function update() {
+        var rows = [], products = 0, print = 0, vat = 0;
+        document.querySelectorAll(".qty-input").forEach(function (input) {
+          var qty = Number(input.value);
+          if (!(qty > 0)) return;
+          var unit = Number(input.dataset.unit) || 0;
+          var printUnit = Number(input.dataset.printUnit) || 0;
+          var lineTotal = qty * (unit + printUnit);
+          products += qty * unit;
+          print += qty * printUnit;
+          vat += lineTotal * (Number(input.dataset.tax) || 0) / 100;
+          rows.push(
+            "<tr><td style='padding:4px 6px;'>" + esc(input.dataset.label || "") + "</td>" +
+            "<td style='padding:4px 6px;text-align:right;'>" + qty + "</td>" +
+            "<td style='padding:4px 6px;text-align:right;'>" + kr(unit) + "</td>" +
+            "<td style='padding:4px 6px;text-align:right;'>" + (printUnit > 0 ? kr(printUnit) : "–") + "</td>" +
+            "<td style='padding:4px 6px;text-align:right;font-weight:600;'>" + kr(lineTotal) + "</td></tr>"
+          );
+        });
+        summary.style.display = rows.length ? "block" : "none";
+        document.getElementById("order-summary-rows").innerHTML = rows.join("");
+        document.getElementById("sum-products").textContent = kr(products);
+        document.getElementById("sum-print").textContent = kr(print);
+        document.getElementById("sum-ex").textContent = kr(products + print);
+        document.getElementById("sum-vat").textContent = kr(vat);
+        document.getElementById("sum-total").textContent = kr(products + print + vat);
+      }
+      document.addEventListener("input", function (e) {
+        if (e.target.classList && e.target.classList.contains("qty-input")) update();
+      });
+      window.__updateOrderSummary = update;
+    })();
+
     (function () {
       var btn = document.getElementById("submit-order-btn");
       if (!btn) return;
@@ -478,6 +579,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
           })
           .then(function () {
             document.querySelectorAll(".qty-input").forEach(function (input) { input.value = ""; });
+            if (window.__updateOrderSummary) window.__updateOrderSummary();
             document.getElementById("requested-by-name").value = "";
             pickupSelect.value = "";
             newContactWrap.style.display = "none";

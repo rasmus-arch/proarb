@@ -92,7 +92,10 @@ function money(value) {
 }
 
 function lineTotal(line) {
-  const productTotal = Number(line.quantity) * Number(line.unitPrice) * (1 - Number(line.discountPercent) / 100);
+  // Rabatt i % eller kr/st (discountAmount = avdrag på à-priset), se api lib/lines.js.
+  const productTotal =
+    Number(line.quantity) *
+    (Number(line.unitPrice) * (1 - Number(line.discountPercent || 0) / 100) - Number(line.discountAmount || 0));
   const printTotal = line.printPrice
     ? Number(line.quantity) * Number(line.printPrice) * (1 - Number(line.printDiscountPercent || 0) / 100)
     : 0;
@@ -101,6 +104,10 @@ function lineTotal(line) {
 
 // null when the product has no cost price on file — margin is unknown,
 // not zero.
+function discountLabel(line) {
+  return Number(line.discountAmount) > 0 ? `${money(line.discountAmount)}/st` : `${line.discountPercent || 0} %`;
+}
+
 function lineMargin(line) {
   if (line.costPrice === null || line.costPrice === undefined) return null;
   return lineTotal(line) - Number(line.quantity) * Number(line.costPrice);
@@ -206,7 +213,7 @@ function renderLines() {
             <td class="py-2 pr-3">${productCell}</td>
             <td class="py-2 pr-3">${line.quantity}</td>
             <td class="py-2 pr-3">${money(line.unitPrice)}</td>
-            <td class="py-2 pr-3">${line.discountPercent} %</td>
+            <td class="py-2 pr-3">${discountLabel(line)}</td>
             <td class="py-2 pr-3">${printSummary}</td>
             <td class="py-2 pr-3 text-right" data-cell="total">${money(lineTotal(line))}</td>
             ${marginCellHtml(lineMargin(line), lineTotal(line), money)}
@@ -219,7 +226,15 @@ function renderLines() {
           <td class="py-2 pr-3">${productCell}</td>
           <td class="py-2 pr-3"><input type="number" min="0.01" step="1" class="input" data-field="quantity" data-index="${index}" value="${line.quantity}" /></td>
           <td class="py-2 pr-3"><input type="number" min="0" step="0.01" class="input" data-field="unitPrice" data-index="${index}" value="${line.unitPrice}" /></td>
-          <td class="py-2 pr-3"><input type="number" min="0" max="100" step="1" class="input" data-field="discountPercent" data-index="${index}" value="${line.discountPercent}" /></td>
+          <td class="py-2 pr-3">
+            <div class="flex">
+              <input type="number" min="0" step="0.01" class="input w-20 min-w-[4.5rem] rounded-r-none px-2" data-field="discountValue" data-index="${index}" value="${Number(line.discountAmount) > 0 ? line.discountAmount : line.discountPercent || 0}" />
+              <select class="input w-[4.5rem] shrink-0 rounded-l-none border-l-0 px-1.5" data-field="discountType" data-index="${index}" title="Rabatt i procent eller kronor per styck">
+                <option value="percent" ${Number(line.discountAmount) > 0 ? "" : "selected"}>%</option>
+                <option value="amount" ${Number(line.discountAmount) > 0 ? "selected" : ""}>kr/st</option>
+              </select>
+            </div>
+          </td>
           <td class="py-2 pr-3">
             <input type="text" class="input" placeholder="Tryckbeskrivning (valfritt)" data-field="printDescription" data-index="${index}" value="${escapeHtml(line.printDescription ?? "")}" />
             <div class="mt-1 flex gap-1">
@@ -243,6 +258,27 @@ el.lineRows.addEventListener("input", (event) => {
   const line = state.lines[Number(index)];
   if (field === "printDescription") {
     line.printDescription = event.target.value;
+  } else if (field === "discountValue") {
+    const value = Number(event.target.value) || 0;
+    if (Number(line.discountAmount) > 0 || event.target.nextElementSibling?.value === "amount") {
+      line.discountAmount = value;
+      line.discountPercent = 0;
+    } else {
+      line.discountPercent = value;
+      line.discountAmount = 0;
+    }
+  } else if (field === "discountType") {
+    // Byt form och räkna om så att rabatten i kronor blir ungefär densamma.
+    const price = Number(line.unitPrice) || 0;
+    if (event.target.value === "amount") {
+      line.discountAmount = Math.round(price * (Number(line.discountPercent) || 0)) / 100;
+      line.discountPercent = 0;
+    } else {
+      line.discountPercent = price > 0 ? Math.round(((Number(line.discountAmount) || 0) / price) * 10000) / 100 : 0;
+      line.discountAmount = 0;
+    }
+    const input = event.target.previousElementSibling;
+    input.value = event.target.value === "amount" ? line.discountAmount : line.discountPercent;
   } else if (field === "costPrice") {
     line.costPrice = event.target.value === "" ? null : Number(event.target.value);
   } else if (field === "printPrice") {
@@ -254,7 +290,7 @@ el.lineRows.addEventListener("input", (event) => {
   // Only the total/margin cells need refreshing on numeric edits — patch
   // them in place rather than a full re-render so the input being typed
   // into doesn't lose focus.
-  if (["quantity", "unitPrice", "discountPercent", "printPrice", "printDiscountPercent", "costPrice"].includes(field)) {
+  if (["quantity", "unitPrice", "discountValue", "discountType", "printPrice", "printDiscountPercent", "costPrice"].includes(field)) {
     const row = event.target.closest("tr");
     row.querySelector('[data-cell="total"]').textContent = money(lineTotal(line));
     renderMarginCell(row.querySelector('[data-cell="margin"]'), lineMargin(line), lineTotal(line), money);
@@ -304,6 +340,7 @@ el.lineResults.addEventListener("click", (event) => {
     quantity: 1,
     unitPrice: Number(v.price_override ?? v.base_price),
     discountPercent: Number(v.suggested_discount_percent ?? 0),
+    discountAmount: Number(v.suggested_discount_amount ?? 0),
     printDescription: v.assortment_print_description ?? "",
     printPrice: v.assortment_print_price === null || v.assortment_print_price === undefined ? null : Number(v.assortment_print_price),
     printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
@@ -413,6 +450,7 @@ function kitLineToOrderLine(l) {
     quantity: Number(l.kit_quantity) || 1,
     unitPrice: Number(l.price_override ?? l.base_price),
     discountPercent: Number(l.suggested_discount_percent ?? 0),
+    discountAmount: Number(l.suggested_discount_amount ?? 0),
     printDescription: "",
     printPrice: null,
     printDiscountPercent: 0,
@@ -563,6 +601,7 @@ el.saveBtn.addEventListener("click", async () => {
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       discountPercent: l.discountPercent,
+      discountAmount: Number(l.discountAmount) || 0,
       taxRatePercent: l.taxRatePercent,
       printDescription: l.printDescription || null,
       printPrice: l.printPrice ?? null,
@@ -700,6 +739,7 @@ async function init() {
       quantity: Number(l.quantity),
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),
+      discountAmount: Number(l.discount_amount ?? 0),
       printDescription: l.print_description ?? "",
       printPrice: l.print_price === null || l.print_price === undefined ? null : Number(l.print_price),
       printDiscountPercent: Number(l.print_discount_percent ?? 0),

@@ -2,6 +2,7 @@ import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
 import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
+import { customerDiscountSelect } from "../../lib/customer-pricing.js";
 
 // Fallback for quick-created products (e.g. from the quote/order/kassa line
 // builder) where the user hasn't typed an article number themselves.
@@ -54,13 +55,10 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
 // rule on the product's supplier (see customers/service.js). 0 (not NULL)
 // when no customerId is given or no rule matches, so callers can use it
 // directly as a line's discountPercent without an extra null-check.
-const DISCOUNT_SELECT = `
-  COALESCE(
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND product_id = p.id LIMIT 1),
-    (SELECT discount_percent FROM customer_discounts WHERE customer_id = ? AND supplier_id = p.supplier_id LIMIT 1),
-    0
-  ) AS suggested_discount_percent
-`;
+// Sortimentets rabatt (% eller kr/st) går före stående rabatter, se
+// lib/customer-pricing.js.
+const discountSelect = (customerId) =>
+  customerDiscountSelect(customerId, { percentAs: "suggested_discount_percent", amountAs: "suggested_discount_amount" });
 
 // Förifyllt tryck från kundens sortiment (customer_assortment, satt i
 // kund-editorn) — samma "0/NULL när ingen kund/regel" -princip som
@@ -85,14 +83,14 @@ export async function findVariantByBarcode(barcode, customerId = null) {
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
             p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.discontinued,
             ${STOCK_SELECT},
-            ${DISCOUNT_SELECT},
+            ${discountSelect(customerId)},
             ${PRINT_PREFILL_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      WHERE (v.barcode = ? OR v.sku = ?) AND v.active = 1
      ORDER BY v.barcode = ? DESC
      LIMIT 1`,
-    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, barcode, barcode, barcode]
+    [customerId ?? 0, customerId ?? 0, customerId ?? 0, barcode, barcode, barcode]
   );
   return variant ?? null;
 }
@@ -105,7 +103,7 @@ export async function searchVariants(search = "", limit = 15, customerId = null)
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
             p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable, p.discontinued,
             ${STOCK_SELECT},
-            ${DISCOUNT_SELECT},
+            ${discountSelect(customerId)},
             ${PRINT_PREFILL_SELECT}
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
@@ -113,7 +111,7 @@ export async function searchVariants(search = "", limit = 15, customerId = null)
        AND (p.name LIKE ? OR p.article_number LIKE ? OR v.sku LIKE ? OR v.barcode LIKE ?)
      ORDER BY p.name ASC
      LIMIT ?`,
-    [customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, customerId ?? 0, like, like, like, like, limit]
+    [customerId ?? 0, customerId ?? 0, customerId ?? 0, like, like, like, like, limit]
   );
   return rows;
 }

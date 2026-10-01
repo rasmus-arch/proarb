@@ -183,14 +183,27 @@ function buildInvoiceRows(lines) {
     if (!(quantity > 0)) continue;
     const name = line.description || [line.product_name, line.color, line.size].filter(Boolean).join(" ") || "Rad";
 
-    rows.push({
-      Description: name,
-      DeliveredQuantity: String(quantity),
-      Price: Number(line.unit_price),
-      Discount: Number(line.discount_percent ?? 0),
-      DiscountType: "PERCENT",
-      VAT: Number(line.tax_rate_percent ?? 25),
-    });
+    // Rabatt i kr/st skickas som nettopris (à-pris minus rabatten), så
+    // att raden blir exakt — utan att vara beroende av hur Fortnox tolkar
+    // en beloppsrabatt (per styck eller per rad).
+    const discountAmount = Number(line.discount_amount ?? 0);
+    rows.push(
+      discountAmount > 0
+        ? {
+            Description: name,
+            DeliveredQuantity: String(quantity),
+            Price: Math.round((Number(line.unit_price) * (1 - Number(line.discount_percent ?? 0) / 100) - discountAmount) * 100) / 100,
+            VAT: Number(line.tax_rate_percent ?? 25),
+          }
+        : {
+            Description: name,
+            DeliveredQuantity: String(quantity),
+            Price: Number(line.unit_price),
+            Discount: Number(line.discount_percent ?? 0),
+            DiscountType: "PERCENT",
+            VAT: Number(line.tax_rate_percent ?? 25),
+          }
+    );
 
     if (line.print_price !== null && line.print_price !== undefined) {
       rows.push({

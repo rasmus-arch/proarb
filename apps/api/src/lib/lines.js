@@ -17,6 +17,8 @@ export function assertValidLines(lines) {
     if (unitPrice === undefined || unitPrice === null || Number.isNaN(Number(unitPrice))) {
       throw new Error("INVALID_LINE");
     }
+    const discountAmount = Number(line.discountAmount ?? line.discount_amount ?? 0);
+    if (!(discountAmount >= 0)) throw new Error("INVALID_LINE");
   }
 }
 
@@ -36,4 +38,50 @@ export function lineCostPrice(line) {
 // för hela ordern/offerten.
 export function hasUnpricedFreeTextLine(lines) {
   return lines.some((l) => !l.product_variant_id && (l.cost_price === null || l.cost_price === undefined));
+}
+
+// --- Radsumma ---------------------------------------------------------------
+// Rabatt finns i två former på en rad: discount_percent (procent) och
+// discount_amount (kronor per styck, avdrag på à-priset). Normalt används
+// bara den ena; räknas de båda tas procenten först. Tryck (print_price)
+// har sin egen procentrabatt. Alla belopp ex moms.
+
+function num(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// Nettopris per styck för produkten efter rabatt.
+export function lineNetUnitPrice(line) {
+  const price = num(line.unitPrice ?? line.unit_price);
+  const percent = num(line.discountPercent ?? line.discount_percent);
+  const amount = num(line.discountAmount ?? line.discount_amount);
+  return price * (1 - percent / 100) - amount;
+}
+
+export function lineProductTotal(line) {
+  return num(line.quantity) * lineNetUnitPrice(line);
+}
+
+export function linePrintTotal(line) {
+  const printPrice = line.printPrice ?? line.print_price;
+  if (printPrice === null || printPrice === undefined || printPrice === "") return 0;
+  const percent = num(line.printDiscountPercent ?? line.print_discount_percent);
+  return num(line.quantity) * num(printPrice) * (1 - percent / 100);
+}
+
+export function lineTotal(line) {
+  return lineProductTotal(line) + linePrintTotal(line);
+}
+
+// Samma uträkning i SQL, för listor/summor som räknas i databasen.
+export function sqlLineTotal(alias) {
+  const a = alias;
+  return `(${a}.quantity * (${a}.unit_price * (1 - ${a}.discount_percent / 100) - ${a}.discount_amount)
+    + IFNULL(${a}.quantity * ${a}.print_price * (1 - ${a}.print_discount_percent / 100), 0))`;
+}
+
+export function lineDiscountAmount(line) {
+  const n = num(line.discountAmount ?? line.discount_amount);
+  return n > 0 ? n : 0;
 }

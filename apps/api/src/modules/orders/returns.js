@@ -3,6 +3,7 @@ import { getOrder } from "./service.js";
 import { recordMovement, DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
 import { createCreditInvoice } from "../integrations/fortnox.js";
 import { getSettings } from "../settings/service.js";
+import { lineTotal } from "../../lib/lines.js";
 
 // Retur (hel eller delvis) av en redan utlämnad order. Bara DELIVERED/
 // INVOICED-ordrar kan returneras — inget har fysiskt lämnat butiken
@@ -16,12 +17,7 @@ function round2(n) {
 }
 
 function returnLineTotal(l) {
-  const productTotal = Number(l.quantity) * Number(l.unit_price) * (1 - Number(l.discount_percent) / 100);
-  const printTotal =
-    l.print_price === null || l.print_price === undefined
-      ? 0
-      : Number(l.quantity) * Number(l.print_price) * (1 - Number(l.print_discount_percent ?? 0) / 100);
-  return productTotal + printTotal;
+  return lineTotal(l);
 }
 
 const RETURNABLE_STATUSES = ["DELIVERED", "INVOICED"];
@@ -124,14 +120,15 @@ export async function createOrderReturn(orderId, { reason, lines }, userId) {
     for (const { orderLine, quantity } of validatedLines) {
       await connection.query(
         `INSERT INTO order_return_lines
-           (return_id, order_line_id, quantity, unit_price, discount_percent, tax_rate_percent, print_price, print_discount_percent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (return_id, order_line_id, quantity, unit_price, discount_percent, discount_amount, tax_rate_percent, print_price, print_discount_percent)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           returnId,
           orderLine.id,
           quantity,
           orderLine.unit_price,
           orderLine.discount_percent,
+          orderLine.discount_amount ?? 0,
           orderLine.tax_rate_percent,
           orderLine.print_price,
           orderLine.print_discount_percent,

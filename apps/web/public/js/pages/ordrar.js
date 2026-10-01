@@ -236,7 +236,9 @@ requestsList.addEventListener("click", async (event) => {
               (l) => `
             <li class="flex items-center justify-between py-1.5 text-xs">
               <span>${escapeHtml(l.product_name)}${l.color || l.size ? ` <span class="text-slate-500">(${[l.color, l.size].filter(Boolean).map(escapeHtml).join(" / ")})</span>` : ""}</span>
-              <span class="text-slate-600">${formatQty(l.quantity)} st · ${formatMoney(l.unit_price)}</span>
+              <span class="text-slate-600">${formatQty(l.quantity)} st · ${formatMoney(
+                Number(l.unit_price) * (1 - Number(l.discount_percent) / 100) - Number(l.discount_amount || 0)
+              )}${l.print_price !== null && l.print_price !== undefined ? ` + tryck ${formatMoney(Number(l.print_price) * (1 - Number(l.print_discount_percent || 0) / 100))}` : ""}</span>
             </li>`
             )
             .join("")}
