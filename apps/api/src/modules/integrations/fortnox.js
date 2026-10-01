@@ -18,7 +18,10 @@ import { getCustomer } from "../customers/service.js";
 const AUTHORIZE_URL = "https://apps.fortnox.se/oauth-v1/auth";
 const TOKEN_URL = "https://apps.fortnox.se/oauth-v1/token";
 const API_BASE = "https://api.fortnox.se/3";
-const SCOPES = "invoice customer";
+// invoice: fakturor (skapa, bokföra, mejla). customer: kunder (hämta,
+// skapa, uppdatera). payment: registrera inbetalning på Swish-köp med
+// ett eget betalsätt (t.ex. SW), se createCustomerInvoice.
+const SCOPES = "invoice customer payment";
 
 export function isFortnoxConfigured(settings) {
   return Boolean(settings?.fortnox_access_token);
@@ -210,10 +213,74 @@ function validEmail(value) {
 
 // --- Customers ----------------------------------------------------------
 
-// Fortnox customers are looked up once and cached on customers.
-// fortnox_customer_number — never re-searched by org number afterwards,
-// so a customer never ends up duplicated in Fortnox because of a lookup
-// mismatch.
+// Fokus-kund -> Fortnox Customer-fält. Fortnox mejlar fakturor till
+// EmailInvoice om den finns, annars till Email.
+function customerFields(customer) {
+  return {
+    Name: customer.name,
+    OrganisationNumber: normalizeOrgNumber(customer.org_number),
+    Email: validEmail(customer.email),
+    EmailInvoice: validEmail(customer.invoice_email),
+    Address1: customer.address || undefined,
+    ZipCode: customer.postal_code || undefined,
+    City: customer.city || undefined,
+    CountryCode: customer.country || "SE",
+    Phone1: customer.phone || undefined,
+  };
+}
+
+// POST/PUT av en kund. Ett organisationsnummer Fortnox inte godtar (t.ex.
+// felaktig kontrollsiffra) ska inte stoppa något — då skickas kunden utan.
+async function writeCustomer(settings, method, path, fields, label) {
+  const send = (f) => fortnoxRequest(settings, path, { method, body: { Customer: f } });
+  try {
+    return await step(label, () => send(fields));
+  } catch (err) {
+    if (err.fortnoxStatus === 400 && fields.OrganisationNumber && /organisation/i.test(err.fortnoxText)) {
+      return step(label, () => send({ ...fields, OrganisationNumber: undefined }));
+    }
+    throw err;
+  }
+}
+
+// Alla kunder i Fortnox (listvyn: nummer, namn, org.nr, e-post, adress,
+// telefon). Hämtas 500 åt gången.
+export async function fetchAllFortnoxCustomers(settings) {
+  if (!isFortnoxConfigured(settings)) throw new Error("NOT_CONFIGURED");
+  const all = [];
+  let current = settings;
+  for (let page = 1; page <= 200; page++) {
+    const { data, settings: next } = await step("Kunde inte hämta kunder från Fortnox", () =>
+      fortnoxRequest(current, `/customers?limit=500&page=${page}`)
+    );
+    current = next;
+    all.push(...(data.Customers ?? []));
+    const totalPages = Number(data.MetaInformation?.["@TotalPages"] ?? 1);
+    if (page >= totalPages) break;
+  }
+  return { customers: all, settings: current };
+}
+
+const digits = (value) => String(value ?? "").replace(/\D/g, "");
+const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+
+// Finns kunden redan i Fortnox? Samma organisationsnummer, annars exakt
+// samma namn — så att en kund som redan fanns där inte skapas en gång till.
+async function findExistingFortnoxCustomer(settings, customer) {
+  const { customers, settings: after } = await fetchAllFortnoxCustomers(settings);
+  const org = digits(customer.org_number);
+  const match =
+    (org.length >= 10 && customers.find((c) => digits(c.OrganisationNumber).endsWith(org.slice(-10)))) ||
+    customers.find((c) => sameName(c.Name, customer.name));
+  return { customerNumber: match?.CustomerNumber ?? null, settings: after };
+}
+
+async function linkCustomer(customerId, customerNumber) {
+  await pool.query(`UPDATE customers SET fortnox_customer_number = ? WHERE id = ?`, [customerNumber, customerId]);
+}
+
+// Fortnox-kundnumret cachas på customers.fortnox_customer_number — slås
+// bara upp (och skapas vid behov) första gången.
 async function findOrCreateFortnoxCustomer(settings, customerId) {
   const customer = await getCustomer(customerId);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
@@ -221,35 +288,47 @@ async function findOrCreateFortnoxCustomer(settings, customerId) {
     return { customerNumber: customer.fortnox_customer_number, settings };
   }
 
-  const fields = {
-    Name: customer.name,
-    OrganisationNumber: normalizeOrgNumber(customer.org_number),
-    Email: validEmail(customer.invoice_email) ?? validEmail(customer.email),
-    Address1: customer.address || undefined,
-    ZipCode: customer.postal_code || undefined,
-    City: customer.city || undefined,
-    CountryCode: customer.country || "SE",
-    Phone1: customer.phone || undefined,
-  };
-  const create = (customerFields) =>
-    fortnoxRequest(settings, "/customers", { method: "POST", body: { Customer: customerFields } });
-
-  let response;
-  try {
-    response = await step("Kunde inte skapa kunden i Fortnox", () => create(fields));
-  } catch (err) {
-    // Ett organisationsnummer Fortnox inte godtar (t.ex. felaktig
-    // kontrollsiffra) ska inte stoppa faktureringen — skapa kunden utan.
-    if (err.fortnoxStatus === 400 && fields.OrganisationNumber && /organisation/i.test(err.fortnoxText)) {
-      response = await step("Kunde inte skapa kunden i Fortnox", () => create({ ...fields, OrganisationNumber: undefined }));
-    } else {
-      throw err;
-    }
+  const existing = await findExistingFortnoxCustomer(settings, customer);
+  if (existing.customerNumber) {
+    await linkCustomer(customer.id, existing.customerNumber);
+    return existing;
   }
-  const { data, settings: settingsAfter } = response;
+
+  const { data, settings: settingsAfter } = await writeCustomer(
+    existing.settings,
+    "POST",
+    "/customers",
+    customerFields(customer),
+    "Kunde inte skapa kunden i Fortnox"
+  );
   const customerNumber = data.Customer.CustomerNumber;
-  await pool.query(`UPDATE customers SET fortnox_customer_number = ? WHERE id = ?`, [customerNumber, customer.id]);
+  await linkCustomer(customer.id, customerNumber);
   return { customerNumber, settings: settingsAfter };
+}
+
+// Skickar en kunds uppgifter från Fokus till Fortnox (efter att kunden
+// sparats/skapats i Fokus). Kopplar ihop med en befintlig Fortnox-kund om
+// en sådan finns, annars skapas den.
+export async function pushCustomerToFortnox({ settings, customerId } = {}) {
+  if (!isFortnoxConfigured(settings)) return notConfigured();
+  const customer = await getCustomer(customerId);
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+
+  if (!customer.fortnox_customer_number) {
+    const { customerNumber, settings: after } = await findOrCreateFortnoxCustomer(settings, customerId);
+    // En befintlig Fortnox-kund som nyss kopplades får också Fokus-uppgifterna.
+    await writeCustomer(after, "PUT", `/customers/${encodeURIComponent(customerNumber)}`, customerFields(customer), "Kunde inte uppdatera kunden i Fortnox");
+    return { ok: true, customerNumber };
+  }
+
+  await writeCustomer(
+    settings,
+    "PUT",
+    `/customers/${encodeURIComponent(customer.fortnox_customer_number)}`,
+    customerFields(customer),
+    "Kunde inte uppdatera kunden i Fortnox"
+  );
+  return { ok: true, customerNumber: customer.fortnox_customer_number };
 }
 
 // --- Invoice rows ---------------------------------------------------------
@@ -310,49 +389,101 @@ function buildInvoiceRows(lines) {
 // kontantfaktura — redan betald, förfaller samma dag — och bokför den
 // direkt, så den aldrig hamnar bland obetalda kundfakturor eller skickas
 // till någon. PaymentWay styrs av Inställningar (standard SW = Swish).
+// Fortnox kontantfakturor godtar bara de här som PaymentWay.
+const CASH_INVOICE_PAYMENT_WAYS = new Set(["CASH", "CARD", "AG"]);
+
+function today() {
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
+}
+
+// Called when an order becomes DELIVERED (recordPickup in orders/service.js).
+//
+// `cash: true` (kontantkund, t.ex. Swish-kunden) — betalt på plats, skickas
+// aldrig till någon. Hur det bokas styrs av Inställningar → "Betalsätt på
+// kontantfakturor":
+//  - CASH/CARD/AG: en kontantfaktura (CASHINVOICE) med det betalsättet,
+//    bokförd direkt.
+//  - annan kod, t.ex. SW: ett betalsätt i Fortnox (Inställningar →
+//    Bokföring → Betalsätt). Då skapas en vanlig faktura som bokförs och
+//    direkt registreras som betald med det betalsättet — så att pengarna
+//    hamnar på betalsättets konto (t.ex. 1930 för Swish).
 export async function createCustomerInvoice({ settings, customerId, lines, orderId, orderNumber, cash = false } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   const invoiceRows = buildInvoiceRows(lines);
   if (invoiceRows.length === 0) throw new Error("Ordern har inga rader att fakturera.");
 
+  const paymentCode = String(settings.fortnox_cash_payment_way || "SW").trim().toUpperCase();
+  const asCashInvoice = cash && CASH_INVOICE_PAYMENT_WAYS.has(paymentCode);
+  const paidWithModeOfPayment = cash && !asCashInvoice;
+
   const { customerNumber, settings: settingsAfter } = await findOrCreateFortnoxCustomer(settings, customerId);
-  const cashFields = cash
-    ? {
-        InvoiceType: "CASHINVOICE",
-        PaymentWay: settings.fortnox_cash_payment_way || "SW",
-        DueDate: new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }),
-      }
-    : {};
+  const extraFields = asCashInvoice
+    ? { InvoiceType: "CASHINVOICE", PaymentWay: paymentCode, DueDate: today() }
+    : paidWithModeOfPayment
+      ? { DueDate: today() }
+      : {};
   const { data, settings: settingsAfterInvoice } = await step("Kunde inte skapa fakturan i Fortnox", () =>
     fortnoxRequest(settingsAfter, "/invoices", {
-    method: "POST",
-    body: {
-      Invoice: {
-        CustomerNumber: customerNumber,
-        YourOrderNumber: orderNumber ?? (orderId != null ? String(orderId) : undefined),
-        InvoiceRows: invoiceRows,
-        ...cashFields,
+      method: "POST",
+      body: {
+        Invoice: {
+          CustomerNumber: customerNumber,
+          YourOrderNumber: orderNumber ?? (orderId != null ? String(orderId) : undefined),
+          InvoiceRows: invoiceRows,
+          ...extraFields,
+        },
       },
-    },
-  }));
+    })
+  );
   const documentNumber = data.Invoice.DocumentNumber;
+  const created = { ok: true, invoiceNumber: documentNumber, externalRef: documentNumber };
+  if (!cash) return created;
 
-  if (cash) {
-    // Fakturan finns redan i Fortnox även om bokföringen skulle misslyckas
-    // — rapportera det som en anteckning, inte som ett fel, så att den inte
-    // skapas en gång till.
+  // Fakturan finns redan i Fortnox även om något av stegen nedan skulle
+  // misslyckas — rapportera det som en anteckning, inte som ett fel, så att
+  // den inte skapas en gång till.
+  let current = settingsAfterInvoice;
+  try {
+    ({ settings: current } = await fortnoxRequest(current, `/invoices/${documentNumber}/bookkeep`, {
+      method: "PUT",
+      body: {},
+    }));
+  } catch (err) {
+    return { ...created, note: `Fakturan skapades men kunde inte bokföras: ${err.message}` };
+  }
+  if (asCashInvoice) return created;
+
+  let payment;
+  try {
+    const total = Number(data.Invoice.Total);
+    ({ data: payment, settings: current } = await fortnoxRequest(current, "/invoicepayments", {
+      method: "POST",
+      body: {
+        InvoicePayment: {
+          InvoiceNumber: Number(documentNumber),
+          Amount: total,
+          AmountCurrency: total,
+          PaymentDate: today(),
+          ModeOfPayment: paymentCode,
+        },
+      },
+    }));
+  } catch (err) {
+    return {
+      ...created,
+      note: `Fakturan skapades men betalningen (${paymentCode}) kunde inte registreras: ${err.message}`,
+    };
+  }
+  // Bokförs betalningar automatiskt i Fortnox är den redan bokförd — då
+  // är det inget fel.
+  if (!payment?.InvoicePayment?.Booked) {
     try {
-      await fortnoxRequest(settingsAfterInvoice, `/invoices/${documentNumber}/bookkeep`, { method: "PUT", body: {} });
+      await fortnoxRequest(current, `/invoicepayments/${payment.InvoicePayment.Number}/bookkeep`, { method: "PUT", body: {} });
     } catch (err) {
-      return {
-        ok: true,
-        invoiceNumber: documentNumber,
-        externalRef: documentNumber,
-        note: `Kontantfakturan skapades men kunde inte bokföras: ${err.message}`,
-      };
+      return { ...created, note: `Betald med ${paymentCode}, men betalningen kunde inte bokföras: ${err.message}` };
     }
   }
-  return { ok: true, invoiceNumber: documentNumber, externalRef: documentNumber };
+  return created;
 }
 
 // Credits back a previously sent customer invoice on a full/partial

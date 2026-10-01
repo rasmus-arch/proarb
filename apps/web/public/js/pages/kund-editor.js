@@ -389,7 +389,7 @@ el.deleteBtn.addEventListener("click", async () => {
 el.saveBtn.addEventListener("click", async () => {
   el.saveError.classList.add("hidden");
   try {
-    await api.patch(`/customers/${customerId}`, {
+    const saved = await api.patch(`/customers/${customerId}`, {
       name: el.name.value,
       orgNumber: el.org.value || null,
       email: el.email.value || null,
@@ -403,6 +403,15 @@ el.saveBtn.addEventListener("click", async () => {
       isCashCustomer: el.cash.checked,
     });
     el.title.textContent = el.name.value;
+    // Fortnox-synk (bara när Fortnox är anslutet).
+    const status = document.getElementById("save-status");
+    const sync = saved.fortnox_sync;
+    status.className = `ml-auto text-sm ${sync && !sync.synced ? "text-amber-700" : "text-green-700"}`;
+    status.textContent = !sync
+      ? "Sparat."
+      : sync.synced
+        ? `Sparat och uppdaterat i Fortnox (kundnr ${sync.customerNumber}).`
+        : `Sparat här, men inte i Fortnox: ${sync.reason}`;
   } catch (err) {
     el.saveError.textContent = err.message;
     el.saveError.classList.remove("hidden");

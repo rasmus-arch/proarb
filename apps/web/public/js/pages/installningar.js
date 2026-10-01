@@ -222,6 +222,7 @@ function applyFortnoxStatus(settings) {
   el.fortnoxStatus.className = `text-sm font-medium ${connected ? "text-green-700" : "text-slate-500"}`;
   el.fortnoxConnectBtn.textContent = connected ? "Anslut igen" : "Anslut till Fortnox";
   el.fortnoxDisconnectBtn.classList.toggle("hidden", !connected);
+  document.getElementById("fortnox-customers-box").classList.toggle("hidden", !connected);
 }
 
 el.fortnoxDisconnectBtn.addEventListener("click", async () => {
@@ -377,3 +378,27 @@ try {
 } catch (err) {
   document.querySelector("main").innerHTML = `<p class="mt-6 text-sm text-red-600">${err.message}</p>`;
 }
+
+// --- Hämta kunder från Fortnox ----------------------------------------------
+
+document.getElementById("fortnox-import-customers-btn").addEventListener("click", async (event) => {
+  const btn = event.currentTarget;
+  const result = document.getElementById("fortnox-import-result");
+  btn.disabled = true;
+  btn.textContent = "Hämtar…";
+  result.className = "mt-2 text-sm text-slate-600";
+  result.textContent = "Det kan ta en stund om det är många kunder.";
+  try {
+    const r = await api.post("/customers/import-fortnox", {});
+    result.className = "mt-2 text-sm text-green-700";
+    result.textContent =
+      `Klart: ${r.total} kunder i Fortnox — ${r.created} nya, ${r.linked} kopplade till befintliga, ` +
+      `${r.updated} uppdaterade${r.skipped ? `, ${r.skipped} inaktiva hoppades över` : ""}.`;
+  } catch (err) {
+    result.className = "mt-2 text-sm text-red-600";
+    result.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Hämta kunder från Fortnox";
+  }
+});

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as customers from "./service.js";
 import * as portalAccounts from "./portal-accounts.js";
+import { importCustomersFromFortnox, syncCustomerToFortnox } from "./fortnox-sync.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
 import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
@@ -30,8 +31,20 @@ router.post("/", async (req, res, next) => {
       return res.status(400).json({ error: "name is required" });
     }
     const customer = await customers.createCustomer(req.body);
-    res.status(201).json(customer);
+    // Ny kund i Fokus -> skapas (eller kopplas till befintlig) i Fortnox.
+    const fortnox = await syncCustomerToFortnox(customer.id);
+    res.status(201).json({ ...(await customers.getCustomer(customer.id)), fortnox_sync: fortnox });
   } catch (err) {
+    next(err);
+  }
+});
+
+// Hämta alla kunder från Fortnox (Inställningar → Integrationer).
+router.post("/import-fortnox", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    res.json(await importCustomersFromFortnox());
+  } catch (err) {
+    if (err.message === "NOT_CONFIGURED") return res.status(400).json({ error: "Fortnox är inte anslutet." });
     next(err);
   }
 });
@@ -72,7 +85,9 @@ router.patch("/:id", async (req, res, next) => {
   try {
     const customer = await customers.updateCustomer(Number(req.params.id), req.body ?? {});
     if (!customer) return res.status(404).json({ error: "Not found" });
-    res.json(customer);
+    // Ändringen skickas vidare till Fortnox.
+    const fortnox = await syncCustomerToFortnox(customer.id);
+    res.json({ ...(await customers.getCustomer(customer.id)), fortnox_sync: fortnox });
   } catch (err) {
     next(err);
   }

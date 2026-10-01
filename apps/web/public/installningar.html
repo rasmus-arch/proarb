@@ -287,7 +287,11 @@
         <label class="mt-3 block max-w-xs text-sm">
           <span class="text-slate-700">Betalsätt på kontantfakturor</span>
           <input id="s-fortnox-cash-payment-way" class="input mt-1" placeholder="SW" maxlength="20" />
-          <span class="mt-1 block text-xs text-slate-500">Fortnox-koden för kontantkunder (t.ex. Swish-kunden): SW = Swish, CASH = kontant, CARD = kort. Tomt = SW.</span>
+          <span class="mt-1 block text-xs text-slate-500">
+            För kontantkunder (t.ex. Swish-kunden). <strong>Egen kod, t.ex. SW</strong>: koden för ett betalsätt i Fortnox
+            (Inställningar → Bokföring → Betalsätt) — köpet blir en faktura som direkt registreras som betald med det
+            betalsättet. <strong>CASH</strong> eller <strong>CARD</strong>: en kontantfaktura (kontant/kort). Tomt = SW.
+          </span>
         </label>
         <p class="mt-3 text-xs text-slate-500">
           Spara Client ID/Secret ovan (knappen "Spara" längst ner) innan du ansluter.
@@ -298,6 +302,16 @@
           <button type="button" id="fortnox-disconnect-btn" class="btn-secondary hidden">Koppla från</button>
         </div>
         <p id="fortnox-message" class="mt-2 hidden text-sm"></p>
+        <div id="fortnox-customers-box" class="mt-4 hidden border-t border-slate-200 pt-4">
+          <h3 class="text-sm font-semibold text-slate-900">Kunder</h3>
+          <p class="mt-1 text-sm text-slate-600">
+            Hämtar alla kunder från Fortnox och kopplar ihop dem med kunderna här (på Fortnox-kundnummer,
+            organisationsnummer eller exakt namn). Kunder som saknas skapas med samma kundnummer som i Fortnox.
+            Går att köra igen när som helst. Ändringar du gör på en kund här skickas automatiskt till Fortnox.
+          </p>
+          <button type="button" id="fortnox-import-customers-btn" class="btn-secondary mt-2">Hämta kunder från Fortnox</button>
+          <p id="fortnox-import-result" class="mt-2 hidden text-sm"></p>
+        </div>
       </section>
 
       <!-- GitHub (buggrapporter) -->
