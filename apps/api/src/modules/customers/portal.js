@@ -138,8 +138,21 @@ function priceHtml(price, discountPercent) {
   return `<div style="text-align:right;white-space:nowrap;">${money(price)}</div>`;
 }
 
+// GET /portal/:token — länken utan inloggning. Stängd när Inställningar →
+// Sortilog kräver inloggning; då skickas besökaren till inloggningen.
 export async function renderPortalPage(req, res) {
-  const result = await customers.getCustomerByPortalToken(req.params.token);
+  const settings = await getSettings();
+  if (settings?.portal_require_login) {
+    res.redirect("/sortilog");
+    return;
+  }
+  return renderPortal(req, res, req.params.token);
+}
+
+// Själva Sortilog-sidan, för en kunds portal_token. `account` är det
+// inloggade kontot (via /sortilog) eller null (länk utan inloggning).
+export async function renderPortal(req, res, token, { account = null } = {}) {
+  const result = await customers.getCustomerByPortalToken(token);
   if (!result) {
     res.status(404).send("<h1>Sidan hittades inte</h1>");
     return;
@@ -295,6 +308,14 @@ export async function renderPortalPage(req, res) {
         : ""
     }
     <h1 style="margin:2px 0 0;font-size:22px;">${escapeHtml(customer.name)}</h1>
+    ${
+      account
+        ? `<form method="post" action="/sortilog/logout" style="margin:12px 0 0;font-size:12px;color:#64748b;">
+            Inloggad som ${escapeHtml(account.name || account.email)} ·
+            <button type="submit" style="background:none;border:none;padding:0;color:#475569;text-decoration:underline;cursor:pointer;font-size:12px;">Logga ut</button>
+          </form>`
+        : ""
+    }
   </div>
 
   ${
@@ -321,7 +342,7 @@ export async function renderPortalPage(req, res) {
       products.length > 0
         ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
             <label style="display:block;font-size:13px;color:#334155;margin-bottom:6px;">Ditt namn (valfritt, så vi vet vem beställningen är från)</label>
-            <input id="requested-by-name" type="text" class="name-input" placeholder="För- och efternamn" />
+            <input id="requested-by-name" type="text" class="name-input" placeholder="För- och efternamn" value="${escapeHtml(account?.name ?? "")}" />
 
             <label style="display:block;font-size:13px;color:#334155;margin:14px 0 6px;">Vem ska hämta ut beställningen?</label>
             <select id="pickup-contact-select" class="name-input">
@@ -394,7 +415,7 @@ export async function renderPortalPage(req, res) {
           return;
         }
         addContactBtn.disabled = true;
-        fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/contacts`)}, {
+        fetch(${JSON.stringify(`/api/public/portal/${token}/contacts`)}, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: name }),
@@ -436,7 +457,7 @@ export async function renderPortalPage(req, res) {
         var pickupValue = pickupSelect.value;
         var referenceContactId = pickupValue && pickupValue !== "__new__" ? Number(pickupValue) : null;
         btn.disabled = true;
-        fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/request`)}, {
+        fetch(${JSON.stringify(`/api/public/portal/${token}/request`)}, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -473,7 +494,7 @@ export async function renderPortalPage(req, res) {
             messageEl.style.display = "none";
           }
           btn.disabled = true;
-          fetch(${JSON.stringify(`/api/public/portal/${req.params.token}/orders/`)} + btn.dataset.orderId + "/reorder", {
+          fetch(${JSON.stringify(`/api/public/portal/${token}/orders/`)} + btn.dataset.orderId + "/reorder", {
             method: "POST",
           })
             .then(function (res) {

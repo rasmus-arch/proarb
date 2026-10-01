@@ -2,6 +2,7 @@ import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import * as customers from "./service.js";
+import * as portalAccounts from "./portal-accounts.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
 import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
@@ -80,6 +81,52 @@ router.patch("/:id", async (req, res, next) => {
 router.delete("/:id", requireRole("ADMIN"), async (req, res, next) => {
   try {
     await customers.deactivateCustomer(Number(req.params.id));
+    await portalAccounts.deactivateAccountsForCustomer(Number(req.params.id));
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sortilog-inloggningar för kunden. Länkarna i inbjudan byggs på APP_URL
+// (om satt) så att de inte kan styras av en förfalskad Host-header.
+function appOrigin(req) {
+  return process.env.APP_URL?.replace(/\/+$/, "") || `${req.protocol}://${req.get("host")}`;
+}
+
+router.get("/:id/portal-accounts", async (req, res, next) => {
+  try {
+    res.json({ rows: await portalAccounts.listAccounts(Number(req.params.id)), loginUrl: `${appOrigin(req)}/sortilog` });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/portal-accounts", async (req, res, next) => {
+  try {
+    const result = await portalAccounts.createAccount(Number(req.params.id), req.body ?? {}, appOrigin(req));
+    res.status(201).json(result);
+  } catch (err) {
+    if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Ange en giltig e-postadress" });
+    if (err.message === "EMAIL_TAKEN") {
+      return res.status(409).json({ error: "E-postadressen har redan ett Sortilog-konto (hos den här eller en annan kund)" });
+    }
+    next(err);
+  }
+});
+
+router.post("/:id/portal-accounts/:accountId/invite", async (req, res, next) => {
+  try {
+    res.json(await portalAccounts.resendInvite(Number(req.params.id), Number(req.params.accountId), appOrigin(req)));
+  } catch (err) {
+    if (err.message === "ACCOUNT_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
+router.delete("/:id/portal-accounts/:accountId", async (req, res, next) => {
+  try {
+    await portalAccounts.deactivateAccount(Number(req.params.id), Number(req.params.accountId));
     res.status(204).end();
   } catch (err) {
     next(err);

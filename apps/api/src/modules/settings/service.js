@@ -42,6 +42,7 @@ export async function updateSettings(data) {
     reminder_enabled: data.reminderEnabled === undefined ? undefined : data.reminderEnabled ? 1 : 0,
     reminder_days_after: data.reminderDaysAfter,
     portal_show_stock: data.portalShowStock === undefined ? undefined : data.portalShowStock ? 1 : 0,
+    portal_require_login: data.portalRequireLogin === undefined ? undefined : data.portalRequireLogin ? 1 : 0,
     inactive_customer_months: data.inactiveCustomerMonths,
     auto_print_order_slip: data.autoPrintOrderSlip === undefined ? undefined : data.autoPrintOrderSlip ? 1 : 0,
     next_order_number: data.nextOrderNumber,

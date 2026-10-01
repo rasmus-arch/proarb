@@ -9,6 +9,7 @@ import usersRouter from "./modules/users/routes.js";
 import customersRouter from "./modules/customers/routes.js";
 import { renderPortalPage } from "./modules/customers/portal.js";
 import portalPublicRouter from "./modules/customers/portal-public.js";
+import sortilogRouter from "./modules/customers/sortilog.js";
 import portalRequestsRouter from "./modules/customers/portal-requests.routes.js";
 import quotesRouter from "./modules/quotes/routes.js";
 import quotesPublicRouter, { renderPublicQuotePage, renderPublicQuotePdf } from "./modules/quotes/public.js";
@@ -89,6 +90,9 @@ app.get("/q/:token/pdf", renderPublicQuotePdf);
 // Kundportal (Fas 7): no-login, read-only link listing a customer's own
 // offerter/ordrar (see PLAN.md §7).
 app.get("/portal/:token", renderPortalPage);
+
+// Sortilog med inloggning (e-post + lösenord per person hos kunden).
+app.use("/sortilog", sortilogRouter);
 
 // QR-koden på ordersedelns PDF (Fas: ordersedel/plocklista). No-login: en
 // enkel sida med bara statusknappar (NEW -> READY_FOR_PICKUP -> DELIVERED).

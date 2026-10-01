@@ -603,6 +603,95 @@ el.assortmentList.addEventListener("click", async (event) => {
 
 // --- Kundportal ----------------------------------------------------------
 
+// --- Sortilog-inloggningar -------------------------------------------------
+
+const accountEl = {
+  list: document.getElementById("portal-account-list"),
+  empty: document.getElementById("portal-accounts-empty"),
+  form: document.getElementById("portal-account-form"),
+  message: document.getElementById("portal-account-message"),
+  loginUrl: document.getElementById("sortilog-login-url"),
+};
+
+function showAccountMessage(text, kind = "ok") {
+  accountEl.message.className = `mt-2 text-sm ${kind === "error" ? "text-red-600" : kind === "warn" ? "text-amber-700" : "text-green-700"}`;
+  accountEl.message.innerHTML = text;
+}
+
+// Gick inbjudan inte att mejla (t.ex. ingen SMTP) visas länken så att den
+// kan skickas på annat sätt.
+function inviteMessage(email, invite) {
+  if (invite.sent) return showAccountMessage(`Inbjudan skickad till ${escapeHtml(email)}.`);
+  showAccountMessage(
+    `Mejlet kunde inte skickas (${escapeHtml(invite.reason ?? "okänt fel")}). Skicka den här länken till ${escapeHtml(email)} själv — den gäller i 7 dagar:<br /><input readonly class="input mt-1 w-full text-xs" value="${escapeHtml(invite.inviteUrl ?? "")}" onclick="this.select()" />`,
+    "warn"
+  );
+}
+
+async function loadPortalAccounts() {
+  const { rows, loginUrl } = await api.get(`/customers/${customerId}/portal-accounts`);
+  accountEl.loginUrl.href = loginUrl;
+  accountEl.loginUrl.textContent = loginUrl.replace(/^https?:\/\//, "");
+  accountEl.empty.classList.toggle("hidden", rows.length > 0);
+  accountEl.list.innerHTML = rows
+    .map(
+      (a) => `
+      <li class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(a.name || a.email)}</span>
+          ${a.name ? `<span class="ml-1 text-slate-500">${escapeHtml(a.email)}</span>` : ""}
+          <span class="chip ml-1">${
+            a.has_password
+              ? a.last_login_at
+                ? `Senast inloggad ${new Date(a.last_login_at).toLocaleDateString("sv-SE")}`
+                : "Aktiv"
+              : "Inbjuden"
+          }</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button type="button" class="link text-xs" data-invite-account="${a.id}" data-email="${escapeHtml(a.email)}">${a.has_password ? "Skicka länk för nytt lösenord" : "Skicka inbjudan igen"}</button>
+          <button type="button" class="text-slate-400 hover:text-red-600" data-remove-account="${a.id}" title="Ta bort inloggningen">✕</button>
+        </div>
+      </li>`
+    )
+    .join("");
+}
+
+accountEl.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = Object.fromEntries(new FormData(accountEl.form).entries());
+  try {
+    const { invite } = await api.post(`/customers/${customerId}/portal-accounts`, form);
+    accountEl.form.reset();
+    inviteMessage(form.email, invite);
+    await loadPortalAccounts();
+  } catch (err) {
+    showAccountMessage(escapeHtml(err.message), "error");
+  }
+});
+
+accountEl.list.addEventListener("click", async (event) => {
+  const inviteBtn = event.target.closest("[data-invite-account]");
+  if (inviteBtn) {
+    try {
+      const invite = await api.post(`/customers/${customerId}/portal-accounts/${inviteBtn.dataset.inviteAccount}/invite`, {});
+      inviteMessage(inviteBtn.dataset.email, invite);
+    } catch (err) {
+      showAccountMessage(escapeHtml(err.message), "error");
+    }
+    return;
+  }
+  const removeBtn = event.target.closest("[data-remove-account]");
+  if (removeBtn) {
+    if (!confirm("Ta bort inloggningen? Personen loggas ut direkt och kan inte logga in igen.")) return;
+    await api.delete(`/customers/${customerId}/portal-accounts/${removeBtn.dataset.removeAccount}`);
+    accountEl.message.className = "hidden";
+    await loadPortalAccounts();
+  }
+});
+
+loadPortalAccounts().catch(() => {});
+
 el.portalGenerateBtn.addEventListener("click", async () => {
   const { url } = await api.post(`/customers/${customerId}/portal-token`);
   el.portalLink.value = url;

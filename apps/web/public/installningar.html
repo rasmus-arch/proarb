@@ -241,6 +241,13 @@
       <!-- Kundportal -->
       <section class="card">
         <h2 class="section-title">Sortilog (kundportalen)</h2>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-portal-require-login" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Kräv inloggning</span>
+            <span class="block text-slate-500">Länkar utan inloggning (/portal/…) slutar fungera och skickar vidare till inloggningen. Slå på när alla kunder har fått sina inloggningar.</span>
+          </span>
+        </label>
         <label class="mt-3 flex items-center gap-2 text-sm">
           <input id="s-portal-show-stock" type="checkbox" class="rounded border-slate-300" />
           <span class="text-slate-700">Visa lagerstatus (I lager / Beställningsvara) för kunder</span>

@@ -13,6 +13,7 @@ const el = {
   reminderEnabled: document.getElementById("s-reminder-enabled"),
   reminderDays: document.getElementById("s-reminder-days"),
   portalShowStock: document.getElementById("s-portal-show-stock"),
+  portalRequireLogin: document.getElementById("s-portal-require-login"),
   inactiveMonths: document.getElementById("s-inactive-months"),
   autoPrint: document.getElementById("s-auto-print"),
   nextQuoteNumber: document.getElementById("s-next-quote-number"),
@@ -92,6 +93,7 @@ function applySettings(settings) {
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
   el.portalShowStock.checked = Boolean(settings.portal_show_stock);
+  el.portalRequireLogin.checked = Boolean(settings.portal_require_login);
   el.inactiveMonths.value = settings.inactive_customer_months ?? 6;
   el.autoPrint.checked = Boolean(settings.auto_print_order_slip);
   el.nextQuoteNumber.value = settings.next_quote_number ?? 1;
@@ -150,6 +152,7 @@ el.saveBtn.addEventListener("click", async () => {
       reminderEnabled: el.reminderEnabled.checked,
       reminderDaysAfter: Number(el.reminderDays.value) || 5,
       portalShowStock: el.portalShowStock.checked,
+      portalRequireLogin: el.portalRequireLogin.checked,
       inactiveCustomerMonths: Number(el.inactiveMonths.value) || 6,
       autoPrintOrderSlip: el.autoPrint.checked,
       nextQuoteNumber: Number(el.nextQuoteNumber.value) || 1,

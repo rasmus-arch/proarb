@@ -233,9 +233,32 @@
       <section class="mt-4 card">
         <h2 class="section-title">Sortilog</h2>
         <p class="mt-1 text-sm text-slate-600">
-          En länk utan inloggning där kunden själv kan se sitt sortiment.
+          Kundens egen sida med sortiment och beställning. Bjud in personer hos kunden — de får ett mejl och väljer
+          själva sitt lösenord, och loggar sedan in med e-post och lösenord på
+          <a id="sortilog-login-url" href="/sortilog" target="_blank" class="link">/sortilog</a>.
         </p>
-        <div class="mt-3 flex flex-wrap items-center gap-2">
+
+        <h3 class="mt-4 text-sm font-semibold text-slate-900">Inloggningar</h3>
+        <ul id="portal-account-list" class="mt-1 divide-y divide-slate-100"></ul>
+        <p id="portal-accounts-empty" class="mt-1 hidden text-sm text-slate-500">Ingen har bjudits in än.</p>
+        <form id="portal-account-form" class="mt-3 flex flex-wrap items-end gap-2">
+          <label class="block text-sm">
+            <span class="text-slate-700">Namn</span>
+            <input name="name" class="input mt-1 w-44" placeholder="För- och efternamn" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">E-post *</span>
+            <input name="email" type="email" required class="input mt-1 w-60" />
+          </label>
+          <button type="submit" class="btn">Bjud in</button>
+        </form>
+        <p id="portal-account-message" class="mt-2 hidden text-sm"></p>
+
+        <h3 class="mt-5 text-sm font-semibold text-slate-900">Länk utan inloggning</h3>
+        <p class="mt-1 text-sm text-slate-600">
+          Fungerar bara så länge Inställningar → Sortilog inte kräver inloggning.
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-2">
           <button type="button" id="portal-generate-btn" class="btn-secondary">Skapa/visa länk</button>
           <input id="portal-link" type="text" readonly class="input hidden max-w-md" />
           <button type="button" id="portal-copy-btn" class="btn-secondary hidden">Kopiera</button>

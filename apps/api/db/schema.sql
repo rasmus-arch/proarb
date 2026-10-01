@@ -135,6 +135,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- Fortnox PaymentWay på kontantfakturor (kontantkunder ovan), t.ex. SW
   -- (Swish), CASH eller CARD. NULL = SW.
   fortnox_cash_payment_way   VARCHAR(20) NULL,
+  -- Sortilog: 1 = länkar utan inloggning (/portal/:token) slutar fungera,
+  -- kunden måste logga in på /sortilog.
+  portal_require_login       TINYINT(1) NOT NULL DEFAULT 0,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -901,3 +904,44 @@ CREATE TABLE IF NOT EXISTS bug_reports (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ---------------------------------------------------------------------------
+-- Sortilog (kundportalen): inloggning med e-post + lösenord per person hos
+-- kunden. Personalen bjuder in från kund-editorn; personen väljer själv sitt
+-- lösenord via en engångslänk (INVITE), och kan återställa det (RESET).
+-- Sessions- och länktokens lagras bara som sha256-hash.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS portal_accounts (
+  id             INT PRIMARY KEY AUTO_INCREMENT,
+  customer_id    INT NOT NULL,
+  email          VARCHAR(255) NOT NULL UNIQUE,
+  name           VARCHAR(255) NULL,
+  password_hash  VARCHAR(255) NULL,
+  active         TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at  DATETIME NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_portal_accounts_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+  INDEX idx_portal_accounts_customer (customer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS portal_sessions (
+  token_hash  CHAR(64) PRIMARY KEY,
+  account_id  INT NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_portal_sessions_account FOREIGN KEY (account_id) REFERENCES portal_accounts(id),
+  INDEX idx_portal_sessions_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS portal_password_tokens (
+  id          INT PRIMARY KEY AUTO_INCREMENT,
+  account_id  INT NOT NULL,
+  token_hash  CHAR(64) NOT NULL UNIQUE,
+  purpose     ENUM('INVITE', 'RESET') NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  used_at     DATETIME NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_portal_pwtokens_account FOREIGN KEY (account_id) REFERENCES portal_accounts(id),
+  INDEX idx_portal_pwtokens_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

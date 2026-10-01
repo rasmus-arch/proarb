@@ -289,6 +289,32 @@ export async function sendPasswordResetEmail({ settings, to, name, resetUrl, val
   return dispatch({ settings, to, subject: "Återställ lösenord till ProArb", html });
 }
 
+export async function sendPortalInviteEmail({ settings, to, name, customerName, url, validDays }) {
+  const seller = settings?.seller_name ?? "oss";
+  const html = buildSimpleEmailHtml({
+    heading: "Välkommen till Sortilog",
+    body: `<p>Hej${name ? ` ${escapeHtml(name)}` : ""},</p>
+      <p>Du har fått ett konto i Sortilog hos ${escapeHtml(seller)}${
+        customerName ? ` för ${escapeHtml(customerName)}` : ""
+      }. Där ser du ert sortiment och kan beställa direkt.</p>
+      <p>Klicka på länken för att välja ditt lösenord. Länken gäller i ${validDays} dagar.</p>
+      <p><a href="${escapeHtml(url)}" style="color:#1c1b19;font-weight:600;">Välj lösenord</a></p>
+      <p style="color:#78736a;font-size:12px;">Du loggar sedan in med din e-postadress (${escapeHtml(to)}).</p>`,
+  });
+  return dispatch({ settings, to, subject: `Ditt konto i Sortilog – ${seller}`, html });
+}
+
+export async function sendPortalPasswordResetEmail({ settings, to, name, url, validMinutes }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Återställ ditt lösenord",
+    body: `<p>Hej${name ? ` ${escapeHtml(name)}` : ""},</p>
+      <p>Någon (förhoppningsvis du) har bett om att återställa lösenordet till Sortilog. Länken gäller i ${validMinutes} minuter och kan bara användas en gång.</p>
+      <p><a href="${escapeHtml(url)}" style="color:#1c1b19;font-weight:600;">Välj nytt lösenord</a></p>
+      <p style="color:#78736a;font-size:12px;">Har du inte bett om det här kan du bortse från mejlet — lösenordet ändras inte.</p>`,
+  });
+  return dispatch({ settings, to, subject: "Återställ lösenord till Sortilog", html });
+}
+
 export async function sendPurchaseOrderEmail({ settings, to, supplierName, contactName, poNumber, customerNumber, note, pdf }) {
   const html = buildSimpleEmailHtml({
     heading: `Inköpsorder ${poNumber}`,

@@ -1,11 +1,29 @@
 import { Router } from "express";
 import { createPortalOrderRequest, addPortalContact, reorderFromOrder } from "./portal-requests.js";
+import { getSettings } from "../settings/service.js";
+import { getSessionAccount, PORTAL_SESSION_COOKIE } from "./portal-accounts.js";
 
 // The customer-facing side of "beställ från Mina sidor": no login, reached
 // only by knowing the unguessable portal_token — same trust model as the
 // public quote link. Mounted at /api/public/portal in index.js; the
 // actual HTML page lives at GET /portal/:token (customers/portal.js).
 const router = Router();
+
+// När Sortilog kräver inloggning räcker det inte att känna till token —
+// anropet måste komma från en inloggad session för just den kunden.
+router.use("/:token", async (req, res, next) => {
+  try {
+    const settings = await getSettings();
+    if (!settings?.portal_require_login) return next();
+    const account = await getSessionAccount(req.cookies?.[PORTAL_SESSION_COOKIE]);
+    if (!account || account.portal_token !== req.params.token) {
+      return res.status(401).json({ error: "Logga in på Sortilog igen" });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/:token/request", async (req, res, next) => {
   try {
