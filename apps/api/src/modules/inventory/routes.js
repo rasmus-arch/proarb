@@ -199,9 +199,12 @@ router.post("/stock-counts", canAdjustStock, async (req, res, next) => {
     const count = await stockCounts.startStockCount({
       warehouseId: req.body?.warehouseId ?? inventory.DEFAULT_WAREHOUSE_ID,
       userId: req.user.id,
+      scopeType: req.body?.scopeType,
+      scopeId: req.body?.scopeId ? Number(req.body.scopeId) : null,
     });
     res.status(201).json(count);
   } catch (err) {
+    if (err.message === "INVALID_SCOPE") return res.status(400).json({ error: "Välj vad inventeringen ska omfatta" });
     next(err);
   }
 });

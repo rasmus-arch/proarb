@@ -705,6 +705,13 @@ CREATE TABLE IF NOT EXISTS stock_counts (
   started_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME NULL,
   status       VARCHAR(30) NOT NULL DEFAULT 'IN_PROGRESS',
+  -- Del-inventering: vad inventeringen omfattar. FULL = hela lagret,
+  -- CATEGORY/BRAND/SUPPLIER = bara produkter med scope_id, SCANNED = bara
+  -- det som räknas (stickprov). Bara varor inom omfattningen kan hamna
+  -- under "Saknas" — resten av lagret lämnas orört.
+  scope_type   VARCHAR(20) NOT NULL DEFAULT 'FULL',
+  scope_id     INT NULL,
+  scope_label  VARCHAR(255) NULL,
   CONSTRAINT fk_sc_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
   CONSTRAINT fk_sc_user FOREIGN KEY (started_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

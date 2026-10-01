@@ -452,6 +452,33 @@ const countRows = document.getElementById("count-rows");
 const countEmpty = document.getElementById("count-empty");
 let currentCountId = null;
 
+const SCOPE_SOURCES = {
+  CATEGORY: { url: "/categories", label: "Kategori" },
+  BRAND: { url: "/brands", label: "Märke" },
+  SUPPLIER: { url: "/suppliers", label: "Leverantör" },
+};
+
+function scopeText(c) {
+  if (c.scope_type === "SCANNED") return "Stickprov";
+  if (SCOPE_SOURCES[c.scope_type]) return `${SCOPE_SOURCES[c.scope_type].label}: ${c.scope_label ?? "–"}`;
+  return "Hela lagret";
+}
+
+const scopeType = document.getElementById("count-scope-type");
+const scopeValue = document.getElementById("count-scope-value");
+const scopeValueWrap = document.getElementById("count-scope-value-wrap");
+
+scopeType.addEventListener("change", async () => {
+  const source = SCOPE_SOURCES[scopeType.value];
+  scopeValueWrap.classList.toggle("hidden", !source);
+  scopeValueWrap.classList.toggle("block", Boolean(source));
+  if (!source) return;
+  document.getElementById("count-scope-value-label").textContent = source.label;
+  scopeValue.innerHTML = "<option>Laddar…</option>";
+  const { rows } = await api.get(source.url);
+  scopeValue.innerHTML = rows.map((r) => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join("");
+});
+
 async function loadStockCounts() {
   const { rows } = await api.get("/inventory/stock-counts");
   countEmpty.classList.toggle("hidden", rows.length > 0);
@@ -460,6 +487,7 @@ async function loadStockCounts() {
       (c) => `
       <tr class="cursor-pointer hover:bg-slate-50" data-count="${c.id}">
         <td class="py-2 pr-3">${c.status === "IN_PROGRESS" ? "Pågår" : "Avslutad"}</td>
+        <td class="py-2 pr-3">${escapeHtml(scopeText(c))}</td>
         <td class="py-2 pr-3 text-slate-500">${new Date(c.started_at).toLocaleString("sv-SE")}</td>
         <td class="py-2 pr-3 text-slate-500">${escapeHtml(c.started_by_name ?? "")}</td>
       </tr>`
@@ -468,8 +496,18 @@ async function loadStockCounts() {
 }
 
 document.getElementById("new-count-btn").addEventListener("click", async () => {
-  const created = await api.post("/inventory/stock-counts", {});
-  openCountDetail(created.id);
+  const error = document.getElementById("new-count-error");
+  error.classList.add("hidden");
+  try {
+    const created = await api.post("/inventory/stock-counts", {
+      scopeType: scopeType.value,
+      scopeId: SCOPE_SOURCES[scopeType.value] ? Number(scopeValue.value) : null,
+    });
+    openCountDetail(created.id);
+  } catch (err) {
+    error.textContent = err.message;
+    error.classList.remove("hidden");
+  }
 });
 
 countRows.addEventListener("click", (event) => {
@@ -504,7 +542,13 @@ async function renderCountDetail() {
   const count = await api.get(`/inventory/stock-counts/${currentCountId}`);
   const inProgress = count.status === "IN_PROGRESS";
 
-  document.getElementById("count-detail-title").textContent = "Inventering";
+  document.getElementById("count-detail-title").textContent = `Inventering · ${scopeText(count)}`;
+  document.getElementById("count-missing-heading").textContent =
+    count.scope_type === "SCANNED"
+      ? "Saknas — gäller inte stickprov (bara det du räknat bedöms)"
+      : count.scope_type === "FULL"
+        ? "Saknas (finns i saldo men ej skannat)"
+        : `Saknas inom ${scopeText(count).toLowerCase()} (finns i saldo men ej skannat)`;
   document.getElementById("count-detail-status").textContent = inProgress ? "Pågår" : "Avslutad";
   document.getElementById("count-detail-status").className = `rounded-full px-2 py-0.5 text-xs font-medium ${inProgress ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`;
   document.getElementById("count-scan-area").classList.toggle("hidden", !inProgress);

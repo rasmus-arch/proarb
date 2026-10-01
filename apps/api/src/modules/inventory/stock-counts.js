@@ -16,6 +16,17 @@ export async function listStockCounts({ warehouseId } = {}) {
   return rows;
 }
 
+// Del-inventering: vilken produktkolumn varje omfattning filtrerar på.
+const SCOPE_COLUMNS = { CATEGORY: "category_id", BRAND: "brand_id", SUPPLIER: "supplier_id" };
+const SCOPE_TABLES = { CATEGORY: "product_categories", BRAND: "brands", SUPPLIER: "suppliers" };
+
+// SQL-villkor (på products p) för att en vara ingår i inventeringen.
+function scopeCondition(count) {
+  const column = SCOPE_COLUMNS[count.scope_type];
+  if (column) return { sql: `AND p.${column} = ?`, params: [count.scope_id] };
+  return { sql: "", params: [] };
+}
+
 // The core of the "juridiskt lämplig inventering": alongside what was
 // actually scanned, also surface every variant that currently has stock
 // on hand in this warehouse but was never scanned during the count — the
@@ -43,6 +54,10 @@ export async function getStockCount(id) {
   );
   const scannedVariantIds = scannedLines.map((l) => l.product_variant_id);
 
+  // Stickprov (SCANNED): bara det som räknats bedöms — inget kan "saknas".
+  if (count.scope_type === "SCANNED") return { ...count, lines: scannedLines, missing: [] };
+  const scope = scopeCondition(count);
+
   const [missing] = await pool.query(
     `SELECT sl.product_variant_id, sl.quantity_on_hand AS expected_qty,
             v.sku, v.barcode, v.color, v.size, p.name AS product_name
@@ -50,9 +65,10 @@ export async function getStockCount(id) {
      JOIN product_variants v ON v.id = sl.product_variant_id
      JOIN products p ON p.id = v.product_id
      WHERE sl.warehouse_id = ? AND sl.quantity_on_hand > 0
+       ${scope.sql}
        ${scannedVariantIds.length > 0 ? "AND sl.product_variant_id NOT IN (?)" : ""}
      ORDER BY p.name ASC`,
-    scannedVariantIds.length > 0 ? [count.warehouse_id, scannedVariantIds] : [count.warehouse_id]
+    [count.warehouse_id, ...scope.params, ...(scannedVariantIds.length > 0 ? [scannedVariantIds] : [])]
   );
 
   return {
@@ -62,11 +78,18 @@ export async function getStockCount(id) {
   };
 }
 
-export async function startStockCount({ warehouseId, userId }) {
-  const [result] = await pool.query(`INSERT INTO stock_counts (warehouse_id, started_by) VALUES (?, ?)`, [
-    warehouseId,
-    userId,
-  ]);
+export async function startStockCount({ warehouseId, userId, scopeType = "FULL", scopeId = null }) {
+  const type = ["FULL", "CATEGORY", "BRAND", "SUPPLIER", "SCANNED"].includes(scopeType) ? scopeType : "FULL";
+  let label = null;
+  if (SCOPE_TABLES[type]) {
+    const [[row]] = await pool.query(`SELECT name FROM ${SCOPE_TABLES[type]} WHERE id = ?`, [scopeId]);
+    if (!row) throw new Error("INVALID_SCOPE");
+    label = row.name;
+  }
+  const [result] = await pool.query(
+    `INSERT INTO stock_counts (warehouse_id, started_by, scope_type, scope_id, scope_label) VALUES (?, ?, ?, ?, ?)`,
+    [warehouseId, userId, type, SCOPE_TABLES[type] ? scopeId : null, label]
+  );
   return getStockCount(result.insertId);
 }
 
@@ -102,9 +125,11 @@ export async function scanCountLine(countId, { barcode, quantity = 1 }) {
   if (!count) throw new Error("COUNT_NOT_FOUND");
   if (count.status !== "IN_PROGRESS") throw new Error("COUNT_NOT_IN_PROGRESS");
 
-  const [[variant]] = await pool.query(`SELECT id FROM product_variants WHERE barcode = ? AND active = 1`, [
-    barcode,
-  ]);
+  // SKU räknas också, så att etiketter från streckkodsarket fungerar.
+  const [[variant]] = await pool.query(
+    `SELECT id FROM product_variants WHERE (barcode = ? OR sku = ?) AND active = 1 ORDER BY barcode = ? DESC LIMIT 1`,
+    [barcode, barcode, barcode]
+  );
   if (!variant) throw new Error("BARCODE_NOT_FOUND");
 
   await upsertCountLine(countId, count.warehouse_id, variant.id, quantity);
