@@ -213,8 +213,8 @@ export async function convertPortalOrderRequest(id, userId) {
       customerId: request.customer_id,
       referenceContactId: request.reference_contact_id,
       notes: request.requested_by_name
-        ? `Beställning via kundportalen (${request.requested_by_name}).`
-        : "Beställning via kundportalen.",
+        ? `Beställning via Sortilog (${request.requested_by_name}).`
+        : "Beställning via Sortilog.",
       lines: request.lines.map((l) => ({
         productVariantId: l.product_variant_id,
         quantity: l.quantity,

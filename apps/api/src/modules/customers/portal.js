@@ -263,7 +263,7 @@ export async function renderPortalPage(req, res) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mina sidor – ${escapeHtml(customer.name)}</title>
+  <title>Sortilog – ${escapeHtml(customer.name)}</title>
   <style>
     body {
       font-family: system-ui, sans-serif;
@@ -288,7 +288,7 @@ export async function renderPortalPage(req, res) {
 <body>
   <div class="card" style="text-align:center;padding:32px 24px 28px;border-top:4px solid ${brandColor};">
     ${logoHtml}
-    <p style="color:#94a3b8;margin:10px 0 0;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;font-weight:600;">Mina sidor</p>
+    <p style="color:#94a3b8;margin:10px 0 0;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;font-weight:600;">Sortilog</p>
     ${
       mainLogo
         ? `<img src="${escapeHtml(mainLogo.display_url)}" alt="${escapeHtml(customer.name)}" style="display:block;margin:14px auto 6px;max-height:72px;max-width:260px;object-fit:contain;" />`
