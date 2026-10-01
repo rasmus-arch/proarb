@@ -119,7 +119,7 @@ export async function listStockLevels({ search = "", warehouseId, lowStockOnly =
     params.push(warehouseId);
   }
   if (lowStockOnly) {
-    conditions.push("sl.reorder_point IS NOT NULL AND sl.quantity_on_hand < sl.reorder_point");
+    conditions.push("sl.reorder_point IS NOT NULL AND sl.quantity_on_hand < sl.reorder_point AND p.discontinued = 0");
   }
   const where = conditions.join(" AND ");
 
@@ -127,7 +127,7 @@ export async function listStockLevels({ search = "", warehouseId, lowStockOnly =
     `SELECT sl.id, sl.quantity_on_hand, sl.reserved_qty, sl.reorder_point, sl.reorder_quantity,
             sl.warehouse_id, w.name AS warehouse_name,
             v.id AS variant_id, v.sku, v.barcode, v.color, v.size,
-            p.id AS product_id, p.name AS product_name, p.article_number
+            p.id AS product_id, p.name AS product_name, p.article_number, p.discontinued
      FROM stock_levels sl
      JOIN product_variants v ON v.id = sl.product_variant_id
      JOIN products p ON p.id = v.product_id

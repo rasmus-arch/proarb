@@ -68,7 +68,7 @@ async function loadSaldo(page = saldoPage) {
       (r) => `
       <tr>
         <td class="py-2 pr-3">
-          <div class="font-medium text-slate-900">${escapeHtml(r.product_name)}</div>
+          <div class="font-medium text-slate-900">${escapeHtml(r.product_name)}${r.discontinued ? `<span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått</span>` : ""}</div>
           <div class="text-xs text-slate-500">${escapeHtml([r.color, r.size, r.sku].filter(Boolean).join(" · "))}</div>
         </td>
         <td class="py-2 pr-3 text-right ${r.reorder_point !== null && r.quantity_on_hand < r.reorder_point ? "font-semibold text-red-600" : ""}">${r.quantity_on_hand}</td>

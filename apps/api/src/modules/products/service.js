@@ -37,7 +37,7 @@ export async function listProducts({ search = "", page = 1, pageSize = 25 }) {
   if (productIdRows.length === 0) return { rows: [], total, page, pageSize };
 
   const [rows] = await pool.query(
-    `SELECT p.id, p.article_number, p.name, p.base_price, p.active,
+    `SELECT p.id, p.article_number, p.name, p.base_price, p.active, p.discontinued,
             v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override
      FROM products p
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
@@ -72,12 +72,18 @@ const PRINT_PREFILL_SELECT = `
   COALESCE((SELECT print_discount_percent FROM customer_assortment WHERE customer_id = ? AND product_id = p.id LIMIT 1), 0) AS assortment_print_discount_percent
 `;
 
+// Lagersaldo i standardlagret — visas vid sökträffar så att en utgången
+// produkt syns med hur många som finns kvar att sälja.
+const STOCK_SELECT = `COALESCE((SELECT sl.quantity_on_hand FROM stock_levels sl
+     WHERE sl.product_variant_id = v.id AND sl.warehouse_id = ${Number(DEFAULT_WAREHOUSE_ID)}), 0) AS quantity_on_hand`;
+
 // Used by the POS / warehouse scanning flows: look up a sellable variant
 // directly by the barcode a scanner just read.
 export async function findVariantByBarcode(barcode, customerId = null) {
   const [[variant]] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent,
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.discontinued,
+            ${STOCK_SELECT},
             ${DISCOUNT_SELECT},
             ${PRINT_PREFILL_SELECT}
      FROM product_variants v
@@ -94,7 +100,8 @@ export async function searchVariants(search = "", limit = 15, customerId = null)
   const like = `%${search}%`;
   const [rows] = await pool.query(
     `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, v.price_override,
-            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable,
+            p.id AS product_id, p.name, p.base_price, p.cost_price, p.tax_rate_percent, p.printable, p.discontinued,
+            ${STOCK_SELECT},
             ${DISCOUNT_SELECT},
             ${PRINT_PREFILL_SELECT}
      FROM product_variants v
@@ -199,6 +206,7 @@ export async function updateProduct(id, data) {
     base_price: data.basePrice,
     cost_price: data.costPrice,
     image_url: data.imageUrl,
+    discontinued: data.discontinued === undefined ? undefined : data.discontinued ? 1 : 0,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

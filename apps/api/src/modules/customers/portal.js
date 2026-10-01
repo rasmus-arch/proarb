@@ -102,6 +102,7 @@ function groupByProduct(products) {
         sku: p.sku,
         price: p.price_override ?? p.base_price,
         quantity_on_hand: p.quantity_on_hand,
+        discontinued: Boolean(p.discontinued),
       });
     }
   }
@@ -117,6 +118,11 @@ function stockBadgeHtml(quantityOnHand) {
   return inStock
     ? `<span style="display:inline-block;border-radius:9999px;background:#dcfce7;color:#15803d;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">I lager</span>`
     : `<span style="display:inline-block;border-radius:9999px;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">Beställningsvara</span>`;
+}
+
+// Utgången produkt: bara det som finns kvar kan beställas.
+function discontinuedBadgeHtml(quantity) {
+  return `<span style="display:inline-block;border-radius:9999px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">Utgår · ${Math.max(0, Number(quantity) || 0)} kvar</span>`;
 }
 
 function imageHtml(imageUrl) {
@@ -201,7 +207,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
               <div>
                 <div style="font-weight:600;">${escapeHtml(p.name)}</div>
                 <div style="color:#64748b;font-size:12px;">${escapeHtml(p.article_number)}</div>
-                ${showStock && p.variants[0] ? `<div style="margin-top:4px;">${stockBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : ""}
+                ${p.variants[0]?.discontinued ? `<div style="margin-top:4px;">${discontinuedBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : showStock && p.variants[0] ? `<div style="margin-top:4px;">${stockBadgeHtml(p.variants[0].quantity_on_hand)}</div>` : ""}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
@@ -228,7 +234,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
               <tr>
                 <td style="padding:4px 8px;color:#334155;">${escapeHtml([v.color, v.size].filter(Boolean).join(" / ") || "–")}</td>
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
-                ${showStock ? `<td style="padding:4px 8px;">${stockBadgeHtml(v.quantity_on_hand)}</td>` : ""}
+                ${v.discontinued ? `<td style="padding:4px 8px;">${discontinuedBadgeHtml(v.quantity_on_hand)}</td>` : showStock ? `<td style="padding:4px 8px;">${stockBadgeHtml(v.quantity_on_hand)}</td>` : ""}
                 ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p.discount_percent)}</td>`}
                 <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" style="width:56px;" /></td>
               </tr>`

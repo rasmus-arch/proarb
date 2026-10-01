@@ -286,6 +286,9 @@ CREATE TABLE IF NOT EXISTS products (
   cost_price       DECIMAL(10,2) NULL,
   image_url        VARCHAR(500) NULL,
   active           TINYINT(1) NOT NULL DEFAULT 1,
+  -- Utgått: säljs bara så länge lagret räcker (se orders/service.js) och
+  -- föreslås aldrig i inköpsförslag eller min-saldo-varningar.
+  discontinued     TINYINT(1) NOT NULL DEFAULT 0,
   created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES product_categories(id),

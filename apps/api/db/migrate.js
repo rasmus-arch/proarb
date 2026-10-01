@@ -145,6 +145,7 @@ export async function run() {
     "ALTER TABLE quote_lines ADD COLUMN cost_price DECIMAL(10,2) NULL",
     "ALTER TABLE order_template_lines ADD COLUMN cost_price DECIMAL(10,2) NULL",
     "ALTER TABLE app_settings ADD COLUMN portal_require_login TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN discontinued TINYINT(1) NOT NULL DEFAULT 0",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

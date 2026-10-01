@@ -248,7 +248,49 @@ export async function getOrder(id) {
   };
 }
 
+// Utgångna produkter (products.discontinued) får bara säljas så länge
+// lagret räcker: det som finns i standardlagret minus det som redan ligger
+// på andra öppna ordrar. Körs i samma transaktion som raderna sparas, för
+// alla vägar som skapar orderrader (ny order, ändrade rader, från offert,
+// duplicering, mall, Sortilog-beställning).
+async function assertDiscontinuedInStock(connection, orderId, lines) {
+  const wanted = new Map();
+  for (const line of lines) {
+    const variantId = line.productVariantId ?? line.product_variant_id;
+    if (variantId) wanted.set(Number(variantId), (wanted.get(Number(variantId)) ?? 0) + Number(line.quantity));
+  }
+  if (wanted.size === 0) return;
+
+  const [rows] = await connection.query(
+    `SELECT v.id, p.name, v.color, v.size,
+            COALESCE((SELECT sl.quantity_on_hand FROM stock_levels sl
+                      WHERE sl.product_variant_id = v.id AND sl.warehouse_id = ?), 0) AS on_hand,
+            COALESCE((SELECT SUM(ol.quantity) FROM order_lines ol JOIN orders o ON o.id = ol.order_id
+                      WHERE ol.product_variant_id = v.id AND o.id <> ?
+                        AND o.status IN ('NEW', 'READY_FOR_PICKUP') AND o.skip_inventory = 0), 0) AS reserved
+     FROM product_variants v JOIN products p ON p.id = v.product_id
+     WHERE v.id IN (?) AND p.discontinued = 1`,
+    [DEFAULT_WAREHOUSE_ID, orderId ?? 0, [...wanted.keys()]]
+  );
+  for (const row of rows) {
+    const available = Math.max(0, Number(row.on_hand) - Number(row.reserved));
+    if (wanted.get(row.id) > available) {
+      const label = [row.name, [row.color, row.size].filter(Boolean).join(" ")].filter(Boolean).join(" ");
+      const err = new Error(
+        available > 0
+          ? `${label} har utgått och kan bara säljas så länge lagret räcker — ${available} st kvar att sälja.`
+          : Number(row.on_hand) > 0
+            ? `${label} har utgått — de ${Number(row.on_hand)} st som finns i lager ligger redan på andra ordrar.`
+            : `${label} har utgått och finns inte kvar i lager.`
+      );
+      err.status = 400;
+      throw err;
+    }
+  }
+}
+
 async function insertOrderLines(connection, orderId, lines) {
+  await assertDiscontinuedInStock(connection, orderId, lines);
   let sortOrder = 0;
   for (const line of lines) {
     await connection.query(

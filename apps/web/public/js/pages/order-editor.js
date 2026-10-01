@@ -321,7 +321,7 @@ el.lineSearch.addEventListener("input", () => {
       .map(
         (v) => `
         <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-variant='${JSON.stringify(v).replace(/'/g, "&#39;")}'>
-          <div class="font-medium text-slate-900">${escapeHtml(v.name)}</div>
+          <div class="font-medium text-slate-900">${escapeHtml(v.name)}${v.discontinued ? `<span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått · ${Number(v.quantity_on_hand) || 0} i lager</span>` : ""}</div>
           <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))} — ${money(v.price_override ?? v.base_price)}</div>
         </button>`
       )

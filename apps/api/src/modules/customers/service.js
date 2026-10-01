@@ -314,7 +314,7 @@ export async function getCustomerByPortalToken(token) {
   // turns it on (see portal.js) — fetched unconditionally here since it's
   // cheap and the caller decides whether to render it.
   const [products] = await pool.query(
-    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url,
+    `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url, p.discontinued,
             v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
             sl.quantity_on_hand,
             ${ASSORTMENT_DISCOUNT_SELECT}
@@ -323,6 +323,8 @@ export async function getCustomerByPortalToken(token) {
      LEFT JOIN product_variants v ON v.product_id = p.id AND v.active = 1
      LEFT JOIN stock_levels sl ON sl.product_variant_id = v.id AND sl.warehouse_id = ?
      WHERE ca.customer_id = ? AND p.active = 1
+       -- Utgångna varianter visas bara så länge det finns något kvar.
+       AND (p.discontinued = 0 OR COALESCE(sl.quantity_on_hand, 0) > 0)
      ORDER BY p.name ASC, v.color ASC, v.size ASC`,
     [customer.id, customer.id, DEFAULT_WAREHOUSE_ID, customer.id]
   );

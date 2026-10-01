@@ -61,7 +61,7 @@ function groupByProduct(rows) {
   const map = new Map();
   for (const r of rows) {
     if (!map.has(r.id)) {
-      map.set(r.id, { id: r.id, article_number: r.article_number, name: r.name, base_price: r.base_price, variants: [] });
+      map.set(r.id, { id: r.id, article_number: r.article_number, name: r.name, base_price: r.base_price, discontinued: Boolean(r.discontinued), variants: [] });
     }
     if (r.variant_id) {
       map.get(r.id).variants.push({
@@ -100,7 +100,7 @@ function renderRows(rows) {
       const mainRow = `
       <tr>
         <td class="py-2 pr-4 text-slate-500">${escapeHtml(p.article_number)}</td>
-        <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(p.name)}${badge}</td>
+        <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(p.name)}${p.discontinued ? `<span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått</span>` : ""}${badge}</td>
         <td class="py-2 pr-4">${single ? escapeHtml(v.color) : "–"}</td>
         <td class="py-2 pr-4">${single ? escapeHtml(v.size) : "–"}</td>
         <td class="py-2 pr-4">${single ? escapeHtml(v.sku) : "–"}</td>
@@ -288,6 +288,7 @@ async function openEditDialog(productId) {
   editProductForm.elements.supplier.value = suppliersCache.find((s) => s.id === product.supplier_id)?.name ?? "";
   editProductForm.elements.basePrice.value = product.base_price ?? "";
   editProductForm.elements.costPrice.value = product.cost_price ?? "";
+  editProductForm.elements.discontinued.checked = Boolean(product.discontinued);
   editProductForm.dataset.productId = productId;
   renderEditVariants(product.variants.filter((v) => v.active));
   renderEditImage(product.image_url);
@@ -407,6 +408,7 @@ editProductForm.addEventListener("submit", async (event) => {
     supplier: form.supplier,
     basePrice: Number(form.basePrice),
     costPrice: form.costPrice ? Number(form.costPrice) : null,
+    discontinued: editProductForm.elements.discontinued.checked,
   };
 
   try {

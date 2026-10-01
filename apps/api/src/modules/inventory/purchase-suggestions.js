@@ -11,7 +11,7 @@ import { DEFAULT_WAREHOUSE_ID } from "./service.js";
 // Det som redan ligger på en öppen inköpsorder dras av, så inget föreslås
 // två gånger. Leverantör = produktens egen leverantör (products.supplier_id,
 // den som sätts i produktformuläret), annars billigaste i product_suppliers.
-// Grupper utan leverantör sorteras sist.
+// Grupper utan leverantör sorteras sist. Utgångna produkter föreslås aldrig.
 
 export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_ID } = {}) {
   const [orderRows] = await pool.query(
@@ -91,10 +91,11 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
      FROM product_variants v
      JOIN products p ON p.id = v.product_id
      LEFT JOIN suppliers s ON s.id = p.supplier_id
-     WHERE v.id IN (?)`,
+     WHERE v.id IN (?) AND p.discontinued = 0`,
     [variantIds]
   );
 
+  if (variants.length === 0) return [];
   const productIds = [...new Set(variants.map((v) => v.product_id))];
   const [supplierRows] = await pool.query(
     `SELECT ps.product_id, ps.supplier_id, s.name AS supplier_name, ps.cost_price, ps.supplier_sku
