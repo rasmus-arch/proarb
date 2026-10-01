@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as customers from "./service.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
+import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
 
 const router = Router();
@@ -140,6 +141,9 @@ router.post("/:id/logos", (req, res, next) => {
       fileSize: req.file.size,
       uploadedBy: req.user.id,
     });
+    // EPS/PDF: förhandsbilden skapas direkt i bakgrunden, så att den finns
+    // när listan laddas om. Misslyckas den visas bara en filikon.
+    if (isPreviewable(logo.file_path)) ensurePreviewFile(logo.file_path).catch(() => {});
     res.status(201).json(logo);
   } catch (err) {
     next(err);
@@ -158,6 +162,27 @@ router.post("/:id/portal-token", async (req, res, next) => {
   }
 });
 
+// Miniatyrbild av en logga. Bildformat visas som de är; EPS och PDF (som
+// webbläsaren inte kan visa som <img>) renderas till PNG första gången och
+// sparas bredvid originalet.
+router.get("/:id/logos/:logoId/preview", async (req, res, next) => {
+  try {
+    const logo = await customers.getLogo(Number(req.params.id), Number(req.params.logoId));
+    if (!logo) return res.status(404).json({ error: "Not found" });
+    if (!isPreviewable(logo.file_path)) return res.redirect(`/uploads/${logo.file_path}`);
+    let previewPath;
+    try {
+      previewPath = await ensurePreviewFile(logo.file_path);
+    } catch (err) {
+      return res.status(422).json({ error: err.message });
+    }
+    res.set("Cache-Control", "private, max-age=86400");
+    res.sendFile(path.join(uploadsRoot, previewPath));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete("/:id/logos/:logoId", async (req, res, next) => {
   try {
     const logo = await customers.getLogo(Number(req.params.id), Number(req.params.logoId));
@@ -165,6 +190,7 @@ router.delete("/:id/logos/:logoId", async (req, res, next) => {
 
     await customers.deleteLogo(Number(req.params.id), Number(req.params.logoId));
     fs.unlink(path.join(uploadsRoot, logo.file_path), () => {});
+    removePreviewFile(logo.file_path);
     res.status(204).end();
   } catch (err) {
     next(err);

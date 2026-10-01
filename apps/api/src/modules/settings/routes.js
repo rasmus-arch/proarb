@@ -1,7 +1,10 @@
 import { Router } from "express";
 import * as settings from "./service.js";
 import * as fortnox from "../integrations/fortnox.js";
-import { createLogoUpload } from "../../lib/uploads.js";
+import fs from "node:fs";
+import path from "node:path";
+import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
+import { createPreviewFile, isPreviewable } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
 
 // Fas: Inställningar — säljarinfo/färger för offert-PDF och publik
@@ -49,7 +52,18 @@ router.post(
   async (req, res, next) => {
     try {
       if (!req.file) return res.status(400).json({ error: "Ingen fil bifogad (fältnamn: file)" });
-      const result = await settings.updateSellerLogo(`settings/${req.file.filename}`);
+      // Loggan visas i menyraden och ritas in i PDF:er (pdfkit), som bara
+      // klarar PNG/JPG — en EPS/PDF-logga ersätts därför av en PNG-rendering.
+      let filePath = `settings/${req.file.filename}`;
+      if (isPreviewable(filePath)) {
+        try {
+          filePath = await createPreviewFile(filePath);
+        } catch (err) {
+          fs.unlink(path.join(uploadsRoot, filePath), () => {});
+          return res.status(400).json({ error: `Kunde inte läsa filen: ${err.message}` });
+        }
+      }
+      const result = await settings.updateSellerLogo(filePath);
       res.json(result);
     } catch (err) {
       next(err);

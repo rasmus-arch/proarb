@@ -1,4 +1,5 @@
 import { pool } from "../../lib/db.js";
+import { ensurePreviewFile, isPreviewable } from "../../lib/preview.js";
 
 export async function getSettings() {
   const [[settings]] = await pool.query(`SELECT * FROM app_settings WHERE id = 1`);
@@ -79,6 +80,16 @@ export async function updateSettings(data) {
   }
 
   return getSettings();
+}
+
+// En EPS/PDF-logga som laddades upp innan förhandsvisningen fanns syns
+// varken i menyraden eller i PDF:erna — byt ut den mot en PNG-rendering.
+// Körs i bakgrunden vid start (index.js).
+export async function convertLegacySellerLogo() {
+  const [[row]] = await pool.query(`SELECT seller_logo_path FROM app_settings WHERE id = 1`);
+  if (!row?.seller_logo_path || !isPreviewable(row.seller_logo_path)) return;
+  const previewPath = await ensurePreviewFile(row.seller_logo_path);
+  await updateSellerLogo(previewPath);
 }
 
 export async function updateSellerLogo(filePath) {

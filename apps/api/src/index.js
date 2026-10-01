@@ -30,6 +30,7 @@ import searchRouter from "./modules/search/routes.js";
 import { uploadsRoot } from "./lib/uploads.js";
 import { requireAuth, requireRole } from "./lib/auth-middleware.js";
 import { run as runMigrations } from "../db/migrate.js";
+import { convertLegacySellerLogo } from "./modules/settings/service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
@@ -116,9 +117,14 @@ app.use((err, req, res, next) => {
 // queries fail with "Unknown column". Idempotent; non-fatal like postinstall.
 // No top-level await: cPanel/Passenger loads this file with require(), which
 // throws ERR_REQUIRE_ASYNC_MODULE (-> 503) on an ESM graph with top-level await.
-runMigrations().catch((err) => {
-  console.warn(`Kunde inte köra databasmigrering vid start: ${err.message}`);
-});
+runMigrations()
+  .catch((err) => {
+    console.warn(`Kunde inte köra databasmigrering vid start: ${err.message}`);
+  })
+  .then(() => convertLegacySellerLogo())
+  .catch((err) => {
+    console.warn(`Kunde inte konvertera företagsloggan: ${err.message}`);
+  });
 
 const port = process.env.PORT ?? 3001;
 app.listen(port, () => {

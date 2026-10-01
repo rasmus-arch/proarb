@@ -103,10 +103,15 @@ function renderLogos(logos) {
   el.logoList.innerHTML = logos
     .map(
       (l) => `
-      <li class="flex items-center justify-between py-2 text-sm">
-        <div>
-          <span class="font-medium text-slate-900">${escapeHtml(l.name)}</span>
-          <span class="ml-2 text-slate-500">${escapeHtml(l.original_filename)} · ${formatBytes(l.file_size)}</span>
+      <li class="flex items-center justify-between gap-3 py-2 text-sm">
+        <div class="flex min-w-0 items-center gap-3">
+          <a href="/uploads/${l.file_path}" target="_blank" class="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 bg-white p-1">
+            <img src="/api/customers/${customerId}/logos/${l.id}/preview" alt="" loading="lazy" class="max-h-full max-w-full object-contain" data-logo-thumb data-ext="${escapeHtml(fileExtension(l.original_filename))}" />
+          </a>
+          <div class="min-w-0">
+            <div class="font-medium text-slate-900">${escapeHtml(l.name)}</div>
+            <div class="truncate text-slate-500">${escapeHtml(l.original_filename)} · ${formatBytes(l.file_size)}</div>
+          </div>
         </div>
         <div class="flex items-center gap-3">
           <a href="/uploads/${l.file_path}" target="_blank" class="link">Öppna</a>
@@ -115,6 +120,21 @@ function renderLogos(logos) {
       </li>`
     )
     .join("");
+  // Filer som inte går att rendera (t.ex. en trasig EPS) visar filtypen
+  // istället för en bruten bild.
+  for (const img of el.logoList.querySelectorAll("[data-logo-thumb]")) {
+    img.addEventListener("error", () => {
+      img.replaceWith(Object.assign(document.createElement("span"), {
+        className: "text-xs font-semibold uppercase text-slate-400",
+        textContent: img.dataset.ext || "fil",
+      }));
+    }, { once: true });
+  }
+}
+
+function fileExtension(name) {
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot + 1) : "";
 }
 
 function renderDiscounts(discounts) {
