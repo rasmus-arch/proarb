@@ -99,7 +99,21 @@ async function requestAndPersistToken({ settings, body }) {
     fortnoxRefreshToken: data.refresh_token,
   });
   await pool.query(`UPDATE app_settings SET fortnox_token_expires_at = ? WHERE id = 1`, [expiresAt]);
+  // Fångar en kapad token direkt (för kort databaskolumn) istället för att
+  // den först ger 401 vid nästa fakturering.
+  if (updated.fortnox_access_token !== data.access_token || updated.fortnox_refresh_token !== data.refresh_token) {
+    throw new Error(
+      "Fortnox-nyckeln kunde inte sparas hel i databasen. Starta om appen (så att databasen uppdateras) och anslut till Fortnox igen."
+    );
+  }
   return { ...updated, fortnox_token_expires_at: expiresAt };
+}
+
+function refreshToken(settings) {
+  return requestAndPersistToken({
+    settings,
+    body: { grant_type: "refresh_token", refresh_token: settings.fortnox_refresh_token },
+  });
 }
 
 // Refreshes ahead of expiry (60s margin) rather than reacting to a 401,
@@ -111,25 +125,46 @@ async function ensureFreshToken(settings) {
   if (!isFortnoxConfigured(settings)) throw new Error("NOT_CONFIGURED");
   const expiresAt = settings.fortnox_token_expires_at ? new Date(settings.fortnox_token_expires_at).getTime() : 0;
   if (expiresAt - Date.now() > 60_000) return settings;
-  return requestAndPersistToken({
-    settings,
-    body: { grant_type: "refresh_token", refresh_token: settings.fortnox_refresh_token },
-  });
+  return refreshToken(settings);
 }
 
 async function fortnoxRequest(settings, path, { method = "GET", body } = {}) {
-  const fresh = await ensureFreshToken(settings);
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${fresh.fortnox_access_token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let fresh = await ensureFreshToken(settings);
+  const send = () =>
+    fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${fresh.fortnox_access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+
+  let res = await send();
+  // 401 trots att token inte borde ha gått ut (t.ex. återkallad, eller
+  // kapad före kolumnfixen): förnya en gång och försök igen.
+  if (res.status === 401) {
+    try {
+      fresh = await refreshToken(fresh);
+    } catch (err) {
+      throw new Error(
+        `Fortnox godkänner inte anslutningen längre (${err.message}). Anslut igen under Inställningar → Integrationer.`
+      );
+    }
+    res = await send();
+  }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Fortnox godkänner inte anslutningen (401). Anslut igen under Inställningar → Integrationer.");
+    }
+    if (res.status === 403) {
+      throw new Error(
+        `Fortnox nekade åtkomst (403)${data?.ErrorInformation?.message ? `: ${data.ErrorInformation.message}` : ""}. Kontrollera att Fortnox-appen har behörighet till kunder och fakturor och att användaren som anslöt har rätt licens.`
+      );
+    }
     const message = data?.ErrorInformation?.message || data?.error_description || `Fortnox API-fel (${res.status})`;
     throw new Error(message);
   }

@@ -696,8 +696,32 @@ function invoiceHistoryItem(inv) {
   if (inv.status === "SYNCED") state = `skapad i Fortnox${inv.status_note ? ` — ${escapeHtml(inv.status_note)}` : ""}`;
   else if (inv.status === "FAILED") state = `<span class="text-red-600">misslyckades i Fortnox: ${escapeHtml(inv.status_note ?? "okänt fel")}</span>`;
   else state = `inte skickad till Fortnox${inv.status_note ? ` (${escapeHtml(inv.status_note)})` : ""}`;
-  return `<li>${new Date(inv.created_at).toLocaleString("sv-SE")} – ${label}${number}: ${state}</li>`;
+  if (inv.status === "SYNCED" && inv.sent_at) state += " · skickad till kunden";
+  // Allt som inte kom fram (inte skapad, eller skapad men inte utskickad)
+  // kan försökas igen — t.ex. efter att Fortnox anslutits på nytt.
+  const retry =
+    inv.type !== "CREDIT_INVOICE" && inv.status !== "SYNCED"
+      ? ` <button type="button" class="link ml-1 text-xs" data-retry-invoice>Skicka till Fortnox igen</button>`
+      : "";
+  return `<li>${new Date(inv.created_at).toLocaleString("sv-SE")} – ${label}${number}: ${state}${retry}</li>`;
 }
+
+el.historyList.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-retry-invoice]");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = "Skickar…";
+  el.formError.classList.add("hidden");
+  try {
+    await api.post(`/orders/${orderId}/invoice/retry`, {});
+    location.reload();
+  } catch (err) {
+    el.formError.textContent = err.message;
+    el.formError.classList.remove("hidden");
+    btn.disabled = false;
+    btn.textContent = "Skicka till Fortnox igen";
+  }
+});
 
 // --- Status actions + pickup ----------------------------------------------
 

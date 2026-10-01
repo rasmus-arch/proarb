@@ -595,13 +595,21 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     connection.release();
   }
 
+  await syncInvoiceToFortnox(invoiceId, order, { cash });
+  return getOrder(orderId);
+}
+
+// Skapar orderns faktura i Fortnox (kontantfaktura för kontantkunder).
+// Best-effort: ett fel sparas på fakturaraden och kan försökas igen med
+// retryOrderInvoice nedan.
+async function syncInvoiceToFortnox(invoiceId, order, { cash }) {
   try {
     const settings = await getSettings();
     const result = await createCustomerInvoice({
       settings,
       customerId: order.customer_id,
       lines: order.lines,
-      orderId,
+      orderId: order.id,
       orderNumber: order.order_number,
       cash,
     });
@@ -611,12 +619,44 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
         [result.externalRef ?? null, result.invoiceNumber ?? null, result.note ?? null, invoiceId]
       );
     } else {
-      await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoiceId]);
+      await pool.query(`UPDATE invoices SET status = 'PENDING', status_note = ? WHERE id = ?`, [
+        result.note ?? result.reason,
+        invoiceId,
+      ]);
     }
   } catch (err) {
     await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [err.message, invoiceId]);
   }
+}
 
+// "Skicka till Fortnox igen" för en faktura som inte kom fram (Fortnox ej
+// anslutet, fel inloggning m.m.). Skapar aldrig en faktura som redan finns
+// i Fortnox (external_ref satt). Var ordern redan markerad Fakturerad
+// skickas fakturan dessutom ut, precis som när den markerades.
+export async function retryOrderInvoice(orderId) {
+  const order = await getOrder(orderId);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  const invoice = order.invoices.find(
+    (inv) => inv.type !== "CREDIT_INVOICE" && !inv.invoice_number && inv.status !== "SYNCED"
+  );
+  if (!invoice) {
+    // Fakturan finns i Fortnox men utskicket misslyckades när ordern
+    // markerades Fakturerad — skicka bara ut den igen.
+    const unsent = order.invoices.find(
+      (inv) => inv.type === "CUSTOMER_INVOICE" && inv.invoice_number && !inv.sent_at
+    );
+    if (unsent && order.status === "INVOICED") {
+      await sendOrderInvoiceFromFortnox(orderId);
+      return getOrder(orderId);
+    }
+    throw new Error("NOTHING_TO_RETRY");
+  }
+
+  await syncInvoiceToFortnox(invoice.id, order, { cash: invoice.type === "CASH_INVOICE" });
+  const [[updated]] = await pool.query(`SELECT * FROM invoices WHERE id = ?`, [invoice.id]);
+  if (updated.status === "SYNCED" && order.status === "INVOICED" && updated.type === "CUSTOMER_INVOICE") {
+    await sendOrderInvoiceFromFortnox(orderId);
+  }
   return getOrder(orderId);
 }
 

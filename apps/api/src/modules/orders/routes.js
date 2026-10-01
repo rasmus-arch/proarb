@@ -171,6 +171,18 @@ router.patch("/:id/lines", async (req, res, next) => {
   }
 });
 
+router.post("/:id/invoice/retry", async (req, res, next) => {
+  try {
+    res.json(await orders.retryOrderInvoice(Number(req.params.id)));
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "NOTHING_TO_RETRY") {
+      return res.status(409).json({ error: "Det finns ingen faktura som behöver skickas till Fortnox igen." });
+    }
+    next(err);
+  }
+});
+
 router.delete("/:id", async (req, res, next) => {
   try {
     await orders.deleteOrder(Number(req.params.id));

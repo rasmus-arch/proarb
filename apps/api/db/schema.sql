@@ -95,8 +95,10 @@ CREATE TABLE IF NOT EXISTS app_settings (
   smtp_use_tls          TINYINT(1) NOT NULL DEFAULT 1,
   fortnox_client_id     VARCHAR(255) NULL,
   fortnox_client_secret VARCHAR(255) NULL,
-  fortnox_access_token  VARCHAR(500) NULL,
-  fortnox_refresh_token VARCHAR(500) NULL,
+  -- TEXT: Fortnox access token är en JWT på över 1 000 tecken. En för
+  -- kort kolumn kapar den tyst (MySQL utan strict mode) -> 401 från Fortnox.
+  fortnox_access_token  TEXT NULL,
+  fortnox_refresh_token TEXT NULL,
   -- Buggrapporter -> GitHub Issues (se bug-reports/github.js). Samma
   -- självbetjänings-tanke som SMTP/Fortnox ovan — ett repo i formen
   -- "ägare/repo" och en personal access token (repo-scope) med rättighet

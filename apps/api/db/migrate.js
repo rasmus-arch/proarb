@@ -159,6 +159,9 @@ export async function run() {
     "ALTER TABLE portal_order_request_lines ADD COLUMN print_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0",
     "ALTER TABLE customer_assortment ADD COLUMN discount_percent DECIMAL(5,2) NULL",
     "ALTER TABLE customer_assortment ADD COLUMN discount_amount DECIMAL(10,2) NULL",
+    // Fortnox access token (JWT) är längre än 500 tecken och kapades tyst.
+    "ALTER TABLE app_settings MODIFY fortnox_access_token TEXT NULL",
+    "ALTER TABLE app_settings MODIFY fortnox_refresh_token TEXT NULL",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.
