@@ -65,6 +65,10 @@ const el = {
   formError: document.getElementById("form-error"),
   saveRow: document.getElementById("save-row"),
   saveBtn: document.getElementById("save-btn"),
+  cashCompleteBtn: document.getElementById("cash-complete-btn"),
+  pickupTitle: document.getElementById("pickup-title"),
+  pickupIntro: document.getElementById("pickup-intro"),
+  pickupFields: document.getElementById("pickup-fields"),
   saveLinesRow: document.getElementById("save-lines-row"),
   saveLinesBtn: document.getElementById("save-lines-btn"),
   pickupSection: document.getElementById("pickup-section"),
@@ -497,6 +501,7 @@ el.newPickupContactQuickBtn.addEventListener("click", () => {
 async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);
   state.contacts = customer.contacts;
+  applyCashMode(Boolean(customer.is_cash_customer));
 
   // Only relevant while creating a NEW order — staff should see anything
   // noted about the customer before adding lines/leveranssätt etc. An
@@ -515,6 +520,21 @@ async function loadContacts(customerId, selectedId) {
     customer.contacts
       .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${c.can_pickup ? " (hämtbehörig)" : ""}</option>`)
       .join("");
+}
+
+// Kontantkund (t.ex. Swish-kunden): köpet är betalt på plats. En ny order
+// kan skapas och slutföras i ett steg, och utlämningen kräver ingen
+// legitimering — den skapar en kontantfaktura i Fortnox som inte skickas.
+function applyCashMode(isCash) {
+  state.isCash = isCash;
+  el.cashCompleteBtn.classList.toggle("hidden", !(isCash && isNewOrder()));
+  el.saveBtn.className = isCash && isNewOrder() ? "btn-secondary" : "btn";
+  el.pickupTitle.textContent = isCash ? "Slutför köp" : "Registrera utlämning";
+  el.pickupIntro.textContent = isCash
+    ? "Kontantkund — när köpet är betalt skapas en kontantfaktura i Fortnox (skickas inte till någon) och ordern blir fakturerad direkt."
+    : "Välj en hämtberättigad kontakt hos kunden, eller ange namn manuellt.";
+  el.pickupFields.classList.toggle("hidden", isCash);
+  el.pickupBtn.textContent = isCash ? "Betald – slutför köp" : "Registrera utlämning";
 }
 
 let customerSearchTimer;
@@ -551,7 +571,10 @@ el.customerChangeBtn.addEventListener("click", () => {
 
 // --- Save (new orders only) ----------------------------------------------
 
-el.saveBtn.addEventListener("click", async () => {
+el.saveBtn.addEventListener("click", () => createOrder({ completeCash: false }));
+el.cashCompleteBtn.addEventListener("click", () => createOrder({ completeCash: true }));
+
+async function createOrder({ completeCash }) {
   el.formError.classList.add("hidden");
   if (!state.customerId) {
     el.formError.textContent = "Välj en kund först.";
@@ -582,8 +605,19 @@ el.saveBtn.addEventListener("click", async () => {
     })),
   };
 
+  el.saveBtn.disabled = el.cashCompleteBtn.disabled = true;
   try {
     const created = await api.post("/orders", payload);
+    if (completeCash) {
+      // Ett betalt småköp har inget att plocka eller hämta — ingen ordersedel.
+      try {
+        await api.post(`/orders/${created.id}/pickup`, {});
+      } catch (err) {
+        sessionStorage.setItem("order-status-notification", JSON.stringify({ status: "CASH", sent: false, reason: err.message }));
+      }
+      location.href = `/order-editor.html?id=${created.id}`;
+      return;
+    }
     try {
       const { auto_print_order_slip } = await api.get("/settings/branding");
       if (auto_print_order_slip) printOrderSlip(created.id);
@@ -592,10 +626,23 @@ el.saveBtn.addEventListener("click", async () => {
     }
     location.href = `/order-editor.html?id=${created.id}`;
   } catch (err) {
+    el.saveBtn.disabled = el.cashCompleteBtn.disabled = false;
     el.formError.textContent = err.message;
     el.formError.classList.remove("hidden");
   }
-});
+}
+
+const INVOICE_TYPE_LABELS = { CUSTOMER_INVOICE: "Faktura", CASH_INVOICE: "Kontantfaktura", CREDIT_INVOICE: "Kreditfaktura" };
+
+function invoiceHistoryItem(inv) {
+  const label = INVOICE_TYPE_LABELS[inv.type] ?? "Faktura";
+  const number = inv.invoice_number ? ` ${escapeHtml(inv.invoice_number)}` : "";
+  let state;
+  if (inv.status === "SYNCED") state = `skapad i Fortnox${inv.status_note ? ` — ${escapeHtml(inv.status_note)}` : ""}`;
+  else if (inv.status === "FAILED") state = `<span class="text-red-600">misslyckades i Fortnox: ${escapeHtml(inv.status_note ?? "okänt fel")}</span>`;
+  else state = `inte skickad till Fortnox${inv.status_note ? ` (${escapeHtml(inv.status_note)})` : ""}`;
+  return `<li>${new Date(inv.created_at).toLocaleString("sv-SE")} – ${label}${number}: ${state}</li>`;
+}
 
 // --- Status actions + pickup ----------------------------------------------
 
@@ -608,6 +655,7 @@ async function changeStatus(orderId, status, sendEmail) {
 }
 
 function notificationText({ status, sent, reason }) {
+  if (status === "CASH") return `Ordern skapades men kunde inte slutföras: ${reason ?? "okänt fel"}`;
   const subject = status === "INVOICED" ? "Fakturan" : "E-post till kund";
   return sent ? `${subject} skickades.` : `${subject} skickades inte: ${reason ?? "okänt fel"}`;
 }
@@ -848,14 +896,15 @@ async function init() {
     renderActionButtons(order);
     el.pickupSection.classList.toggle("hidden", !order.can_pickup);
 
-    if (order.pickups?.length > 0) {
+    if (order.pickups?.length > 0 || order.invoices?.length > 0) {
       el.historySection.classList.remove("hidden");
-      el.historyList.innerHTML = order.pickups
-        .map(
-          (p) =>
-            `<li>${new Date(p.picked_up_at).toLocaleString("sv-SE")} – hämtat av ${escapeHtml(p.picked_up_by_contact_name ?? p.picked_up_by_name ?? "okänd")}</li>`
-        )
-        .join("");
+      el.historyList.innerHTML =
+        (order.pickups ?? [])
+          .map(
+            (p) =>
+              `<li>${new Date(p.picked_up_at).toLocaleString("sv-SE")} – ${order.is_cash_customer ? "slutfört (betalt på plats)" : `hämtat av ${escapeHtml(p.picked_up_by_contact_name ?? p.picked_up_by_name ?? "okänd")}`}</li>`
+          )
+          .join("") + (order.invoices ?? []).map(invoiceHistoryItem).join("");
     }
 
     if (RETURNABLE_ORDER_STATUSES.includes(order.status) || order.has_returns) {

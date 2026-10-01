@@ -25,6 +25,7 @@ const el = {
   smtpTls: document.getElementById("s-smtp-tls"),
   fortnoxClientId: document.getElementById("s-fortnox-client-id"),
   fortnoxClientSecret: document.getElementById("s-fortnox-client-secret"),
+  fortnoxCashPaymentWay: document.getElementById("s-fortnox-cash-payment-way"),
   fortnoxRedirectUri: document.getElementById("fortnox-redirect-uri"),
   fortnoxStatus: document.getElementById("fortnox-status"),
   fortnoxConnectBtn: document.getElementById("fortnox-connect-btn"),
@@ -103,6 +104,7 @@ function applySettings(settings) {
   el.smtpTls.checked = settings.smtp_use_tls === undefined ? true : Boolean(settings.smtp_use_tls);
   el.fortnoxClientId.value = settings.fortnox_client_id ?? "";
   el.fortnoxClientSecret.value = settings.fortnox_client_secret ?? "";
+  el.fortnoxCashPaymentWay.value = settings.fortnox_cash_payment_way ?? "";
   applyFortnoxStatus(settings);
   el.githubRepo.value = settings.github_issues_repo ?? "";
   el.githubToken.value = settings.github_issues_token ?? "";
@@ -160,6 +162,7 @@ el.saveBtn.addEventListener("click", async () => {
       smtpUseTls: el.smtpTls.checked,
       fortnoxClientId: el.fortnoxClientId.value || null,
       fortnoxClientSecret: el.fortnoxClientSecret.value || null,
+      fortnoxCashPaymentWay: el.fortnoxCashPaymentWay.value,
       githubIssuesRepo: el.githubRepo.value || null,
       githubIssuesToken: el.githubToken.value || null,
       quoteValidDays: Number(el.quoteValidDays.value) || 10,

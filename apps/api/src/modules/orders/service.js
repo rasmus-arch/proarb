@@ -204,8 +204,8 @@ export async function getOrderByNumber(orderNumber) {
 export async function getOrder(id) {
   const [[order]] = await pool.query(
     `SELECT o.*, c.name AS customer_name, c.email AS customer_email, c.address AS customer_address,
-            c.postal_code AS customer_postal_code, c.city AS customer_city, cc.name AS reference_name,
-            u.name AS created_by_name
+            c.postal_code AS customer_postal_code, c.city AS customer_city, c.is_cash_customer,
+            cc.name AS reference_name, u.name AS created_by_name
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      LEFT JOIN customer_contacts cc ON cc.id = o.reference_contact_id
@@ -227,11 +227,17 @@ export async function getOrder(id) {
     `SELECT COUNT(*) AS has_returns FROM order_returns WHERE order_id = ?`,
     [id]
   );
+  const [invoices] = await pool.query(
+    `SELECT id, type, invoice_number, status, status_note, amount, sent_at, created_at
+     FROM invoices WHERE order_id = ? ORDER BY id ASC`,
+    [id]
+  );
 
   return {
     ...order,
     lines,
     pickups,
+    invoices,
     has_returns: has_returns > 0,
     totals: summarizeTotals(lines),
     can_pickup: !PICKUP_BLOCKED_STATUSES.includes(order.status),
@@ -460,6 +466,8 @@ async function sendOrderInvoiceFromFortnox(orderId) {
     [orderId]
   );
   if (!invoice) return { sent: false, reason: "Ingen faktura hittades för ordern." };
+  // Kontantfakturor är redan betalda och ska aldrig skickas till någon.
+  if (invoice.type === "CASH_INVOICE") return { sent: false, reason: "Kontantfaktura — skickas inte." };
 
   try {
     const settings = await getSettings();
@@ -494,6 +502,10 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   const order = await getOrder(orderId);
   if (!order) throw new Error("ORDER_NOT_FOUND");
   if (PICKUP_BLOCKED_STATUSES.includes(order.status)) throw new Error("ORDER_NOT_PICKUPABLE");
+  // Kontantkund (Swish-kunden): köpet är betalt på plats och ingen behöver
+  // legitimera sig — ordern går direkt till Fakturerad med en kontantfaktura.
+  const cash = Boolean(order.is_cash_customer);
+  if (cash && !pickedUpByContactId && !pickedUpByName?.trim()) pickedUpByName = order.customer_name;
   if (!pickedUpByContactId && !pickedUpByName?.trim()) throw new Error("PICKUP_IDENTITY_REQUIRED");
 
   const connection = await pool.getConnection();
@@ -508,7 +520,7 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     );
 
     await connection.query(`UPDATE order_lines SET delivered_qty = quantity WHERE order_id = ?`, [orderId]);
-    await connection.query(`UPDATE orders SET status = 'DELIVERED' WHERE id = ?`, [orderId]);
+    await connection.query(`UPDATE orders SET status = ? WHERE id = ?`, [cash ? "INVOICED" : "DELIVERED", orderId]);
 
     for (const line of order.skip_inventory ? [] : order.lines) {
       // A fritextrad (free-text line) has no product_variant_id — nothing
@@ -527,8 +539,8 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
     }
 
     const [invoiceResult] = await connection.query(
-      `INSERT INTO invoices (order_id, type, amount, status) VALUES (?, 'CUSTOMER_INVOICE', ?, 'PENDING')`,
-      [orderId, order.totals.total_inc_vat]
+      `INSERT INTO invoices (order_id, type, amount, status) VALUES (?, ?, ?, 'PENDING')`,
+      [orderId, cash ? "CASH_INVOICE" : "CUSTOMER_INVOICE", order.totals.total_inc_vat]
     );
     invoiceId = invoiceResult.insertId;
 
@@ -548,13 +560,13 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
       lines: order.lines,
       orderId,
       orderNumber: order.order_number,
+      cash,
     });
     if (result.ok) {
-      await pool.query(`UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ? WHERE id = ?`, [
-        result.externalRef ?? null,
-        result.invoiceNumber ?? null,
-        invoiceId,
-      ]);
+      await pool.query(
+        `UPDATE invoices SET status = 'SYNCED', external_ref = ?, invoice_number = ?, status_note = ? WHERE id = ?`,
+        [result.externalRef ?? null, result.invoiceNumber ?? null, result.note ?? null, invoiceId]
+      );
     } else {
       await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoiceId]);
     }

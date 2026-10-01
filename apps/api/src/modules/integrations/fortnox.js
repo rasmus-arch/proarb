@@ -209,23 +209,53 @@ function buildInvoiceRows(lines) {
 // --- Invoices ---------------------------------------------------------
 
 // Called when an order becomes DELIVERED (recordPickup in orders/service.js).
-export async function createCustomerInvoice({ settings, customerId, lines, orderId, orderNumber } = {}) {
+//
+// `cash: true` (kontantkund, t.ex. Swish-kunden) skapar istället en
+// kontantfaktura — redan betald, förfaller samma dag — och bokför den
+// direkt, så den aldrig hamnar bland obetalda kundfakturor eller skickas
+// till någon. PaymentWay styrs av Inställningar (standard SW = Swish).
+export async function createCustomerInvoice({ settings, customerId, lines, orderId, orderNumber, cash = false } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   const invoiceRows = buildInvoiceRows(lines);
   if (invoiceRows.length === 0) throw new Error("Ordern har inga rader att fakturera.");
 
   const { customerNumber, settings: settingsAfter } = await findOrCreateFortnoxCustomer(settings, customerId);
-  const { data } = await fortnoxRequest(settingsAfter, "/invoices", {
+  const cashFields = cash
+    ? {
+        InvoiceType: "CASHINVOICE",
+        PaymentWay: settings.fortnox_cash_payment_way || "SW",
+        DueDate: new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" }),
+      }
+    : {};
+  const { data, settings: settingsAfterInvoice } = await fortnoxRequest(settingsAfter, "/invoices", {
     method: "POST",
     body: {
       Invoice: {
         CustomerNumber: customerNumber,
         YourOrderNumber: orderNumber ?? (orderId != null ? String(orderId) : undefined),
         InvoiceRows: invoiceRows,
+        ...cashFields,
       },
     },
   });
-  return { ok: true, invoiceNumber: data.Invoice.DocumentNumber, externalRef: data.Invoice.DocumentNumber };
+  const documentNumber = data.Invoice.DocumentNumber;
+
+  if (cash) {
+    // Fakturan finns redan i Fortnox även om bokföringen skulle misslyckas
+    // — rapportera det som en anteckning, inte som ett fel, så att den inte
+    // skapas en gång till.
+    try {
+      await fortnoxRequest(settingsAfterInvoice, `/invoices/${documentNumber}/bookkeep`, { method: "PUT", body: {} });
+    } catch (err) {
+      return {
+        ok: true,
+        invoiceNumber: documentNumber,
+        externalRef: documentNumber,
+        note: `Kontantfakturan skapades men kunde inte bokföras: ${err.message}`,
+      };
+    }
+  }
+  return { ok: true, invoiceNumber: documentNumber, externalRef: documentNumber };
 }
 
 // Credits back a previously sent customer invoice on a full/partial

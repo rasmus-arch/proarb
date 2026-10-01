@@ -132,6 +132,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
   purchase_order_email_note  VARCHAR(1000) NULL,
   -- Hur många dagars databaskopior som sparas (se scripts/backup.js).
   backup_keep_days           INT NOT NULL DEFAULT 14,
+  -- Fortnox PaymentWay på kontantfakturor (kontantkunder ovan), t.ex. SW
+  -- (Swish), CASH eller CARD. NULL = SW.
+  fortnox_cash_payment_way   VARCHAR(20) NULL,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -164,6 +167,10 @@ CREATE TABLE IF NOT EXISTS customers (
   -- (skapar kunden i Fortnox om den saknar ett). Cachas här så kunden
   -- inte skapas dubbelt i Fortnox nästa gång.
   fortnox_customer_number VARCHAR(20) NULL,
+  -- Kontantkund (t.ex. "Swish-kund"): småköp som betalas på plats. Vid
+  -- utlämning skapas en bokförd kontantfaktura i Fortnox som inte skickas
+  -- till någon, och ordern blir Fakturerad direkt (se orders/service.js).
+  is_cash_customer   TINYINT(1) NOT NULL DEFAULT 0,
   phone              VARCHAR(50) NULL,
   address            VARCHAR(255) NULL,
   postal_code        VARCHAR(20) NULL,

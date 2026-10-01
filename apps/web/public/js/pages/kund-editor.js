@@ -31,6 +31,7 @@ const el = {
   city: document.getElementById("f-city"),
   terms: document.getElementById("f-terms"),
   notes: document.getElementById("f-notes"),
+  cash: document.getElementById("f-cash"),
   saveBtn: document.getElementById("save-btn"),
   saveError: document.getElementById("save-error"),
   contactRows: document.getElementById("contact-rows"),
@@ -166,6 +167,7 @@ async function loadCustomer() {
   el.city.value = customer.city ?? "";
   el.terms.value = customer.payment_terms_days ?? 30;
   el.notes.value = customer.notes ?? "";
+  el.cash.checked = Boolean(customer.is_cash_customer);
   renderContacts(customer.contacts);
   renderLogos(customer.logos);
 
@@ -346,6 +348,7 @@ el.saveBtn.addEventListener("click", async () => {
       city: el.city.value || null,
       paymentTermsDays: Number(el.terms.value) || 0,
       notes: el.notes.value || null,
+      isCashCustomer: el.cash.checked,
     });
     el.title.textContent = el.name.value;
   } catch (err) {

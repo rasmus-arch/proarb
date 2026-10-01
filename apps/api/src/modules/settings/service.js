@@ -70,6 +70,10 @@ export async function updateSettings(data) {
     order_ready_email_note: data.orderReadyEmailNote,
     purchase_order_email_note: data.purchaseOrderEmailNote,
     backup_keep_days: data.backupKeepDays,
+    fortnox_cash_payment_way:
+      data.fortnoxCashPaymentWay === undefined
+        ? undefined
+        : String(data.fortnoxCashPaymentWay ?? "").trim().toUpperCase().slice(0, 20) || null,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

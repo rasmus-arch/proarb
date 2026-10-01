@@ -139,6 +139,15 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN order_ready_email_note VARCHAR(1000) NULL",
     "ALTER TABLE app_settings ADD COLUMN purchase_order_email_note VARCHAR(1000) NULL",
     "ALTER TABLE app_settings ADD COLUMN backup_keep_days INT NOT NULL DEFAULT 14",
+    "ALTER TABLE customers ADD COLUMN is_cash_customer TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_cash_payment_way VARCHAR(20) NULL",
+    // Swish-kunden för småköp — skapas en gång. Finns det redan en
+    // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
+    // eller borttagen Swish-kund dyker aldrig upp igen.
+    `INSERT INTO customers (customer_number, name, is_cash_customer, payment_terms_days, notes)
+     SELECT 'SWISH', 'Swish-kund', 1, 0, 'Småköp som betalas med Swish. Utlämning skapar en kontantfaktura i Fortnox som inte skickas.'
+     FROM DUAL
+     WHERE NOT EXISTS (SELECT 1 FROM customers WHERE is_cash_customer = 1 OR customer_number = 'SWISH')`,
   ];
   for (const statement of alters) {
     try {

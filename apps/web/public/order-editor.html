@@ -124,13 +124,14 @@
 
       <div id="save-row" class="mt-4 flex justify-end gap-2">
         <button type="button" id="save-btn" class="btn">Skapa order</button>
+        <button type="button" id="cash-complete-btn" class="btn hidden" title="Skapar ordern, lämnar ut den och skapar en kontantfaktura i Fortnox">Betald – skapa och slutför</button>
       </div>
 
       <!-- Pickup -->
       <section id="pickup-section" class="mt-6 hidden card">
-        <h2 class="section-title">Registrera utlämning</h2>
-        <p class="mt-1 text-sm text-slate-600">Välj en hämtberättigad kontakt hos kunden, eller ange namn manuellt.</p>
-        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <h2 id="pickup-title" class="section-title">Registrera utlämning</h2>
+        <p id="pickup-intro" class="mt-1 text-sm text-slate-600">Välj en hämtberättigad kontakt hos kunden, eller ange namn manuellt.</p>
+        <div id="pickup-fields" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label class="block text-sm">
             <span class="flex items-center justify-between text-slate-700">
               Hämtberättigad kontakt
@@ -153,7 +154,7 @@
 
       <!-- History -->
       <section id="history-section" class="mt-6 hidden card">
-        <h2 class="section-title">Utlämningshistorik</h2>
+        <h2 class="section-title">Historik</h2>
         <ul id="history-list" class="mt-2 space-y-1 text-sm text-slate-600"></ul>
       </section>
 

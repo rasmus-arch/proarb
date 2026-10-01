@@ -49,7 +49,9 @@ function renderOrder(order) {
   if (order.status === "NEW") {
     buttons.push(`<button type="button" class="btn-secondary" data-action="ready">Redo för utlämning</button>`);
   }
-  if (order.can_pickup) {
+  if (order.can_pickup && order.is_cash_customer) {
+    buttons.push(`<button type="button" class="btn" data-action="cash-complete">Betald – slutför köp</button>`);
+  } else if (order.can_pickup) {
     buttons.push(`<button type="button" class="btn" data-action="show-pickup">Registrera utlämning</button>`);
   }
   el.orderActions.innerHTML = buttons.length
@@ -102,7 +104,23 @@ el.orderActions.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "show-pickup") {
+  // Kontantkund (Swish-kunden): ingen legitimering — utlämningen skapar en
+  // kontantfaktura i Fortnox och ordern blir fakturerad direkt.
+  if (action === "cash-complete") {
+    try {
+      await api.post(`/orders/${currentOrder.id}/pickup`, {});
+      el.orderMessage.textContent = "Köpet är slutfört — kontantfaktura skapas i Fortnox.";
+      el.orderMessage.classList.remove("hidden");
+      el.orderActions.innerHTML = "";
+      setTimeout(resetToScan, 2000);
+    } catch (err) {
+      el.scanError.textContent = err.message;
+      el.scanError.classList.remove("hidden");
+    }
+    return;
+  }
+
+    if (action === "show-pickup") {
     await loadPickupContacts(currentOrder.customer_id);
     el.pickupForm.classList.remove("hidden");
   }

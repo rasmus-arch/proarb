@@ -15,7 +15,7 @@ export async function listCustomers({ search = "", page = 1, pageSize = 25 }) {
   const like = `%${search}%`;
 
   const [rows] = await pool.query(
-    `SELECT id, customer_number, name, org_number, email, phone, city, logo_url, active
+    `SELECT id, customer_number, name, org_number, email, phone, city, logo_url, active, is_cash_customer
      FROM customers
      WHERE active = 1 AND (name LIKE ? OR customer_number LIKE ? OR org_number LIKE ?)
      ORDER BY name ASC
@@ -127,8 +127,8 @@ export async function createCustomer(data) {
 
   const [result] = await pool.query(
     `INSERT INTO customers
-       (customer_number, name, org_number, email, invoice_email, phone, address, postal_code, city, logo_url, payment_terms_days, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (customer_number, name, org_number, email, invoice_email, phone, address, postal_code, city, logo_url, payment_terms_days, notes, is_cash_customer)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       customerNumber,
       data.name,
@@ -142,6 +142,7 @@ export async function createCustomer(data) {
       data.logoUrl ?? null,
       data.paymentTermsDays ?? (await getSettings())?.default_payment_terms_days ?? 30,
       data.notes ?? null,
+      data.isCashCustomer ? 1 : 0,
     ]
   );
 
@@ -161,6 +162,7 @@ export async function updateCustomer(id, data) {
     logo_url: data.logoUrl,
     payment_terms_days: data.paymentTermsDays,
     notes: data.notes,
+    is_cash_customer: data.isCashCustomer === undefined ? undefined : data.isCashCustomer ? 1 : 0,
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);
