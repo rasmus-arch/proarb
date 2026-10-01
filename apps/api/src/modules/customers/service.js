@@ -104,6 +104,15 @@ export async function sendInactiveCustomerReminder(customerId, months) {
   return { sent: result.ok, reason: result.note ?? result.reason };
 }
 
+export async function listLogos(customerId) {
+  const [logos] = await pool.query(
+    `SELECT id, name, file_path, original_filename, mime_type, file_size, created_at
+     FROM customer_logos WHERE customer_id = ? ORDER BY created_at ASC, id ASC`,
+    [customerId]
+  );
+  return logos;
+}
+
 export async function getCustomer(id) {
   const [[customer]] = await pool.query(`SELECT * FROM customers WHERE id = ?`, [id]);
   if (!customer) return null;

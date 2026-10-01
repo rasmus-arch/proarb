@@ -1,5 +1,27 @@
+import path from "node:path";
 import * as customers from "./service.js";
 import { getSettings } from "../settings/service.js";
+import { ensurePreviewFile, isPreviewable } from "../../lib/preview.js";
+
+const BROWSER_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".svg", ".webp"]);
+
+// Kundens egna loggor (kund-editorn → Loggor & tryckunderlag), med en
+// visningsbar bild för var och en: bildformat visas som de är, EPS/PDF via
+// den PNG-förhandsbild som preview.js skapar (null om filen inte går att
+// rendera — då visas bara namnet och nedladdningslänken).
+async function portalLogos(customerId) {
+  const logos = await customers.listLogos(customerId);
+  return Promise.all(
+    logos.map(async (logo) => {
+      const ext = path.extname(logo.file_path).toLowerCase();
+      let displayPath = BROWSER_IMAGE_EXTENSIONS.has(ext) ? logo.file_path : null;
+      if (!displayPath && isPreviewable(logo.file_path)) {
+        displayPath = await ensurePreviewFile(logo.file_path).catch(() => null);
+      }
+      return { ...logo, display_url: displayPath ? `/uploads/${displayPath}` : null };
+    })
+  );
+}
 
 // Kept in sync with apps/web/public/js/order-status.js — duplicated rather
 // than shared because this page is server-rendered (plain HTML response,
@@ -135,6 +157,25 @@ export async function renderPortalPage(req, res) {
 
   const { customer, products: flatProducts, orders, contacts } = result;
   const products = groupByProduct(flatProducts);
+  const logos = await portalLogos(customer.id);
+  // Första uppladdade loggan som går att visa = kundens "huvudlogga" i sidhuvudet.
+  const mainLogo = logos.find((l) => l.display_url);
+
+  const logoCards = logos
+    .map(
+      (l) => `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+          <div style="height:96px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:6px;padding:8px;">
+            ${
+              l.display_url
+                ? `<img src="${escapeHtml(l.display_url)}" alt="${escapeHtml(l.name)}" style="max-height:100%;max-width:100%;object-fit:contain;" />`
+                : `<span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;">${escapeHtml(path.extname(l.original_filename).slice(1) || "fil")}</span>`
+            }
+          </div>
+          <div style="font-size:13px;font-weight:600;">${escapeHtml(l.name)}</div>
+          <a href="/uploads/${escapeHtml(l.file_path)}" download="${escapeHtml(l.original_filename)}" style="font-size:12px;color:#475569;">Ladda ner (${escapeHtml(path.extname(l.original_filename).slice(1).toUpperCase() || "fil")})</a>
+        </div>`
+    )
+    .join("");
 
   const blocks = products
     .map((p) => {
@@ -248,6 +289,11 @@ export async function renderPortalPage(req, res) {
   <div class="card" style="text-align:center;padding:32px 24px 28px;border-top:4px solid ${brandColor};">
     ${logoHtml}
     <p style="color:#94a3b8;margin:10px 0 0;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;font-weight:600;">Mina sidor</p>
+    ${
+      mainLogo
+        ? `<img src="${escapeHtml(mainLogo.display_url)}" alt="${escapeHtml(customer.name)}" style="display:block;margin:14px auto 6px;max-height:72px;max-width:260px;object-fit:contain;" />`
+        : ""
+    }
     <h1 style="margin:2px 0 0;font-size:22px;">${escapeHtml(customer.name)}</h1>
   </div>
 
@@ -303,6 +349,16 @@ export async function renderPortalPage(req, res) {
         : ""
     }
   </div>
+
+  ${
+    logoCards
+      ? `<div class="card">
+          <h2 class="section-heading">Era loggor</h2>
+          <p style="color:#64748b;font-size:13px;margin:4px 0 0;">De loggor och tryckunderlag vi har sparade för er.</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px;">${logoCards}</div>
+        </div>`
+      : ""
+  }
 
   <div id="lightbox-overlay" class="lightbox-overlay">
     <img id="lightbox-img" src="" alt="" />

@@ -10,6 +10,10 @@ const el = {
   topProductsRows: document.getElementById("top-products-rows"),
   topCategoriesRows: document.getElementById("top-categories-rows"),
   topCustomersRows: document.getElementById("top-customers-rows"),
+  summaryDiscount: document.getElementById("summary-discount"),
+  summaryPrint: document.getElementById("summary-print"),
+  discountCustomerRows: document.getElementById("discount-customer-rows"),
+  discountProductRows: document.getElementById("discount-product-rows"),
   pipelineCount: document.getElementById("pipeline-count"),
   pipelineValue: document.getElementById("pipeline-value"),
   pipelineOldest: document.getElementById("pipeline-oldest"),
@@ -59,6 +63,34 @@ async function loadSummary() {
   }
   if (summary.lines_missing_cost > 0) notes.push("Vissa produkter saknar inköpspris och räknas inte med i marginalen.");
   el.summaryIncompleteNote.textContent = `* ${notes.join(" ")}`;
+
+  el.summaryDiscount.textContent = money(summary.discount_amount);
+  el.summaryPrint.textContent =
+    summary.print_revenue > 0
+      ? `Varav tryck & brodyr i omsättningen: ${money(summary.print_revenue)} (räknas inte i marginalen)`
+      : "";
+}
+
+function discountRowsHtml(rows, emptyText) {
+  return (
+    rows
+      .map(
+        (r) => `
+      <tr>
+        <td class="py-1.5 pr-2 text-slate-900">${escapeHtml(r.name)}</td>
+        <td class="py-1.5 pr-2 text-right text-slate-500">${money(r.gross_ex_vat)}</td>
+        <td class="py-1.5 pr-2 text-right font-medium">${money(r.discount_amount)}</td>
+        <td class="py-1.5 text-right text-slate-500">${r.discount_percent.toFixed(1)} %</td>
+      </tr>`
+      )
+      .join("") || `<tr><td colspan="4" class="py-3 text-center text-slate-500">${emptyText}</td></tr>`
+  );
+}
+
+async function loadDiscounts() {
+  const data = await api.get(`/stats/discounts?${rangeParams()}`);
+  el.discountCustomerRows.innerHTML = discountRowsHtml(data.by_customer, "Inga rabatter i perioden.");
+  el.discountProductRows.innerHTML = discountRowsHtml(data.by_product, "Inga rabatter i perioden.");
 }
 
 async function loadTopProducts() {
@@ -187,7 +219,7 @@ async function loadTrend() {
 }
 
 async function loadAll() {
-  await Promise.all([loadSummary(), loadTopProducts(), loadTopCategories(), loadTopCustomers(), loadPipeline()]);
+  await Promise.all([loadSummary(), loadTopProducts(), loadTopCategories(), loadTopCustomers(), loadDiscounts(), loadPipeline()]);
 }
 
 loadTrend();

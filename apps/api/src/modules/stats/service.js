@@ -16,40 +16,64 @@ function defaultRange({ from, to }) {
 // be a second channel here, POS/kassa sale_lines/sales — removed along
 // with the rest of that feature; see schema.sql.)
 //
-// product_variant_id can be NULL here (fritextrad — a free-text line with
-// no catalog product behind it). Every query below LEFT JOINs product_variants/
-// products (not JOIN) so those lines still count toward revenue/customer/
-// category totals — same "unknown, not zero" treatment already used for
-// cost_price IS NULL (margin excluded, lines_missing_cost counted). Only
-// getTopProducts stays an inner join: a line with no product can't be a
-// "top product" by definition.
+// Varje orderrad ger en rad här, plus en EXTRA rad för tryck/brodyr när
+// raden har ett tryckpris (is_print = 1). Trycket räknas alltså som en egen
+// "produkt" (Tryck & brodyr) i omsättning, topplistor, kategorier och
+// rabatter. Tryck har inget inköpspris och räknas inte med i marginalen.
+//
+// product_variant_id is NULL for fritextrader and for the tryck rows. Every
+// query below LEFT JOINs product_variants/products so those still count
+// toward revenue/customer/category totals.
+//
+// gross = före rabatt, revenue = efter rabatt — skillnaden är rabatten
+// ("pengar vi ger bort"), se getDiscounts.
 const SALE_SOURCE_CTE = `
-  WITH sale_source AS (
-    SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent,
-           o.id AS order_id, o.created_at, o.customer_id,
-           CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE sp.cost_price END AS cost_price,
+  WITH sold_orders AS (
+    SELECT o.id, o.created_at, o.customer_id,
            EXISTS (
              SELECT 1 FROM order_lines fx
              WHERE fx.order_id = o.id AND fx.product_variant_id IS NULL AND fx.cost_price IS NULL
            ) AS margin_excluded
+    FROM orders o
+    WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
+  ),
+  sale_source AS (
+    SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent, 0 AS is_print,
+           o.id AS order_id, o.created_at, o.customer_id, o.margin_excluded,
+           CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE sp.cost_price END AS cost_price
     FROM order_lines ol
-    JOIN orders o ON o.id = ol.order_id
+    JOIN sold_orders o ON o.id = ol.order_id
     LEFT JOIN product_variants sv ON sv.id = ol.product_variant_id
     LEFT JOIN products sp ON sp.id = sv.product_id
-    WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
+    UNION ALL
+    SELECT NULL, ol.quantity, ol.print_price, ol.print_discount_percent, 1,
+           o.id, o.created_at, o.customer_id, o.margin_excluded,
+           NULL
+    FROM order_lines ol
+    JOIN sold_orders o ON o.id = ol.order_id
+    WHERE ol.print_price IS NOT NULL AND ol.print_price <> 0
   )
 `;
 
-// Rader som räknas in i marginalen: inköpspris känt OCH ordern har ingen
-// fritextrad utan inköpspris (en sådan order utesluts helt — annars skulle
-// fritextradens försäljning se ut som ren vinst eller dra ner procenten).
-const MARGIN_LINE = "(ss.margin_excluded = 0 AND ss.cost_price IS NOT NULL)";
+// Rader som räknas in i marginalen: inköpspris känt, inte tryck, OCH
+// ordern har ingen fritextrad utan inköpspris (en sådan order utesluts
+// helt — annars skulle fritextradens försäljning se ut som ren vinst eller
+// dra ner procenten).
+const MARGIN_LINE = "(ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NOT NULL)";
+const LINE_GROSS = "ss.quantity * ss.unit_price";
 const LINE_REVENUE = "ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)";
-// Per grupp (produkt/kategori/kund): NULL när någon rad saknar inköpspris
-// eller allt i gruppen ligger i uteslutna ordrar.
-const GROUP_MARGIN = `CASE WHEN MAX(ss.margin_excluded = 0 AND ss.cost_price IS NULL) = 1 OR MIN(ss.margin_excluded) = 1
+const LINE_DISCOUNT = "ss.quantity * ss.unit_price * ss.discount_percent / 100";
+// Per grupp (produkt/kategori/kund): NULL när någon (icke-tryck-)rad saknar
+// inköpspris eller inget i gruppen alls kan räknas.
+const GROUP_MARGIN = `CASE WHEN MAX(ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NULL) = 1
+                   OR MIN(ss.margin_excluded = 1 OR ss.is_print = 1) = 1
                  THEN NULL
                  ELSE SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} - ss.quantity * ss.cost_price ELSE 0 END) END`;
+
+const PRINT_NAME = "'Tryck & brodyr'";
+const ITEM_NAME = `CASE WHEN ss.is_print = 1 THEN ${PRINT_NAME} WHEN ss.product_variant_id IS NULL THEN 'Fritextrader' ELSE p.name END`;
+const CATEGORY_ID = "CASE WHEN ss.is_print = 1 THEN -1 ELSE COALESCE(pc.id, 0) END";
+const CATEGORY_NAME = `CASE WHEN ss.is_print = 1 THEN ${PRINT_NAME} ELSE COALESCE(pc.name, 'Okategoriserad') END`;
 
 function rangeParams(range) {
   return [range.from, range.to];
@@ -61,9 +85,11 @@ export async function getSummary(rangeInput) {
     `${SALE_SOURCE_CTE}
      SELECT
        COALESCE(SUM(${LINE_REVENUE}), 0) AS revenue_ex_vat,
+       COALESCE(SUM(${LINE_DISCOUNT}), 0) AS discount_amount,
+       COALESCE(SUM(CASE WHEN ss.is_print = 1 THEN ${LINE_REVENUE} ELSE 0 END), 0) AS print_revenue,
        COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} - ss.quantity * ss.cost_price ELSE 0 END), 0) AS margin_amount,
        COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} ELSE 0 END), 0) AS margin_revenue,
-       SUM(CASE WHEN ss.margin_excluded = 0 AND ss.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
+       SUM(CASE WHEN ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
        COUNT(DISTINCT CASE WHEN ss.margin_excluded = 1 THEN ss.order_id END) AS excluded_orders,
        COUNT(*) AS line_count
      FROM sale_source ss`,
@@ -81,6 +107,8 @@ export async function getSummary(rangeInput) {
     margin_percent: marginRevenue > 0 ? round2((margin / marginRevenue) * 100) : 0,
     margin_incomplete: Number(row.lines_missing_cost) > 0 || Number(row.excluded_orders) > 0,
     lines_missing_cost: Number(row.lines_missing_cost),
+    discount_amount: round2(Number(row.discount_amount)),
+    print_revenue: round2(Number(row.print_revenue)),
     excluded_orders: Number(row.excluded_orders),
   };
 }
@@ -118,16 +146,20 @@ export async function getDailySalesTrend(days = 90) {
 
 export async function getTopProducts(rangeInput, limit = 20) {
   const range = defaultRange(rangeInput);
+  // Fritextrader är inga produkter och hoppas över här; tryck räknas som
+  // en egen produkt ("Tryck & brodyr").
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
-     SELECT p.id AS product_id, p.name,
+     SELECT CASE WHEN ss.is_print = 1 THEN NULL ELSE p.id END AS product_id,
+            ${ITEM_NAME} AS name,
             SUM(ss.quantity) AS total_qty,
-            SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
+            SUM(${LINE_REVENUE}) AS revenue_ex_vat,
             ${GROUP_MARGIN} AS margin_amount
      FROM sale_source ss
-     JOIN product_variants v ON v.id = ss.product_variant_id
-     JOIN products p ON p.id = v.product_id
-     GROUP BY p.id, p.name
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
+     WHERE ss.product_variant_id IS NOT NULL OR ss.is_print = 1
+     GROUP BY 1, 2
      ORDER BY revenue_ex_vat DESC
      LIMIT ?`,
     [...rangeParams(range), limit]
@@ -144,7 +176,7 @@ export async function getTopCategories(rangeInput, limit = 20) {
   const range = defaultRange(rangeInput);
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
-     SELECT COALESCE(pc.id, 0) AS category_id, COALESCE(pc.name, 'Okategoriserad') AS name,
+     SELECT ${CATEGORY_ID} AS category_id, ${CATEGORY_NAME} AS name,
             SUM(ss.quantity) AS total_qty,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat,
             ${GROUP_MARGIN} AS margin_amount
@@ -152,7 +184,7 @@ export async function getTopCategories(rangeInput, limit = 20) {
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN product_categories pc ON pc.id = p.category_id
-     GROUP BY COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
+     GROUP BY 1, 2
      ORDER BY revenue_ex_vat DESC
      LIMIT ?`,
     [...rangeParams(range), limit]
@@ -181,14 +213,14 @@ export async function getMonthlyCategoryTrend(months = 12) {
   const [rows] = await pool.query(
     `${SALE_SOURCE_CTE}
      SELECT DATE_FORMAT(ss.created_at, '%Y-%m') AS month,
-            COALESCE(pc.id, 0) AS category_id, COALESCE(pc.name, 'Okategoriserad') AS category_name,
+            ${CATEGORY_ID} AS category_id, ${CATEGORY_NAME} AS category_name,
             SUM(ss.quantity) AS total_qty,
             SUM(ss.quantity * ss.unit_price * (1 - ss.discount_percent / 100)) AS revenue_ex_vat
      FROM sale_source ss
      LEFT JOIN product_variants v ON v.id = ss.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
      LEFT JOIN product_categories pc ON pc.id = p.category_id
-     GROUP BY month, COALESCE(pc.id, 0), COALESCE(pc.name, 'Okategoriserad')
+     GROUP BY 1, 2, 3
      ORDER BY month ASC`,
     [from, to]
   );
@@ -274,4 +306,50 @@ export async function getTopCustomers(rangeInput, limit = 20) {
     revenue_ex_vat: round2(Number(r.revenue_ex_vat)),
     margin_amount: r.margin_amount === null ? null : round2(Number(r.margin_amount)),
   }));
+}
+
+// Rabatter: hur mycket som "ges bort" i rabatt (rabatt-% på raden, och på
+// trycket), per kund och per produkt. gross = före rabatt.
+export async function getDiscounts(rangeInput, limit = 20) {
+  const range = defaultRange(rangeInput);
+  const params = [...rangeParams(range), limit];
+  const [byCustomer] = await pool.query(
+    `${SALE_SOURCE_CTE}
+     SELECT c.id AS customer_id, c.name,
+            SUM(${LINE_GROSS}) AS gross_ex_vat,
+            SUM(${LINE_DISCOUNT}) AS discount_amount
+     FROM sale_source ss
+     JOIN customers c ON c.id = ss.customer_id
+     GROUP BY c.id, c.name
+     HAVING discount_amount > 0
+     ORDER BY discount_amount DESC
+     LIMIT ?`,
+    params
+  );
+  const [byProduct] = await pool.query(
+    `${SALE_SOURCE_CTE}
+     SELECT CASE WHEN ss.is_print = 1 OR ss.product_variant_id IS NULL THEN NULL ELSE p.id END AS product_id,
+            ${ITEM_NAME} AS name,
+            SUM(${LINE_GROSS}) AS gross_ex_vat,
+            SUM(${LINE_DISCOUNT}) AS discount_amount
+     FROM sale_source ss
+     LEFT JOIN product_variants v ON v.id = ss.product_variant_id
+     LEFT JOIN products p ON p.id = v.product_id
+     GROUP BY 1, 2
+     HAVING discount_amount > 0
+     ORDER BY discount_amount DESC
+     LIMIT ?`,
+    params
+  );
+  const shape = (r) => {
+    const gross = Number(r.gross_ex_vat);
+    const discount = Number(r.discount_amount);
+    return {
+      ...r,
+      gross_ex_vat: round2(gross),
+      discount_amount: round2(discount),
+      discount_percent: gross > 0 ? round2((discount / gross) * 100) : 0,
+    };
+  };
+  return { range, by_customer: byCustomer.map(shape), by_product: byProduct.map(shape) };
 }
