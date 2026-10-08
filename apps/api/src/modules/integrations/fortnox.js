@@ -566,12 +566,35 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
 
 // Emails an already-created invoice (see createCustomerInvoice above) to
 // the customer from Fortnox. Called when an order is marked "Fakturerad".
-export async function sendCustomerInvoice({ settings, externalRef } = {}) {
+//
+// Motsvarar "Bokför & skicka" i Fortnox: fakturan bokförs först (om den
+// inte redan är bokförd — kontrolleras mot Fortnox), sedan mejlas den.
+// `email: false` (kunden saknar e-post) bokför bara.
+export async function sendCustomerInvoice({ settings, externalRef, email = true } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   if (!externalRef) return { ok: false, reason: "NO_REF", note: "Ingen Fortnox-faktura att skicka." };
-  await step("Kunde inte mejla fakturan från Fortnox", () =>
+  const path = `/invoices/${encodeURIComponent(externalRef)}`;
+  let current = settings;
+
+  const { data, settings: afterLoad } = await step("Kunde inte läsa fakturan i Fortnox", () => fortnoxRequest(current, path));
+  current = afterLoad;
+  if (!data.Invoice?.Booked) {
+    ({ settings: current } = await step("Kunde inte bokföra fakturan i Fortnox", () =>
+      fortnoxRequest(current, `${path}/bookkeep`, { method: "PUT", body: {} })
+    ));
+    const { data: check, settings: afterCheck } = await fortnoxRequest(current, path);
+    current = afterCheck;
+    if (!check.Invoice?.Booked) {
+      throw new Error(
+        "Fortnox visar inte fakturan som bokförd. Kontrollera att användaren som anslöt har licens för bokföring."
+      );
+    }
+  }
+  if (!email) return { ok: true, booked: true, emailed: false };
+
+  await step("Fakturan bokfördes men kunde inte mejlas från Fortnox", () =>
     // Fortnox skickar fakturan som e-post på GET (inte PUT).
-    fortnoxRequest(settings, `/invoices/${encodeURIComponent(externalRef)}/email`)
+    fortnoxRequest(current, `${path}/email`)
   );
-  return { ok: true };
+  return { ok: true, booked: true, emailed: true };
 }

@@ -739,6 +739,7 @@ async function changeStatus(orderId, status, sendEmail) {
 function notificationText({ status, sent, reason }) {
   if (status === "CASH") return `Ordern skapades men kunde inte slutföras: ${reason ?? "okänt fel"}`;
   const subject = status === "INVOICED" ? "Fakturan" : "E-post till kund";
+  if (status === "INVOICED") return sent ? "Fakturan bokfördes och skickades från Fortnox." : `Fakturan: ${reason ?? "okänt fel"}`;
   return sent ? `${subject} skickades.` : `${subject} skickades inte: ${reason ?? "okänt fel"}`;
 }
 

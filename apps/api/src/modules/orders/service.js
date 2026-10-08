@@ -517,22 +517,22 @@ async function sendOrderInvoiceFromFortnox(orderId) {
      FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = ?`,
     [orderId]
   );
-  if (!recipient?.email) {
-    const reason = "Kunden saknar e-postadress — fakturan finns i Fortnox men måste skickas därifrån (eller lägg till e-post på kunden och försök igen).";
-    // FAILED så att "Skicka till Fortnox igen" visas när e-post lagts till.
-    await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [reason, invoice.id]);
-    return { sent: false, reason };
-  }
-
   try {
     const settings = await getSettings();
+    // Bokför & skicka. Saknar kunden e-post bokförs fakturan ändå.
     const result = await sendCustomerInvoice({
       settings,
       externalRef: invoice.external_ref,
-      invoiceNumber: invoice.invoice_number,
+      email: Boolean(recipient?.email),
     });
+    if (result.ok && !result.emailed) {
+      const reason = "Bokförd i Fortnox, men kunden saknar e-postadress — skicka fakturan från Fortnox (eller lägg till e-post på kunden och försök igen).";
+      // FAILED så att "Skicka till Fortnox igen" visas när e-post lagts till.
+      await pool.query(`UPDATE invoices SET status = 'FAILED', status_note = ? WHERE id = ?`, [reason, invoice.id]);
+      return { sent: false, reason };
+    }
     if (result.ok) {
-      await pool.query(`UPDATE invoices SET status = 'SYNCED', sent_at = NOW() WHERE id = ?`, [invoice.id]);
+      await pool.query(`UPDATE invoices SET status = 'SYNCED', status_note = NULL, sent_at = NOW() WHERE id = ?`, [invoice.id]);
       return { sent: true };
     }
     await pool.query(`UPDATE invoices SET status_note = ? WHERE id = ?`, [result.note ?? result.reason, invoice.id]);
