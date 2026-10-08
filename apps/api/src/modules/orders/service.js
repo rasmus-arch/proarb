@@ -12,6 +12,7 @@ import {
 } from "../../lib/lines.js";
 import { completeCashInvoice, createCustomerInvoice, sendCustomerInvoice } from "../integrations/fortnox.js";
 import { sendOrderReadyEmail, sendPickupReminderEmail } from "../integrations/email.js";
+import { notifyOrderDelivered } from "./notifications.js";
 import { getSettings } from "../settings/service.js";
 
 // Sekventiella ordernummer (ORD-0001, ORD-0002, ...) istället för
@@ -176,7 +177,7 @@ async function loadOrderLines(orderId) {
     `SELECT ol.*, COALESCE(p.name, ol.description) AS product_name,
             COALESCE(p.tax_rate_percent, ol.tax_rate_percent) AS tax_rate_percent,
             CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE p.cost_price END AS cost_price,
-            v.sku, v.color, v.size
+            v.sku, v.color, v.size, p.shelf_location
      FROM order_lines ol
      LEFT JOIN product_variants v ON v.id = ol.product_variant_id
      LEFT JOIN products p ON p.id = v.product_id
@@ -484,7 +485,7 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
       const settings = await getSettings();
       const result = await sendOrderReadyEmail({
         settings,
-        to: order.customer_email,
+        to: order.notify_email || order.customer_email,
         customerName: order.customer_name,
         orderNumber: order.order_number,
         note: settings?.order_ready_email_note,
@@ -608,7 +609,9 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   }
 
   await syncInvoiceToFortnox(invoiceId, order, { cash });
-  return getOrder(orderId);
+  const delivered = await getOrder(orderId);
+  notifyOrderDelivered(delivered, delivered.pickups.at(-1)?.picked_up_by_contact_name || pickedUpByName?.trim());
+  return delivered;
 }
 
 // Skapar orderns faktura i Fortnox (kontantfaktura för kontantkunder).
@@ -750,11 +753,11 @@ export async function sendPickupReminder(id) {
   const order = await getOrder(id);
   if (!order) throw new Error("ORDER_NOT_FOUND");
   if (order.status !== "READY_FOR_PICKUP") throw new Error("NOT_READY");
-  if (!order.customer_email) throw new Error("NO_CUSTOMER_EMAIL");
+  if (!order.notify_email && !order.customer_email) throw new Error("NO_CUSTOMER_EMAIL");
   const settings = await getSettings();
   const result = await sendPickupReminderEmail({
     settings,
-    to: order.customer_email,
+    to: order.notify_email || order.customer_email,
     customerName: order.reference_name || order.customer_name,
     orderNumber: order.order_number,
     readySince: order.ready_at ?? order.updated_at,

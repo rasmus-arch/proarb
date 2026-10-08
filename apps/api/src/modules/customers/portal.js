@@ -27,7 +27,7 @@ async function portalLogos(customerId) {
 // than shared because this page is server-rendered (plain HTML response,
 // not a browser ES module) while that file is client-side only.
 const ORDER_STATUS_LABELS = {
-  NEW: "Order",
+  NEW: "Bekräftad",
   READY_FOR_PICKUP: "Redo för utlämning",
   DELIVERED: "Utlämnad",
   INVOICED: "Fakturerad",
@@ -205,7 +205,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     ? `<img src="/uploads/${settings.seller_logo_path}" alt="${escapeHtml(sellerName)}" style="height:52px;width:auto;max-width:240px;margin:0 auto;display:block;" />`
     : `<div style="font-size:20px;font-weight:700;color:${brandColor};">${escapeHtml(sellerName)}</div>`;
 
-  const { customer, products: flatProducts, orders, contacts } = result;
+  const { customer, products: flatProducts, orders, contacts, pendingRequests } = result;
   const products = groupByProduct(flatProducts);
   const logos = await portalLogos(customer.id);
   // Första uppladdade loggan som går att visa = kundens "huvudlogga" i sidhuvudet.
@@ -294,7 +294,20 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     })
     .join("");
 
-  const orderRows = (orders ?? [])
+  const pendingRows = (pendingRequests ?? [])
+    .map(
+      (r) => `<tr>
+          <td style="padding:6px 8px;font-weight:500;color:#64748b;">Beställning</td>
+          <td style="padding:6px 8px;color:#64748b;">${new Date(r.created_at).toLocaleDateString("sv-SE")}</td>
+          <td style="padding:6px 8px;text-align:right;">
+            <span style="display:inline-block;border-radius:9999px;background:#e0f2fe;color:#0369a1;font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">Mottagen – väntar på bekräftelse</span>
+          </td>
+          <td></td>
+        </tr>`
+    )
+    .join("");
+
+  const orderRows = pendingRows + (orders ?? [])
     .map((o) => {
       const color = ORDER_STATUS_COLORS[o.status] ?? ORDER_STATUS_COLORS.NEW;
       return `<tr>

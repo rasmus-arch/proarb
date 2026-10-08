@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { loadFeatures } from "../features.js";
 import { renderPager } from "../pagination.js";
 
 const rowsEl = document.getElementById("product-rows");
@@ -208,6 +209,7 @@ newProductForm.addEventListener("submit", async (event) => {
     supplier: form.supplier,
     basePrice: Number(form.basePrice),
     costPrice: form.costPrice ? Number(form.costPrice) : undefined,
+    ...(features?.shelfLocations ? { shelfLocation: form.shelfLocation || null } : {}),
     variants: [
       {
         color: form.variantColor || undefined,
@@ -289,6 +291,7 @@ async function openEditDialog(productId) {
   editProductForm.elements.basePrice.value = product.base_price ?? "";
   editProductForm.elements.costPrice.value = product.cost_price ?? "";
   editProductForm.elements.discontinued.checked = Boolean(product.discontinued);
+  editProductForm.elements.shelfLocation.value = product.shelf_location ?? "";
   editProductForm.dataset.productId = productId;
   renderEditVariants(product.variants.filter((v) => v.active));
   renderEditImage(product.image_url);
@@ -409,6 +412,7 @@ editProductForm.addEventListener("submit", async (event) => {
     basePrice: Number(form.basePrice),
     costPrice: form.costPrice ? Number(form.costPrice) : null,
     discontinued: editProductForm.elements.discontinued.checked,
+    ...(features?.shelfLocations ? { shelfLocation: form.shelfLocation || null } : {}),
   };
 
   try {
@@ -583,4 +587,11 @@ document.getElementById("barcode-sheet-create").addEventListener("click", async 
   const url = URL.createObjectURL(await res.blob());
   if (tab) tab.location.href = url;
   else window.open(url, "_blank");
+});
+
+// Hyllplats (Inställningar → Funktioner).
+let features = null;
+loadFeatures().then((f) => {
+  features = f;
+  document.querySelectorAll(".shelf-field").forEach((n) => n.classList.toggle("hidden", !f.shelfLocations));
 });

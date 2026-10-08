@@ -151,6 +151,12 @@ export async function addSupplier(productId, { supplierId, supplierSku, costPric
   return getProduct(productId);
 }
 
+// Hyllplats, t.ex. "A3-2". Tomt = ingen.
+function shelfLocation(value) {
+  if (value === undefined) return undefined;
+  return String(value ?? "").trim().slice(0, 50) || null;
+}
+
 export async function createProduct(data) {
   const categoryId = data.categoryId ?? (await resolveNameToId("product_categories", data.category));
   const brandId = data.brandId ?? (await resolveNameToId("brands", data.brand));
@@ -161,8 +167,8 @@ export async function createProduct(data) {
 
   const [result] = await pool.query(
     `INSERT INTO products
-       (article_number, name, description, category_id, brand_id, supplier_id, printable, unit, tax_rate_percent, base_price, cost_price)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (article_number, name, description, category_id, brand_id, supplier_id, printable, unit, tax_rate_percent, base_price, cost_price, shelf_location)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       articleNumber,
       data.name,
@@ -175,6 +181,7 @@ export async function createProduct(data) {
       data.taxRatePercent ?? (await getSettings())?.default_tax_rate_percent ?? 25,
       data.basePrice,
       data.costPrice ?? null,
+      shelfLocation(data.shelfLocation) ?? null,
     ]
   );
 
@@ -208,6 +215,7 @@ export async function updateProduct(id, data) {
     cost_price: data.costPrice,
     image_url: data.imageUrl,
     discontinued: data.discontinued === undefined ? undefined : data.discontinued ? 1 : 0,
+    shelf_location: shelfLocation(data.shelfLocation),
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);

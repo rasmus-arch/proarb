@@ -17,6 +17,7 @@
         <button type="button" class="tab-btn" data-settings-tab="offerter">Offerter & ordrar</button>
         <button type="button" class="tab-btn" data-settings-tab="paminnelser">Påminnelser & e-post</button>
         <button type="button" class="tab-btn" data-settings-tab="kundportal">Sortilog</button>
+        <button type="button" class="tab-btn" data-settings-tab="funktioner">Funktioner</button>
         <button type="button" class="tab-btn" data-settings-tab="integrationer">Integrationer</button>
         <button type="button" class="tab-btn" data-settings-tab="sakerhetskopior">Säkerhetskopior</button>
         <button type="button" class="tab-btn" data-settings-tab="anvandare">Användare</button>
@@ -190,6 +191,31 @@
         </div>
       </section>
       <section class="card">
+        <h2 class="section-title">Statusmejl till kunden</h2>
+        <p class="mt-1 text-sm text-slate-600">Går till personen som beställde via Sortilog, annars till kundens e-post. Kontantkunder får inga mejl.</p>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-notify-received" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Beställning mottagen</span>
+            <span class="block text-slate-500">När kunden skickar en beställning från Sortilog — med vad som beställts.</span>
+          </span>
+        </label>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-notify-confirmed" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Orderbekräftelse</span>
+            <span class="block text-slate-500">När beställningen görs om till en order — med ordernummer och innehåll.</span>
+          </span>
+        </label>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-notify-delivered" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Utlämnad</span>
+            <span class="block text-slate-500">När ordern hämtas ut — med vem som hämtade.</span>
+          </span>
+        </label>
+      </section>
+      <section class="card">
         <h2 class="section-title">Egna texter i mejl</h2>
         <label class="mt-3 block text-sm">
           <span class="text-slate-700">Till kund när ordern är redo eller inte hämtats (t.ex. öppettider)</span>
@@ -235,6 +261,34 @@
         </div>
       </section>
 
+      </div>
+
+      <div class="mt-5 hidden space-y-4" data-settings-panel="funktioner">
+      <section class="card">
+        <h2 class="section-title">Funktioner</h2>
+        <p class="mt-1 text-sm text-slate-600">Slå av det ni inte använder så syns det inte i systemet.</p>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-fortnox-payment-status" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Betalstatus från Fortnox</span>
+            <span class="block text-slate-500">Obetalda och förfallna fakturor per kund hämtas från Fortnox och visas på kunden, i ordern och på Översikt. Kräver att Fortnox är kopplat.</span>
+          </span>
+        </label>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-credit-limits" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Kreditgräns per kund</span>
+            <span class="block text-slate-500">Fält för kreditgräns på kunden (valfritt per kund). Ordern varnar när kundens obetalda fakturor och öppna ordrar plus den nya ordern går över gränsen.</span>
+          </span>
+        </label>
+        <label class="mt-3 flex items-start gap-2 text-sm">
+          <input id="s-shelf-locations" type="checkbox" class="mt-0.5 rounded border-slate-300" />
+          <span>
+            <span class="text-slate-700">Hyllplats på produkter</span>
+            <span class="block text-slate-500">Fält för hyllplats (t.ex. A3-2) på produkten. Visas på ordersedeln och i ordern, och plocklistan sorteras efter hyllplats.</span>
+          </span>
+        </label>
+      </section>
       </div>
 
       <div class="mt-5 hidden space-y-4" data-settings-panel="kundportal">

@@ -58,6 +58,61 @@ export async function sendOrderReadyEmail({ settings, to, customerName, orderNum
   return dispatch({ settings, to, subject: `Order ${orderNumber} är redo för avhämtning`, html });
 }
 
+// --- Statusmejl till kunden (av/på under Inställningar → Påminnelser) ---
+
+function linesTableHtml(lines, totalIncVat) {
+  if (!lines?.length) return "";
+  const rows = lines
+    .map(
+      (l) => `<tr>
+        <td style="padding:4px 8px 4px 0;border-bottom:1px solid #e2e8f0;">${escapeHtml(l.name)}</td>
+        <td style="padding:4px 0;border-bottom:1px solid #e2e8f0;text-align:right;white-space:nowrap;">${escapeHtml(
+          Number(l.quantity).toLocaleString("sv-SE")
+        )} st</td>
+      </tr>`
+    )
+    .join("");
+  const total =
+    totalIncVat !== undefined && totalIncVat !== null
+      ? `<tr><td style="padding:8px 8px 0 0;font-weight:600;">Totalt inkl moms</td><td style="padding:8px 0 0;text-align:right;font-weight:600;white-space:nowrap;">${money(totalIncVat)}</td></tr>`
+      : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;font-size:14px;">${rows}${total}</table>`;
+}
+
+// Kunden har skickat en beställning från Sortilog.
+export async function sendRequestReceivedEmail({ settings, to, customerName, lines, totalIncVat }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Vi har tagit emot din beställning",
+    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Tack! Vi har tagit emot din beställning och återkommer med en bekräftelse så snart vi har gått igenom den.</p>${linesTableHtml(
+      lines,
+      totalIncVat
+    )}`,
+  });
+  return dispatch({ settings, to, subject: "Vi har tagit emot din beställning", html });
+}
+
+// En säljare har gjort beställningen till en order.
+export async function sendOrderConfirmedEmail({ settings, to, customerName, orderNumber, lines, totalIncVat }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Orderbekräftelse",
+    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Din beställning är bekräftad och har ordernummer <strong>${escapeHtml(
+      orderNumber
+    )}</strong>. Vi hör av oss när den är redo att hämtas.</p>${linesTableHtml(lines, totalIncVat)}`,
+  });
+  return dispatch({ settings, to, subject: `Orderbekräftelse ${orderNumber}`, html });
+}
+
+// Ordern är utlämnad.
+export async function sendOrderDeliveredEmail({ settings, to, customerName, orderNumber, pickedUpBy }) {
+  const html = buildSimpleEmailHtml({
+    heading: "Din order är utlämnad",
+    body: `<p>Hej ${escapeHtml(customerName)},</p><p>Order <strong>${escapeHtml(orderNumber)}</strong> är nu utlämnad${
+      pickedUpBy ? ` till ${escapeHtml(pickedUpBy)}` : ""
+    }. Tack för att du handlar hos oss!</p>`,
+  });
+  return dispatch({ settings, to, subject: `Order ${orderNumber} är utlämnad`, html });
+}
+
 // Påminnelse när en order stått redo en tid utan att hämtas.
 export async function sendPickupReminderEmail({ settings, to, customerName, orderNumber, readySince, note }) {
   const since = readySince ? new Date(readySince).toLocaleDateString("sv-SE", { day: "numeric", month: "long" }) : null;

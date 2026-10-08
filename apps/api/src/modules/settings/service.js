@@ -15,7 +15,8 @@ export async function getBranding() {
   const [[branding]] = await pool.query(
     `SELECT seller_name, seller_logo_path, inactive_customer_months, auto_print_order_slip,
             margin_warning_percent, margin_critical_percent, quote_expiry_warning_days, quote_valid_days,
-            pickup_reminder_days, default_tax_rate_percent, default_payment_terms_days
+            pickup_reminder_days, default_tax_rate_percent, default_payment_terms_days,
+            shelf_locations_enabled, credit_limits_enabled, fortnox_payment_status_enabled
      FROM app_settings WHERE id = 1`
   );
   return branding;
@@ -53,6 +54,8 @@ export function maskSecrets(settings) {
 // sparade" (sidan får aldrig se det sparade värdet).
 const keepIfEmpty = (value) => (value === null || value === undefined || value === "" ? undefined : value);
 
+const flag = (value) => (value === undefined ? undefined : value ? 1 : 0);
+
 export async function updateSettings(data) {
   const fields = {
     seller_name: data.sellerName,
@@ -68,6 +71,12 @@ export async function updateSettings(data) {
     reminder_days_after: data.reminderDaysAfter,
     portal_show_stock: data.portalShowStock === undefined ? undefined : data.portalShowStock ? 1 : 0,
     portal_require_login: data.portalRequireLogin === undefined ? undefined : data.portalRequireLogin ? 1 : 0,
+    notify_request_received: flag(data.notifyRequestReceived),
+    notify_order_confirmed: flag(data.notifyOrderConfirmed),
+    notify_order_delivered: flag(data.notifyOrderDelivered),
+    fortnox_payment_status_enabled: flag(data.fortnoxPaymentStatusEnabled),
+    credit_limits_enabled: flag(data.creditLimitsEnabled),
+    shelf_locations_enabled: flag(data.shelfLocationsEnabled),
     inactive_customer_months: data.inactiveCustomerMonths,
     auto_print_order_slip: data.autoPrintOrderSlip === undefined ? undefined : data.autoPrintOrderSlip ? 1 : 0,
     next_order_number: data.nextOrderNumber,

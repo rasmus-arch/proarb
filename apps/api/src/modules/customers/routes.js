@@ -8,6 +8,7 @@ import { weakPasswordMessage } from "../../lib/security.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
 import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
+import { getCustomerCreditStatus, getOverduePaymentsOverview, refreshUnpaidInvoices } from "./payment-status.js";
 
 const router = Router();
 const logoUpload = createLogoUpload("customer-logos");
@@ -51,6 +52,37 @@ router.post("/import-fortnox", requireRole("ADMIN"), async (req, res, next) => {
 });
 
 // Before /:id so "inactive" isn't swallowed as an :id value.
+// Betalstatus från Fortnox (Inställningar → Funktioner).
+router.get("/payment-overview", async (req, res, next) => {
+  try {
+    res.json(await getOverduePaymentsOverview());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/payment-status/refresh", async (req, res, next) => {
+  try {
+    const result = await refreshUnpaidInvoices({ force: true });
+    if (!result.ok && result.error !== "NOT_ACTIVE") return res.status(502).json({ error: result.error });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/:id/credit-status", async (req, res, next) => {
+  try {
+    const status = await getCustomerCreditStatus(Number(req.params.id), {
+      orderId: req.query.orderId ? Number(req.query.orderId) : undefined,
+    });
+    if (!status) return res.status(404).json({ error: "Customer not found" });
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/inactive", async (req, res, next) => {
   try {
     const months = Number(req.query.months) || 6;

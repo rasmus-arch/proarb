@@ -163,6 +163,17 @@ export async function run() {
     "ALTER TABLE app_settings MODIFY fortnox_access_token TEXT NULL",
     "ALTER TABLE app_settings MODIFY fortnox_refresh_token TEXT NULL",
     "ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE app_settings ADD COLUMN notify_request_received TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE app_settings ADD COLUMN notify_order_confirmed TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE app_settings ADD COLUMN notify_order_delivered TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_payment_status_enabled TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE app_settings ADD COLUMN fortnox_unpaid_synced_at DATETIME NULL",
+    "ALTER TABLE app_settings ADD COLUMN credit_limits_enabled TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE app_settings ADD COLUMN shelf_locations_enabled TINYINT(1) NOT NULL DEFAULT 1",
+    "ALTER TABLE customers ADD COLUMN credit_limit DECIMAL(12,2) NULL",
+    "ALTER TABLE products ADD COLUMN shelf_location VARCHAR(50) NULL",
+    "ALTER TABLE portal_order_requests ADD COLUMN requester_email VARCHAR(255) NULL",
+    "ALTER TABLE orders ADD COLUMN notify_email VARCHAR(255) NULL",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

@@ -154,7 +154,7 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
 
     y = Math.max(y, y2 + 13) + 16;
 
-    y = drawProductTable(doc, order, y, brandColor);
+    y = drawProductTable(doc, order, y, brandColor, Boolean(settings?.shelf_locations_enabled));
 
     y = Math.max(y + 20, 630);
     if (y > 680) {
@@ -175,23 +175,41 @@ export async function generateOrderSlipPdf(order, { qrUrl, settings } = {}) {
   });
 }
 
-function drawProductTable(doc, order, startY, brandColor) {
+// Med hyllplatser påslaget sorteras raderna i plockordning (hyllplats,
+// rader utan hyllplats sist) och hyllplatsen skrivs under produktnamnet.
+function pickOrder(lines) {
+  const collator = new Intl.Collator("sv", { numeric: true, sensitivity: "base" });
+  return [...lines].sort((a, b) => {
+    if (!a.shelf_location !== !b.shelf_location) return a.shelf_location ? -1 : 1;
+    return a.shelf_location ? collator.compare(a.shelf_location, b.shelf_location) : 0;
+  });
+}
+
+function drawProductTable(doc, order, startY, brandColor, shelves = false) {
   let y = startY;
   drawTableHeader(doc, y, brandColor);
   y += 24;
 
+  const lines = shelves ? pickOrder(order.lines) : order.lines;
   doc.font("Helvetica").fontSize(9).fillColor("#0f172a");
-  order.lines.forEach((line, i) => {
+  lines.forEach((line, i) => {
     const variantText = [line.color, line.size].filter(Boolean).join(" / ") || "–";
     const printText = line.print_description || "–";
+    const shelfText = shelves && line.shelf_location ? `Hylla ${line.shelf_location}` : null;
     const rowHeight =
       Math.max(
-        doc.heightOfString(line.product_name, { width: COLS.product.width }),
+        doc.heightOfString(line.product_name, { width: COLS.product.width }) + (shelfText ? 11 : 0),
         doc.heightOfString(variantText, { width: COLS.variant.width }),
         doc.heightOfString(printText, { width: COLS.print.width })
       ) + 10;
 
     doc.text(line.product_name, COLS.product.x, y, { width: COLS.product.width });
+    if (shelfText) {
+      const nameHeight = doc.heightOfString(line.product_name, { width: COLS.product.width });
+      doc.font("Helvetica-Bold").fontSize(8).fillColor(brandColor);
+      doc.text(shelfText, COLS.product.x, y + nameHeight + 1, { width: COLS.product.width });
+      doc.font("Helvetica").fontSize(9).fillColor("#0f172a");
+    }
     doc.text(variantText, COLS.variant.x, y, { width: COLS.variant.width });
     doc.text(printText, COLS.print.x, y, { width: COLS.print.width });
     doc.text(String(line.quantity), COLS.qty.x, y, { width: COLS.qty.width, align: "right" });
@@ -200,7 +218,7 @@ function drawProductTable(doc, order, startY, brandColor) {
     y += rowHeight;
     // Tunn skiljelinje mellan raderna för läsbarhet på listor med flera
     // produkter — inte efter sista raden, som redan avslutas av tabellen.
-    if (i < order.lines.length - 1) {
+    if (i < lines.length - 1) {
       doc.moveTo(40, y - 5).lineTo(TABLE_RIGHT_EDGE, y - 5).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
     }
     if (y > 680) {

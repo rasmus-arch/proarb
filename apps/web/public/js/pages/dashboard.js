@@ -409,8 +409,39 @@ async function loadLowStock() {
   }
 }
 
+// Förfallna kundfakturor från Fortnox (Inställningar → Funktioner).
+async function loadOverdue() {
+  const data = await api.get("/customers/payment-overview");
+  const section = document.getElementById("overdue-section");
+  if (!data.enabled || data.customers.length === 0) {
+    section.classList.add("hidden");
+    return;
+  }
+  section.classList.remove("hidden");
+  document.getElementById("overdue-total").textContent = money(data.overdue_total);
+  document.getElementById("overdue-sub").textContent = `Totalt obetalt ${money(data.unpaid_total)} enligt Fortnox.`;
+  const shown = data.customers.slice(0, 8);
+  document.getElementById("overdue-list").innerHTML =
+    shown
+      .map(
+        (c) => `
+      <li class="flex items-center justify-between gap-3 py-2 text-sm">
+        <div>
+          ${c.customer_id ? `<a href="/kund-editor.html?id=${c.customer_id}" class="font-medium text-slate-900 hover:underline">${escapeHtml(c.customer_name)}</a>` : `<span class="font-medium text-slate-900">${escapeHtml(c.customer_name)}</span>`}
+          <span class="ml-2 text-slate-500">${c.invoice_count} st · upp till ${c.max_days_overdue} dagar sen</span>
+        </div>
+        <span class="whitespace-nowrap text-red-600">${money(c.overdue_total)}</span>
+      </li>`
+      )
+      .join("") +
+    (data.customers.length > shown.length
+      ? `<li class="py-2 text-xs text-slate-500">+ ${data.customers.length - shown.length} kunder till.</li>`
+      : "");
+}
+
 loadGreeting();
 loadSalesChart();
+loadOverdue().catch(() => {});
 loadKpis();
 loadReminders();
 loadUnpicked();

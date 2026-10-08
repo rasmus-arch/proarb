@@ -61,6 +61,12 @@ const el = {
   poNote: document.getElementById("s-po-note"),
   backupKeepDays: document.getElementById("s-backup-keep-days"),
   saveBar: document.getElementById("save-bar"),
+  notifyReceived: document.getElementById("s-notify-received"),
+  notifyConfirmed: document.getElementById("s-notify-confirmed"),
+  notifyDelivered: document.getElementById("s-notify-delivered"),
+  fortnoxPaymentStatus: document.getElementById("s-fortnox-payment-status"),
+  creditLimits: document.getElementById("s-credit-limits"),
+  shelfLocations: document.getElementById("s-shelf-locations"),
 };
 
 // --- Flikar -----------------------------------------------------------------
@@ -122,6 +128,12 @@ function applySettings(settings) {
   el.orderReadyNote.value = settings.order_ready_email_note ?? "";
   el.poNote.value = settings.purchase_order_email_note ?? "";
   el.backupKeepDays.value = settings.backup_keep_days ?? 14;
+  el.notifyReceived.checked = Boolean(settings.notify_request_received);
+  el.notifyConfirmed.checked = Boolean(settings.notify_order_confirmed);
+  el.notifyDelivered.checked = Boolean(settings.notify_order_delivered);
+  el.fortnoxPaymentStatus.checked = Boolean(settings.fortnox_payment_status_enabled);
+  el.creditLimits.checked = Boolean(settings.credit_limits_enabled);
+  el.shelfLocations.checked = Boolean(settings.shelf_locations_enabled);
 
   if (settings.seller_logo_path) {
     el.logoPreview.src = `/uploads/${settings.seller_logo_path}`;
@@ -180,6 +192,12 @@ el.saveBtn.addEventListener("click", async () => {
       orderReadyEmailNote: el.orderReadyNote.value || null,
       purchaseOrderEmailNote: el.poNote.value || null,
       backupKeepDays: Number(el.backupKeepDays.value) || 14,
+      notifyRequestReceived: el.notifyReceived.checked,
+      notifyOrderConfirmed: el.notifyConfirmed.checked,
+      notifyOrderDelivered: el.notifyDelivered.checked,
+      fortnoxPaymentStatusEnabled: el.fortnoxPaymentStatus.checked,
+      creditLimitsEnabled: el.creditLimits.checked,
+      shelfLocationsEnabled: el.shelfLocations.checked,
     });
     el.saveSuccess.textContent = "Sparat.";
     setTimeout(() => el.saveSuccess.classList.add("hidden"), 2500);

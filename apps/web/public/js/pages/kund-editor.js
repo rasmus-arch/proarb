@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { loadFeatures } from "../features.js";
 
 const params = new URLSearchParams(location.search);
 const customerId = params.get("id");
@@ -8,6 +9,7 @@ if (!customerId) {
 }
 
 const el = {
+  creditLimit: document.getElementById("f-credit-limit"),
   title: document.getElementById("page-title"),
   statsSection: document.getElementById("stats-section"),
   statYear: document.getElementById("stat-year"),
@@ -169,6 +171,7 @@ async function loadCustomer() {
   el.terms.value = customer.payment_terms_days ?? 30;
   el.notes.value = customer.notes ?? "";
   el.cash.checked = Boolean(customer.is_cash_customer);
+  el.creditLimit.value = customer.credit_limit ?? "";
   renderContacts(customer.contacts);
   renderLogos(customer.logos);
 
@@ -401,7 +404,9 @@ el.saveBtn.addEventListener("click", async () => {
       paymentTermsDays: Number(el.terms.value) || 0,
       notes: el.notes.value || null,
       isCashCustomer: el.cash.checked,
+      ...(features?.creditLimits ? { creditLimit: el.creditLimit.value === "" ? null : Number(el.creditLimit.value) } : {}),
     });
+    loadPaymentStatus();
     el.title.textContent = el.name.value;
     // Fortnox-synk (bara när Fortnox är anslutet).
     const status = document.getElementById("save-status");
@@ -794,3 +799,103 @@ el.portalCopyBtn.addEventListener("click", async () => {
 });
 
 loadCustomer();
+
+// --- Betalningar & kredit -----------------------------------------------------
+
+let features = null;
+
+function dateText(value) {
+  return value ? new Date(value).toLocaleDateString("sv-SE") : "–";
+}
+
+function statTile(label, value, tone = "text-slate-900") {
+  return `<div><div class="text-xs text-slate-500">${label}</div><div class="mt-0.5 text-lg font-semibold ${tone}">${value}</div></div>`;
+}
+
+async function loadPaymentStatus() {
+  features ??= await loadFeatures();
+  document.getElementById("credit-limit-field").classList.toggle("hidden", !features.creditLimits);
+  if (!features.paymentStatus && !features.creditLimits) return;
+
+  const section = document.getElementById("payment-section");
+  const { payments, credit } = await api.get(`/customers/${customerId}/credit-status`);
+  const hasCredit = credit.enabled && credit.limit !== null;
+  if (!payments.enabled && !hasCredit) {
+    section.classList.add("hidden");
+    return;
+  }
+  section.classList.remove("hidden");
+  document.getElementById("payment-refresh-btn").classList.toggle("hidden", !payments.enabled);
+
+  const tiles = [];
+  if (payments.enabled) {
+    tiles.push(statTile("Obetalt", money(payments.unpaid_total)));
+    tiles.push(
+      statTile(
+        `Förfallet${payments.overdue_count ? ` (${payments.overdue_count})` : ""}`,
+        money(payments.overdue_total),
+        payments.overdue_total > 0 ? "text-red-600" : "text-slate-900"
+      )
+    );
+  }
+  if (hasCredit) {
+    tiles.push(statTile("Kreditgräns", money(credit.limit)));
+    tiles.push(statTile("Kvar av krediten", money(credit.available), credit.available < 0 ? "text-red-600" : "text-green-700"));
+  }
+  document.getElementById("payment-summary").innerHTML = tiles.join("");
+
+  const bar = document.getElementById("credit-bar");
+  if (hasCredit) {
+    const pct = credit.limit > 0 ? Math.min(100, Math.round((credit.used / credit.limit) * 100)) : 100;
+    const tone = credit.available < 0 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-green-600";
+    bar.innerHTML = `<div class="h-2 w-full overflow-hidden rounded-full bg-slate-100"><div class="h-2 ${tone}" style="width:${pct}%"></div></div>
+      <p class="mt-1 text-xs text-slate-500">Använt ${money(credit.used)}: obetalda fakturor ${money(credit.unpaid_invoices)} + ej fakturerade ordrar ${money(credit.open_orders)}${
+        credit.open_order_count ? ` (${credit.open_order_count} st)` : ""
+      }.</p>`;
+    bar.classList.remove("hidden");
+  } else {
+    bar.classList.add("hidden");
+  }
+
+  const list = document.getElementById("payment-invoices");
+  if (payments.enabled && payments.invoices.length > 0) {
+    list.innerHTML = `<table class="min-w-full text-sm">
+        <thead><tr class="text-left text-xs text-slate-500">
+          <th class="py-1 pr-3 font-medium">Faktura</th><th class="py-1 pr-3 font-medium">Fakturadatum</th>
+          <th class="py-1 pr-3 font-medium">Förfaller</th><th class="py-1 pr-3 text-right font-medium">Kvar att betala</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">${payments.invoices
+          .map(
+            (i) => `<tr>
+              <td class="py-1.5 pr-3">${escapeHtml(i.document_number)}</td>
+              <td class="py-1.5 pr-3 text-slate-600">${dateText(i.invoice_date)}</td>
+              <td class="py-1.5 pr-3 ${i.overdue ? "font-medium text-red-600" : "text-slate-600"}">${dateText(i.due_date)}${
+                i.overdue ? ` · ${i.days_overdue} dagar sen` : ""
+              }</td>
+              <td class="py-1.5 pr-3 text-right">${money(i.balance)}</td>
+            </tr>`
+          )
+          .join("")}</tbody></table>`;
+  } else {
+    list.innerHTML = payments.enabled ? `<p class="text-sm text-slate-500">Inga obetalda fakturor i Fortnox.</p>` : "";
+  }
+  document.getElementById("payment-note").textContent = payments.enabled
+    ? `Från Fortnox, hämtat ${payments.synced_at ? new Date(payments.synced_at).toLocaleString("sv-SE") : "–"}.`
+    : "";
+}
+
+document.getElementById("payment-refresh-btn").addEventListener("click", async (event) => {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  btn.textContent = "Hämtar…";
+  try {
+    await api.post("/customers/payment-status/refresh", {});
+    await loadPaymentStatus();
+    btn.textContent = "Hämta från Fortnox";
+  } catch (err) {
+    btn.textContent = `Fel: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+loadPaymentStatus().catch(() => {});

@@ -282,6 +282,31 @@ export async function fetchAllFortnoxCustomers(settings) {
   return { customers: all, settings: current };
 }
 
+// Alla obetalda kundfakturor (inkl. förfallna) — för betalstatus per kund
+// (customers/payment-status.js). Makulerade fakturor räknas inte.
+export async function fetchUnpaidInvoices(settings) {
+  if (!isFortnoxConfigured(settings)) throw new Error("NOT_CONFIGURED");
+  const all = [];
+  let current = settings;
+  for (let page = 1; page <= 200; page++) {
+    const { data, settings: next } = await step("Kunde inte hämta obetalda fakturor från Fortnox", () =>
+      fortnoxRequest(current, `/invoices?filter=unpaid&limit=500&page=${page}`)
+    );
+    current = next;
+    all.push(...(data.Invoices ?? []).filter((i) => !i.Cancelled));
+    const totalPages = Number(data.MetaInformation?.["@TotalPages"] ?? 1);
+    if (page >= totalPages) break;
+  }
+  return all.map((i) => ({
+    documentNumber: String(i.DocumentNumber),
+    customerNumber: String(i.CustomerNumber ?? ""),
+    invoiceDate: i.InvoiceDate || null,
+    dueDate: i.DueDate || null,
+    total: Number(i.Total) || 0,
+    balance: Number(i.Balance ?? i.Total) || 0,
+  }));
+}
+
 const digits = (value) => String(value ?? "").replace(/\D/g, "");
 const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 

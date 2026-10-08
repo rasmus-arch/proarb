@@ -131,13 +131,21 @@ export async function getCustomer(id) {
   return { ...customer, contacts, logos, stats };
 }
 
+// Kreditgräns: tomt = ingen gräns (NULL), annars ett belopp >= 0.
+function creditLimit(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}
+
 export async function createCustomer(data) {
   const customerNumber = data.customerNumber?.trim() || nextCustomerNumber();
 
   const [result] = await pool.query(
     `INSERT INTO customers
-       (customer_number, name, org_number, email, invoice_email, phone, address, postal_code, city, logo_url, payment_terms_days, notes, is_cash_customer)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (customer_number, name, org_number, email, invoice_email, phone, address, postal_code, city, logo_url, payment_terms_days, notes, is_cash_customer, credit_limit)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       customerNumber,
       data.name,
@@ -152,6 +160,7 @@ export async function createCustomer(data) {
       data.paymentTermsDays ?? (await getSettings())?.default_payment_terms_days ?? 30,
       data.notes ?? null,
       data.isCashCustomer ? 1 : 0,
+      creditLimit(data.creditLimit) ?? null,
     ]
   );
 
@@ -172,6 +181,7 @@ export async function updateCustomer(id, data) {
     payment_terms_days: data.paymentTermsDays,
     notes: data.notes,
     is_cash_customer: data.isCashCustomer === undefined ? undefined : data.isCashCustomer ? 1 : 0,
+    credit_limit: creditLimit(data.creditLimit),
   };
 
   const entries = Object.entries(fields).filter(([, value]) => value !== undefined);
@@ -340,7 +350,13 @@ export async function getCustomerByPortalToken(token) {
     [customer.id]
   );
 
-  return { customer, products, orders, contacts };
+  // Sortilog-beställningar som ännu inte gjorts om till en order.
+  const [pendingRequests] = await pool.query(
+    `SELECT id, created_at FROM portal_order_requests WHERE customer_id = ? AND status = 'NEW' ORDER BY created_at DESC`,
+    [customer.id]
+  );
+
+  return { customer, products, orders, contacts, pendingRequests };
 }
 
 // --- Sortiment ("Mina sidor") ----------------------------------------------

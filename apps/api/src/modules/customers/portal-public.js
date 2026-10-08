@@ -10,6 +10,13 @@ import { publicFormLimiter } from "../../lib/security.js";
 // actual HTML page lives at GET /portal/:token (customers/portal.js).
 const router = Router();
 
+// E-posten för bekräftelsemejl: den inloggade Sortilog-användaren om
+// sessionen hör till samma kund.
+async function requesterEmail(req) {
+  const account = await getSessionAccount(req.cookies?.[PORTAL_SESSION_COOKIE]);
+  return account && account.portal_token === req.params.token ? account.email : null;
+}
+
 // När Sortilog kräver inloggning räcker det inte att känna till token —
 // anropet måste komma från en inloggad session för just den kunden.
 router.use("/:token", async (req, res, next) => {
@@ -32,6 +39,7 @@ router.post("/:token/request", publicFormLimiter, async (req, res, next) => {
       requestedByName: req.body?.requestedByName,
       referenceContactId: req.body?.referenceContactId ? Number(req.body.referenceContactId) : null,
       lines: Array.isArray(req.body?.lines) ? req.body.lines : [],
+      requesterEmail: await requesterEmail(req),
     });
     res.status(201).json(result);
   } catch (err) {
@@ -56,7 +64,9 @@ router.post("/:token/contacts", publicFormLimiter, async (req, res, next) => {
 
 router.post("/:token/orders/:orderId/reorder", publicFormLimiter, async (req, res, next) => {
   try {
-    const result = await reorderFromOrder(req.params.token, Number(req.params.orderId));
+    const result = await reorderFromOrder(req.params.token, Number(req.params.orderId), {
+      requesterEmail: await requesterEmail(req),
+    });
     res.status(201).json(result);
   } catch (err) {
     if (err.message === "CUSTOMER_NOT_FOUND" || err.message === "ORDER_NOT_FOUND") {

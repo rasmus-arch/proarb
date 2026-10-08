@@ -142,6 +142,18 @@ CREATE TABLE IF NOT EXISTS app_settings (
   -- Sortilog: 1 = länkar utan inloggning (/portal/:token) slutar fungera,
   -- kunden måste logga in på /sortilog.
   portal_require_login       TINYINT(1) NOT NULL DEFAULT 0,
+  -- Mejl till kunden om Sortilog-beställningar och ordrar (av/på).
+  notify_request_received    TINYINT(1) NOT NULL DEFAULT 1,
+  notify_order_confirmed     TINYINT(1) NOT NULL DEFAULT 1,
+  notify_order_delivered     TINYINT(1) NOT NULL DEFAULT 0,
+  -- Obetalda/förfallna fakturor hämtas från Fortnox (se
+  -- integrations/fortnox-payments.js). synced_at = senaste hämtningen.
+  fortnox_payment_status_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  fortnox_unpaid_synced_at   DATETIME NULL,
+  -- Kreditgräns per kund (customers.credit_limit) — varning i ordern.
+  credit_limits_enabled      TINYINT(1) NOT NULL DEFAULT 1,
+  -- Hyllplats på produkter, visas på ordersedeln.
+  shelf_locations_enabled    TINYINT(1) NOT NULL DEFAULT 1,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -178,6 +190,8 @@ CREATE TABLE IF NOT EXISTS customers (
   -- utlämning skapas en bokförd kontantfaktura i Fortnox som inte skickas
   -- till någon, och ordern blir Fakturerad direkt (se orders/service.js).
   is_cash_customer   TINYINT(1) NOT NULL DEFAULT 0,
+  -- Valfri kreditgräns inkl moms. NULL = ingen gräns.
+  credit_limit       DECIMAL(12,2) NULL,
   phone              VARCHAR(50) NULL,
   address            VARCHAR(255) NULL,
   postal_code        VARCHAR(20) NULL,
@@ -293,6 +307,8 @@ CREATE TABLE IF NOT EXISTS products (
   -- Utgått: säljs bara så länge lagret räcker (se orders/service.js) och
   -- föreslås aldrig i inköpsförslag eller min-saldo-varningar.
   discontinued     TINYINT(1) NOT NULL DEFAULT 0,
+  -- Var varan står i lagret, t.ex. "A3-2". Visas på ordersedeln.
+  shelf_location   VARCHAR(50) NULL,
   created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES product_categories(id),
@@ -382,6 +398,9 @@ CREATE TABLE IF NOT EXISTS portal_order_requests (
   -- förfrågan, så den redan finns med i pickup-listan när ordern väl är
   -- redo att hämtas ut.
   reference_contact_id  INT NULL,
+  -- Vart bekräftelsemejlen går: den inloggade Sortilog-användaren, annars
+  -- kundens e-post.
+  requester_email       VARCHAR(255) NULL,
   status                ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',
   order_id              INT NULL,
   created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -549,6 +568,9 @@ CREATE TABLE IF NOT EXISTS orders (
   -- rad (se order_lines) — ingen egen produktionsstatus/kö längre.
   status               ENUM('NEW','READY_FOR_PICKUP','DELIVERED','INVOICED','CANCELLED') NOT NULL DEFAULT 'NEW',
   delivery_method      ENUM('PICKUP','SHIPPING') NOT NULL DEFAULT 'PICKUP',
+  -- Mottagare för statusmejl när den skiljer sig från kundens e-post
+  -- (t.ex. personen som beställde via Sortilog).
+  notify_email         VARCHAR(255) NULL,
   created_by           INT NOT NULL,
   notes                TEXT NULL,
   -- QR-koden på ordersedelns PDF (se orders/pdf.js). Unguessable token,
@@ -976,4 +998,16 @@ CREATE TABLE IF NOT EXISTS portal_password_tokens (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_portal_pwtokens_account FOREIGN KEY (account_id) REFERENCES portal_accounts(id),
   INDEX idx_portal_pwtokens_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Obetalda kundfakturor i Fortnox, hämtade med jämna mellanrum
+-- (integrations/fortnox-payments.js). Ersätts helt vid varje hämtning.
+CREATE TABLE IF NOT EXISTS fortnox_unpaid_invoices (
+  document_number  VARCHAR(30) PRIMARY KEY,
+  customer_number  VARCHAR(30) NOT NULL,
+  invoice_date     DATE NULL,
+  due_date         DATE NULL,
+  total            DECIMAL(12,2) NOT NULL DEFAULT 0,
+  balance          DECIMAL(12,2) NOT NULL DEFAULT 0,
+  INDEX idx_fui_customer (customer_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

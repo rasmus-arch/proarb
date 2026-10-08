@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { loadMarginThresholds, marginCellHtml, renderMarginCell, marginLevel, marginSummaryText } from "../margin.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
 import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
+import { loadFeatures } from "../features.js";
 
 const params = new URLSearchParams(location.search);
 const orderId = params.get("id");
@@ -147,6 +148,7 @@ function renderTotals() {
   el.totalsSubtotal.textContent = money(subtotal);
   el.totalsVat.textContent = money(vat);
   el.totalsTotal.textContent = money(subtotal + vat);
+  renderCreditBanner(subtotal + vat);
 
   const percent = subtotal > 0 ? (marginAmount / subtotal) * 100 : 0;
   const incomplete = margins.length < state.lines.length && state.lines.length > 0;
@@ -172,6 +174,58 @@ function renderTotals() {
 }
 
 const isNewOrder = () => !orderId;
+
+// --- Kreditgräns & förfallna fakturor ---------------------------------------
+// Bara en varning — ordern går alltid att spara.
+
+let creditStatus = null;
+
+async function loadCreditStatus(customerId) {
+  creditStatus = null;
+  const features = await loadFeatures();
+  if (customerId && (features.creditLimits || features.paymentStatus)) {
+    try {
+      creditStatus = await api.get(`/customers/${customerId}/credit-status${orderId ? `?orderId=${orderId}` : ""}`);
+    } catch {
+      creditStatus = null;
+    }
+  }
+  renderTotals();
+}
+
+function renderCreditBanner(orderTotal) {
+  const banner = document.getElementById("credit-banner");
+  const messages = [];
+  let critical = false;
+  // Bara medan ordern fortfarande kan ändras — en utlämnad order är redan klar.
+  const active = isNewOrder() || ["NEW", "READY_FOR_PICKUP"].includes(state.status);
+  const credit = creditStatus?.credit;
+  if (active && credit?.enabled && credit.limit !== null) {
+    const after = credit.used + orderTotal;
+    if (after > credit.limit) {
+      critical = true;
+      messages.push(
+        `<p class="font-medium">Över kreditgränsen</p><p class="mt-1">Med den här ordern blir kundens skuld ${money(after)} — kreditgränsen är ${money(credit.limit)} (${money(
+          after - credit.limit
+        )} över). Obetalda fakturor ${money(credit.unpaid_invoices)}, andra ej fakturerade ordrar ${money(credit.open_orders)}.</p>`
+      );
+    } else if (credit.limit > 0 && after / credit.limit >= 0.8) {
+      messages.push(`<p class="font-medium">Nära kreditgränsen</p><p class="mt-1">${money(credit.limit - after)} kvar av ${money(credit.limit)} efter den här ordern.</p>`);
+    }
+  }
+  const payments = creditStatus?.payments;
+  if (active && payments?.enabled && payments.overdue_count > 0) {
+    const oldest = Math.max(...payments.invoices.filter((i) => i.overdue).map((i) => Number(i.days_overdue)));
+    messages.push(
+      `<p class="font-medium">Förfallna fakturor</p><p class="mt-1">${payments.overdue_count} st på ${money(payments.overdue_total)} i Fortnox, äldsta ${oldest} dagar sen.</p>`
+    );
+  }
+  banner.classList.toggle("hidden", messages.length === 0);
+  banner.className = `mt-3 rounded-md border p-3 text-sm ${messages.length === 0 ? "hidden" : ""} ${
+    critical ? "border-red-300 bg-red-50 text-red-900" : "border-amber-300 bg-amber-50 text-amber-900"
+  }`;
+  banner.innerHTML = messages.join(`<div class="my-2 border-t border-current opacity-20"></div>`);
+}
 
 // Rader går att redigera (antal/pris/tryck) inte bara på en helt ny,
 // osparad order, utan också på en redan sparad order så länge inget
@@ -555,6 +609,7 @@ async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);
   state.contacts = customer.contacts;
   applyCashMode(Boolean(customer.is_cash_customer));
+  loadCreditStatus(customerId);
 
   // Only relevant while creating a NEW order — staff should see anything
   // noted about the customer before adding lines/leveranssätt etc. An
@@ -964,6 +1019,7 @@ function applyReadOnlyState() {
 
 async function init() {
   await loadMarginThresholds();
+  const features = await loadFeatures();
   const suppliers = (await api.get("/suppliers")).rows;
   el.newProductSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
 
@@ -974,7 +1030,9 @@ async function init() {
       productVariantId: l.product_variant_id,
       description: l.product_variant_id ? null : l.description,
       name: l.product_name,
-      colorSize: l.product_variant_id ? [l.color, l.size, l.sku].filter(Boolean).join(" · ") : "Fritextrad",
+      colorSize: l.product_variant_id
+        ? [l.color, l.size, l.sku, l.shelf_location && features?.shelfLocations ? `Hylla ${l.shelf_location}` : null].filter(Boolean).join(" · ")
+        : "Fritextrad",
       quantity: Number(l.quantity),
       unitPrice: Number(l.unit_price),
       discountPercent: Number(l.discount_percent),

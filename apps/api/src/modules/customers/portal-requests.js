@@ -1,5 +1,6 @@
 import { pool } from "../../lib/db.js";
-import { createOrder } from "../orders/service.js";
+import { createOrder, getOrder } from "../orders/service.js";
+import { notifyOrderConfirmed, notifyRequestReceived } from "../orders/notifications.js";
 import { assortmentDiscountSelect, addContact } from "./service.js";
 
 // Self-service beställning från "Mina sidor" (portal.js): kunden väljer
@@ -10,7 +11,9 @@ import { assortmentDiscountSelect, addContact } from "./service.js";
 // den hinner konverteras. product_variant_id valideras samtidigt mot
 // customer_assortment — kunden kan bara beställa det den faktiskt ser.
 
-export async function createPortalOrderRequest(token, { requestedByName, referenceContactId, lines }) {
+// requesterEmail = den inloggade Sortilog-användarens e-post (bekräftelser
+// går dit), annars null och kundens e-post används.
+export async function createPortalOrderRequest(token, { requestedByName, referenceContactId, lines, requesterEmail }) {
   const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (!Array.isArray(lines) || lines.length === 0) throw new Error("INVALID_REQUEST");
@@ -31,8 +34,9 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO portal_order_requests (customer_id, requested_by_name, reference_contact_id) VALUES (?, ?, ?)`,
-      [customer.id, requestedByName || null, contactId]
+      `INSERT INTO portal_order_requests (customer_id, requested_by_name, reference_contact_id, requester_email)
+       VALUES (?, ?, ?, ?)`,
+      [customer.id, requestedByName || null, contactId, requesterEmail || null]
     );
     const requestId = result.insertId;
 
@@ -82,6 +86,7 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
     if (linesInserted === 0) throw new Error("INVALID_REQUEST");
 
     await connection.commit();
+    notifyRequestReceived(requestId);
     return { id: requestId };
   } catch (err) {
     await connection.rollback();
@@ -99,7 +104,7 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
 // portalbeställning — blir inte en riktig order förrän en säljare
 // konverterar den. Fritextrader (produktvariant saknas) kan inte
 // återbeställas den här vägen och hoppas bara över.
-export async function reorderFromOrder(token, orderId) {
+export async function reorderFromOrder(token, orderId, { requesterEmail } = {}) {
   const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
 
@@ -120,8 +125,8 @@ export async function reorderFromOrder(token, orderId) {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO portal_order_requests (customer_id, requested_by_name) VALUES (?, ?)`,
-      [customer.id, "Återbeställning"]
+      `INSERT INTO portal_order_requests (customer_id, requested_by_name, requester_email) VALUES (?, ?, ?)`,
+      [customer.id, "Återbeställning", requesterEmail || null]
     );
     const requestId = result.insertId;
 
@@ -165,6 +170,7 @@ export async function reorderFromOrder(token, orderId) {
     if (linesInserted === 0) throw new Error("NO_REORDERABLE_LINES");
 
     await connection.commit();
+    notifyRequestReceived(requestId);
     return { id: requestId, lineCount: linesInserted };
   } catch (err) {
     await connection.rollback();
@@ -250,7 +256,12 @@ export async function convertPortalOrderRequest(id, userId) {
     [order.id, userId, id]
   );
 
-  return order;
+  if (request.requester_email) {
+    await pool.query(`UPDATE orders SET notify_email = ? WHERE id = ?`, [request.requester_email, order.id]);
+  }
+  const confirmed = await getOrder(order.id);
+  notifyOrderConfirmed(confirmed);
+  return confirmed;
 }
 
 // Kunden kan lägga till en ny hämtbehörig kontakt direkt från "Mina
