@@ -452,6 +452,22 @@ async function init() {
     .then((r) => (r.ok ? r.json() : null))
     .catch(() => null);
   renderNav(user, branding);
+  if (user.must_change_password) forcePasswordChange();
+}
+
+// Standardlösenord eller lösenord satt av en administratör: inget annat i
+// systemet fungerar (servern svarar 403) förrän ett eget lösenord valts.
+function forcePasswordChange() {
+  const dialog = ensurePasswordDialog();
+  dialog.querySelector("h2").textContent = "Välj ett eget lösenord";
+  dialog.querySelector("form [data-cancel]").classList.add("hidden");
+  dialog.querySelector("[data-done] [data-cancel]").addEventListener("click", () => location.reload());
+  dialog.querySelector("form").insertAdjacentHTML(
+    "afterbegin",
+    `<p class="text-sm text-slate-600">Ditt konto har ett tillfälligt lösenord. Välj ett eget innan du fortsätter.</p>`
+  );
+  dialog.addEventListener("cancel", (event) => event.preventDefault());
+  dialog.showModal();
 }
 
 document.addEventListener("DOMContentLoaded", init);

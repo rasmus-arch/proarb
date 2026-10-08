@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as quotes from "./service.js";
 import { generateQuotePdf } from "./pdf.js";
 import { getSettings } from "../settings/service.js";
+import { publicFormLimiter } from "../../lib/security.js";
 
 const FALLBACK_BRAND_COLOR = "#0f172a";
 
@@ -233,7 +234,7 @@ export async function renderPublicQuotePdf(req, res, next) {
 
 const router = Router();
 
-router.post("/:token/accept", async (req, res, next) => {
+router.post("/:token/accept", publicFormLimiter, async (req, res, next) => {
   try {
     const quote = await quotes.respondToQuote(req.params.token, "accept");
     if (!quote) return res.status(404).json({ error: "Not found" });
@@ -246,7 +247,7 @@ router.post("/:token/accept", async (req, res, next) => {
   }
 });
 
-router.post("/:token/suggested-lines", async (req, res, next) => {
+router.post("/:token/suggested-lines", publicFormLimiter, async (req, res, next) => {
   try {
     const quote = await quotes.addSuggestedLineToQuote(req.params.token, req.body ?? {});
     res.status(201).json(quote);
@@ -258,7 +259,7 @@ router.post("/:token/suggested-lines", async (req, res, next) => {
   }
 });
 
-router.post("/:token/decline", async (req, res, next) => {
+router.post("/:token/decline", publicFormLimiter, async (req, res, next) => {
   try {
     const quote = await quotes.respondToQuote(req.params.token, "decline");
     if (!quote) return res.status(404).json({ error: "Not found" });

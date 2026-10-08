@@ -101,15 +101,15 @@ function applySettings(settings) {
   el.smtpHost.value = settings.smtp_host ?? "";
   el.smtpPort.value = settings.smtp_port ?? "";
   el.smtpUsername.value = settings.smtp_username ?? "";
-  el.smtpPassword.value = settings.smtp_password ?? "";
+  setSecretField(el.smtpPassword, settings.smtp_password_set);
   el.smtpFrom.value = settings.smtp_from_email ?? "";
   el.smtpTls.checked = settings.smtp_use_tls === undefined ? true : Boolean(settings.smtp_use_tls);
   el.fortnoxClientId.value = settings.fortnox_client_id ?? "";
-  el.fortnoxClientSecret.value = settings.fortnox_client_secret ?? "";
+  setSecretField(el.fortnoxClientSecret, settings.fortnox_client_secret_set);
   el.fortnoxCashPaymentWay.value = settings.fortnox_cash_payment_way ?? "";
   applyFortnoxStatus(settings);
   el.githubRepo.value = settings.github_issues_repo ?? "";
-  el.githubToken.value = settings.github_issues_token ?? "";
+  setSecretField(el.githubToken, settings.github_issues_token_set);
   el.quoteValidDays.value = settings.quote_valid_days ?? 10;
   el.quoteWarningDays.value = settings.quote_expiry_warning_days ?? 3;
   el.marginWarning.value = settings.margin_warning_percent ?? 25;
@@ -212,12 +212,19 @@ el.logoForm.addEventListener("submit", async (event) => {
   }
 });
 
+// Hemliga fält (lösenord/nycklar) visas aldrig — servern skickar bara om de
+// är ifyllda. Tomt fält vid Spara = behåll det sparade värdet.
+function setSecretField(input, isSet) {
+  input.value = "";
+  input.placeholder = isSet ? "Sparat — lämna tomt för att behålla" : "";
+}
+
 // --- Fortnox ---------------------------------------------------------------
 
 el.fortnoxRedirectUri.textContent = `${location.origin}/api/settings/fortnox/callback`;
 
 function applyFortnoxStatus(settings) {
-  const connected = Boolean(settings.fortnox_access_token);
+  const connected = Boolean(settings.fortnox_connected);
   el.fortnoxStatus.textContent = connected ? "Ansluten" : "Inte ansluten";
   el.fortnoxStatus.className = `text-sm font-medium ${connected ? "text-green-700" : "text-slate-500"}`;
   el.fortnoxConnectBtn.textContent = connected ? "Anslut igen" : "Anslut till Fortnox";
@@ -376,7 +383,10 @@ activateTab(location.hash.slice(1) || "foretag");
 try {
   await Promise.all([loadSettings(), loadUsers()]);
 } catch (err) {
-  document.querySelector("main").innerHTML = `<p class="mt-6 text-sm text-red-600">${err.message}</p>`;
+  const message = document.createElement("p");
+  message.className = "mt-6 text-sm text-red-600";
+  message.textContent = err.message;
+  document.querySelector("main").replaceChildren(message);
 }
 
 // --- Hämta kunder från Fortnox ----------------------------------------------

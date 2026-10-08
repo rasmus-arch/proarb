@@ -4,6 +4,7 @@ import path from "node:path";
 import * as customers from "./service.js";
 import * as portalAccounts from "./portal-accounts.js";
 import { importCustomersFromFortnox, syncCustomerToFortnox } from "./fortnox-sync.js";
+import { weakPasswordMessage } from "../../lib/security.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
 import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
@@ -119,13 +120,32 @@ router.get("/:id/portal-accounts", async (req, res, next) => {
 
 router.post("/:id/portal-accounts", async (req, res, next) => {
   try {
-    const result = await portalAccounts.createAccount(Number(req.params.id), req.body ?? {}, appOrigin(req));
+    const { email, name, password } = req.body ?? {};
+    const result = await portalAccounts.createAccount(Number(req.params.id), { email, name, password }, appOrigin(req));
     res.status(201).json(result);
   } catch (err) {
     if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Ange en giltig e-postadress" });
     if (err.message === "EMAIL_TAKEN") {
       return res.status(409).json({ error: "E-postadressen har redan ett Sortilog-konto (hos den här eller en annan kund)" });
     }
+    if (err.message === "WEAK_PASSWORD") return res.status(400).json({ error: weakPasswordMessage(err) });
+    next(err);
+  }
+});
+
+router.patch("/:id/portal-accounts/:accountId", async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body ?? {};
+    res.json(
+      await portalAccounts.updateAccount(Number(req.params.id), Number(req.params.accountId), { name, email, password })
+    );
+  } catch (err) {
+    if (err.message === "ACCOUNT_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Ange en giltig e-postadress" });
+    if (err.message === "EMAIL_TAKEN") {
+      return res.status(409).json({ error: "E-postadressen har redan ett Sortilog-konto (hos den här eller en annan kund)" });
+    }
+    if (err.message === "WEAK_PASSWORD") return res.status(400).json({ error: weakPasswordMessage(err) });
     next(err);
   }
 });

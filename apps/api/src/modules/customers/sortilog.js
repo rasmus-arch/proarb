@@ -2,6 +2,15 @@ import { Router } from "express";
 import { getSettings } from "../settings/service.js";
 import { renderPortal } from "./portal.js";
 import * as accounts from "./portal-accounts.js";
+import {
+  checkLoginAllowed,
+  passwordFlowAllowed,
+  recordLoginFailure,
+  recordLoginSuccess,
+  weakPasswordMessage,
+} from "../../lib/security.js";
+
+const TOO_MANY = "För många försök — vänta en stund och försök igen.";
 
 // Sortilog med inloggning: /sortilog (inloggning eller, när man är
 // inloggad, kundens sida), /sortilog/glomt (glömt lösenord) och
@@ -109,8 +118,18 @@ router.get("/", async (req, res, next) => {
 
 router.post("/login", async (req, res, next) => {
   try {
-    const result = await accounts.login(req.body?.email, req.body?.password);
-    if (!result) return res.status(401).json({ error: "Fel e-post eller lösenord" });
+    const { email, password } = req.body ?? {};
+    if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
+      return res.status(400).json({ error: "E-post och lösenord krävs" });
+    }
+    const blocked = checkLoginAllowed(req, "portal", email);
+    if (blocked) return res.status(429).json({ error: blocked });
+    const result = await accounts.login(email, password);
+    if (!result) {
+      recordLoginFailure("portal", email);
+      return res.status(401).json({ error: "Fel e-post eller lösenord" });
+    }
+    recordLoginSuccess("portal", email);
     res.cookie(accounts.PORTAL_SESSION_COOKIE, result.token, cookieOptions(req));
     res.status(204).end();
   } catch (err) {
@@ -161,6 +180,8 @@ router.get("/glomt", async (req, res, next) => {
 
 router.post("/glomt", async (req, res, next) => {
   try {
+    if (!passwordFlowAllowed(req, "portal-forgot")) return res.status(429).json({ error: TOO_MANY });
+    if (typeof req.body?.email !== "string") return res.status(400).json({ error: "Ange e-post" });
     await accounts.requestPasswordReset(req.body?.email, origin(req));
     res.json({ ok: true });
   } catch (err) {
@@ -209,12 +230,13 @@ router.get("/losenord", async (req, res, next) => {
 
 router.post("/losenord", async (req, res, next) => {
   try {
+    if (!passwordFlowAllowed(req, "portal-set")) return res.status(429).json({ error: TOO_MANY });
     const result = await accounts.setPassword(req.body?.token, req.body?.password);
     if (!result) throw new Error("INVALID_TOKEN");
     res.cookie(accounts.PORTAL_SESSION_COOKIE, result.token, cookieOptions(req));
     res.status(204).end();
   } catch (err) {
-    if (err.message === "WEAK_PASSWORD") return res.status(400).json({ error: "Lösenordet måste vara minst 8 tecken" });
+    if (err.message === "WEAK_PASSWORD") return res.status(400).json({ error: weakPasswordMessage(err) });
     if (err.message === "INVALID_TOKEN") {
       return res.status(400).json({ error: "Länken är ogiltig eller har gått ut — begär en ny" });
     }

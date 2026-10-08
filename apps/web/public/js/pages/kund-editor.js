@@ -697,9 +697,20 @@ async function loadPortalAccounts() {
           }</span>
         </div>
         <div class="flex items-center gap-3">
-          <button type="button" class="link text-xs" data-invite-account="${a.id}" data-email="${escapeHtml(a.email)}">${a.has_password ? "Skicka länk för nytt lösenord" : "Skicka inbjudan igen"}</button>
+          <button type="button" class="link text-xs" data-edit-account="${a.id}">Ändra</button>
+          <button type="button" class="link text-xs" data-invite-account="${a.id}" data-email="${escapeHtml(a.email)}">${a.has_password ? "Mejla länk för nytt lösenord" : "Skicka inbjudan igen"}</button>
           <button type="button" class="text-slate-400 hover:text-red-600" data-remove-account="${a.id}" title="Ta bort inloggningen">✕</button>
         </div>
+        <form class="hidden w-full flex-wrap items-end gap-2 rounded-md bg-slate-50 p-2" data-edit-form="${a.id}">
+          <label class="block text-xs"><span class="text-slate-600">Namn</span>
+            <input name="name" class="input mt-1 w-44" value="${escapeHtml(a.name ?? "")}" /></label>
+          <label class="block text-xs"><span class="text-slate-600">E-post</span>
+            <input name="email" type="email" required class="input mt-1 w-56" value="${escapeHtml(a.email)}" /></label>
+          <label class="block text-xs"><span class="text-slate-600">Nytt lösenord</span>
+            <input name="password" type="password" autocomplete="new-password" class="input mt-1 w-44" placeholder="Tomt = oförändrat" /></label>
+          <button type="submit" class="btn text-xs">Spara</button>
+          <button type="button" class="btn-secondary text-xs" data-edit-cancel="${a.id}">Avbryt</button>
+        </form>
       </li>`
     )
     .join("");
@@ -711,7 +722,28 @@ accountEl.form.addEventListener("submit", async (event) => {
   try {
     const { invite } = await api.post(`/customers/${customerId}/portal-accounts`, form);
     accountEl.form.reset();
-    inviteMessage(form.email, invite);
+    if (invite) inviteMessage(form.email, invite);
+    else showAccountMessage(`Inloggningen för ${escapeHtml(form.email)} är skapad med lösenordet du angav.`);
+    await loadPortalAccounts();
+  } catch (err) {
+    showAccountMessage(escapeHtml(err.message), "error");
+  }
+});
+
+accountEl.list.addEventListener("submit", async (event) => {
+  const form = event.target.closest("[data-edit-form]");
+  if (!form) return;
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(form).entries());
+  try {
+    await api.patch(`/customers/${customerId}/portal-accounts/${form.dataset.editForm}`, {
+      name: data.name,
+      email: data.email,
+      password: data.password || undefined,
+    });
+    showAccountMessage(
+      data.password ? "Sparat. Lösenordet är bytt och personen har loggats ut överallt." : "Sparat."
+    );
     await loadPortalAccounts();
   } catch (err) {
     showAccountMessage(escapeHtml(err.message), "error");
@@ -719,6 +751,14 @@ accountEl.form.addEventListener("submit", async (event) => {
 });
 
 accountEl.list.addEventListener("click", async (event) => {
+  const editBtn = event.target.closest("[data-edit-account], [data-edit-cancel]");
+  if (editBtn) {
+    const id = editBtn.dataset.editAccount ?? editBtn.dataset.editCancel;
+    const form = accountEl.list.querySelector(`[data-edit-form="${id}"]`);
+    form.classList.toggle("hidden");
+    form.classList.toggle("flex", !form.classList.contains("hidden"));
+    return;
+  }
   const inviteBtn = event.target.closest("[data-invite-account]");
   if (inviteBtn) {
     try {

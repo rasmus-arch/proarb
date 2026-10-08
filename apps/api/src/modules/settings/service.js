@@ -28,6 +28,31 @@ function cleanPrefix(value) {
   return cleaned || undefined;
 }
 
+// Hemligheter som aldrig skickas till webbläsaren. Inställningssidan får
+// bara veta om de är ifyllda (<fält>_set).
+const SECRET_FIELDS = [
+  "smtp_password",
+  "fortnox_client_secret",
+  "fortnox_access_token",
+  "fortnox_refresh_token",
+  "fortnox_oauth_state",
+  "github_issues_token",
+];
+
+export function maskSecrets(settings) {
+  if (!settings) return settings;
+  const masked = { ...settings, fortnox_connected: Boolean(settings.fortnox_access_token) };
+  for (const field of SECRET_FIELDS) {
+    masked[`${field}_set`] = Boolean(settings[field]);
+    masked[field] = "";
+  }
+  return masked;
+}
+
+// Ett tomt hemligt fält från inställningssidan betyder "behåll det
+// sparade" (sidan får aldrig se det sparade värdet).
+const keepIfEmpty = (value) => (value === null || value === undefined || value === "" ? undefined : value);
+
 export async function updateSettings(data) {
   const fields = {
     seller_name: data.sellerName,
@@ -50,14 +75,14 @@ export async function updateSettings(data) {
     smtp_host: data.smtpHost,
     smtp_port: data.smtpPort,
     smtp_username: data.smtpUsername,
-    smtp_password: data.smtpPassword,
+    smtp_password: keepIfEmpty(data.smtpPassword),
     smtp_from_email: data.smtpFromEmail,
     smtp_use_tls: data.smtpUseTls === undefined ? undefined : data.smtpUseTls ? 1 : 0,
     fortnox_client_id: data.fortnoxClientId,
-    fortnox_client_secret: data.fortnoxClientSecret,
+    fortnox_client_secret: keepIfEmpty(data.fortnoxClientSecret),
     fortnox_access_token: data.fortnoxAccessToken,
     fortnox_refresh_token: data.fortnoxRefreshToken,
-    github_issues_token: data.githubIssuesToken,
+    github_issues_token: keepIfEmpty(data.githubIssuesToken),
     github_issues_repo: data.githubIssuesRepo,
     quote_valid_days: data.quoteValidDays,
     quote_expiry_warning_days: data.quoteExpiryWarningDays,

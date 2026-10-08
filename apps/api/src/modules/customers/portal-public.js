@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createPortalOrderRequest, addPortalContact, reorderFromOrder } from "./portal-requests.js";
 import { getSettings } from "../settings/service.js";
 import { getSessionAccount, PORTAL_SESSION_COOKIE } from "./portal-accounts.js";
+import { publicFormLimiter } from "../../lib/security.js";
 
 // The customer-facing side of "beställ från Mina sidor": no login, reached
 // only by knowing the unguessable portal_token — same trust model as the
@@ -25,7 +26,7 @@ router.use("/:token", async (req, res, next) => {
   }
 });
 
-router.post("/:token/request", async (req, res, next) => {
+router.post("/:token/request", publicFormLimiter, async (req, res, next) => {
   try {
     const result = await createPortalOrderRequest(req.params.token, {
       requestedByName: req.body?.requestedByName,
@@ -42,7 +43,7 @@ router.post("/:token/request", async (req, res, next) => {
   }
 });
 
-router.post("/:token/contacts", async (req, res, next) => {
+router.post("/:token/contacts", publicFormLimiter, async (req, res, next) => {
   try {
     const contact = await addPortalContact(req.params.token, { name: req.body?.name });
     res.status(201).json(contact);
@@ -53,7 +54,7 @@ router.post("/:token/contacts", async (req, res, next) => {
   }
 });
 
-router.post("/:token/orders/:orderId/reorder", async (req, res, next) => {
+router.post("/:token/orders/:orderId/reorder", publicFormLimiter, async (req, res, next) => {
   try {
     const result = await reorderFromOrder(req.params.token, Number(req.params.orderId));
     res.status(201).json(result);

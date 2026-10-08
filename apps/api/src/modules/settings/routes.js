@@ -26,7 +26,7 @@ router.get("/branding", async (req, res, next) => {
 
 router.get("/", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    res.json(await settings.getSettings());
+    res.json(settings.maskSecrets(await settings.getSettings()));
   } catch (err) {
     next(err);
   }
@@ -34,7 +34,7 @@ router.get("/", requireRole("ADMIN"), async (req, res, next) => {
 
 router.patch("/", requireRole("ADMIN"), async (req, res, next) => {
   try {
-    res.json(await settings.updateSettings(req.body ?? {}));
+    res.json(settings.maskSecrets(await settings.updateSettings(req.body ?? {})));
   } catch (err) {
     next(err);
   }
@@ -63,8 +63,7 @@ router.post(
           return res.status(400).json({ error: `Kunde inte läsa filen: ${err.message}` });
         }
       }
-      const result = await settings.updateSellerLogo(filePath);
-      res.json(result);
+      res.json(settings.maskSecrets(await settings.updateSellerLogo(filePath)));
     } catch (err) {
       next(err);
     }
@@ -104,7 +103,7 @@ router.get("/fortnox/callback", requireRole("ADMIN"), async (req, res) => {
 router.post("/fortnox/disconnect", requireRole("ADMIN"), async (req, res, next) => {
   try {
     await fortnox.disconnectFortnox();
-    res.json(await settings.getSettings());
+    res.json(settings.maskSecrets(await settings.getSettings()));
   } catch (err) {
     next(err);
   }

@@ -162,6 +162,7 @@ export async function run() {
     // Fortnox access token (JWT) är längre än 500 tecken och kapades tyst.
     "ALTER TABLE app_settings MODIFY fortnox_access_token TEXT NULL",
     "ALTER TABLE app_settings MODIFY fortnox_refresh_token TEXT NULL",
+    "ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

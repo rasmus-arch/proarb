@@ -1,7 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import cors from "cors";
 import cookieParser from "cookie-parser";
 
 import authRouter from "./modules/auth/routes.js";
@@ -30,8 +29,10 @@ import backupsRouter from "./modules/backups/routes.js";
 import searchRouter from "./modules/search/routes.js";
 import { uploadsRoot } from "./lib/uploads.js";
 import { requireAuth, requireRole } from "./lib/auth-middleware.js";
+import { publicFormLimiter, securityHeaders, uploadHeaders } from "./lib/security.js";
 import { run as runMigrations } from "../db/migrate.js";
 import { convertLegacySellerLogo } from "./modules/settings/service.js";
+import { flagDefaultPasswords } from "./modules/auth/service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webPublicDir = path.join(__dirname, "..", "..", "web", "public");
@@ -41,9 +42,14 @@ const app = express();
 // behind a TLS-terminating reverse proxy (e.g. cPanel/Apache) — the
 // Fortnox OAuth redirect_uri (settings/routes.js) must exactly match what
 // the browser was actually redirected from, not the plain-http backend.
-app.set("trust proxy", true);
-app.use(cors());
-app.use(express.json());
+// Lita bara på proxyservrar på lokala/privata adresser (Apache/Passenger
+// på samma server) — med "true" kunde vem som helst ange sin egen IP i
+// X-Forwarded-For och komma runt spärren mot lösenordsgissning.
+app.set("trust proxy", "loopback, linklocal, uniquelocal");
+app.disable("x-powered-by");
+// Ingen CORS: frontend och API ligger på samma adress.
+app.use(securityHeaders);
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
 app.get("/api/health", (req, res) => {
@@ -63,6 +69,14 @@ app.use("/api/public/portal", portalPublicRouter);
 // TODO (Fas 8+): once this app has more than a handful of staff accounts,
 // consider trimming session TTL / adding an idle-timeout on top of this.
 app.use("/api", requireAuth);
+// Konton med tillfälligt lösenord (standardlösenordet eller ett som en
+// administratör satt) får bara byta lösenord (/api/auth/*, ovan) tills det är gjort.
+app.use("/api", (req, res, next) => {
+  if (req.user?.must_change_password && !req.path.startsWith("/settings/branding")) {
+    return res.status(403).json({ error: "Byt lösenord först.", code: "PASSWORD_CHANGE_REQUIRED" });
+  }
+  next();
+});
 
 app.use("/api/users", requireRole("ADMIN"), usersRouter);
 app.use("/api/customers", customersRouter);
@@ -99,20 +113,29 @@ app.use("/sortilog", sortilogRouter);
 // Slutar fungera (redirect till proarb.se) så fort ordern är utlämnad — se
 // qr-public.js.
 app.get("/qr/:token", handleQrScan);
-app.post("/qr/:token/ready", handleQrMarkReady);
-app.post("/qr/:token/delivered", handleQrMarkDelivered);
+app.post("/qr/:token/ready", publicFormLimiter, handleQrMarkReady);
+app.post("/qr/:token/delivered", publicFormLimiter, handleQrMarkDelivered);
 
 // Uploaded logo/print-artwork files (customer logos, seller logo).
-app.use("/uploads", express.static(uploadsRoot));
+app.use("/uploads", uploadHeaders, express.static(uploadsRoot, { dotfiles: "deny", index: false }));
 
 // Serve the vanilla JS + Tailwind frontend.
 app.use(express.static(webPublicDir));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error(err);
-  const status = err.status ?? 500;
-  res.status(status).json({ error: err.message ?? "Internal server error" });
+  const status = err.status ?? err.statusCode ?? 500;
+  // Databas- och systemfel visas aldrig i detalj för användaren — de kan
+  // avslöja tabellnamn, frågor och sökvägar. Hela felet loggas på servern.
+  // Egna felmeddelanden (t.ex. från Fortnox-kopplingen) visas som vanligt.
+  const isSystemError = Boolean(err.sqlMessage || err.sql || err.errno || err.syscall || /^E[A-Z_]+$/.test(err.code ?? ""));
+  if (status >= 500) console.error(err);
+  if (isSystemError || !(err instanceof Error)) {
+    return res.status(status >= 500 ? 500 : status).json({
+      error: "Något gick fel på servern. Försök igen eller rapportera problemet.",
+    });
+  }
+  res.status(status).json({ error: err.message || "Något gick fel" });
 });
 
 // Brings the database schema up to date on every start, so deploying new
@@ -124,6 +147,10 @@ app.use((err, req, res, next) => {
 runMigrations()
   .catch((err) => {
     console.warn(`Kunde inte köra databasmigrering vid start: ${err.message}`);
+  })
+  .then(() => flagDefaultPasswords())
+  .catch((err) => {
+    console.warn(`Kunde inte kontrollera standardlösenord: ${err.message}`);
   })
   .then(() => convertLegacySellerLogo())
   .catch((err) => {

@@ -13,12 +13,12 @@ function renderRows(customers) {
   rowsEl.innerHTML = customers
     .map(
       (c) => `
-      <tr class="cursor-pointer hover:bg-slate-50" onclick="location.href='/kund-editor.html?id=${c.id}'">
-        <td class="py-2 pr-4 text-slate-500">${c.customer_number}</td>
+      <tr class="cursor-pointer hover:bg-slate-50" onclick="location.href='/kund-editor.html?id=${Number(c.id)}'">
+        <td class="py-2 pr-4 text-slate-500">${escapeHtml(c.customer_number)}</td>
         <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(c.name)}${c.is_cash_customer ? ` <span class="chip ml-1">Kontant</span>` : ""}</td>
-        <td class="py-2 pr-4">${c.org_number ?? ""}</td>
-        <td class="py-2 pr-4">${c.city ?? ""}</td>
-        <td class="py-2 pr-4">${c.phone ?? ""}</td>
+        <td class="py-2 pr-4">${escapeHtml(c.org_number ?? "")}</td>
+        <td class="py-2 pr-4">${escapeHtml(c.city ?? "")}</td>
+        <td class="py-2 pr-4">${escapeHtml(c.phone ?? "")}</td>
       </tr>`
     )
     .join("");

@@ -234,8 +234,8 @@
       <section class="mt-4 card">
         <h2 class="section-title">Sortilog</h2>
         <p class="mt-1 text-sm text-slate-600">
-          Kundens egen sida med sortiment och beställning. Bjud in personer hos kunden — de får ett mejl och väljer
-          själva sitt lösenord, och loggar sedan in med e-post och lösenord på
+          Kundens egen sida med sortiment och beställning. Lägg till personer hos kunden — sätt ett lösenord direkt,
+          eller lämna lösenordet tomt så får personen ett mejl och väljer själv. De loggar in med e-post och lösenord på
           <a id="sortilog-login-url" href="/sortilog" target="_blank" class="link">/sortilog</a>.
         </p>
 
@@ -251,7 +251,11 @@
             <span class="text-slate-700">E-post *</span>
             <input name="email" type="email" required class="input mt-1 w-60" />
           </label>
-          <button type="submit" class="btn">Bjud in</button>
+          <label class="block text-sm">
+            <span class="text-slate-700">Lösenord</span>
+            <input name="password" type="password" autocomplete="new-password" class="input mt-1 w-48" placeholder="Tomt = skicka inbjudan" />
+          </label>
+          <button type="submit" class="btn">Lägg till</button>
         </form>
         <p id="portal-account-message" class="mt-2 hidden text-sm"></p>
 

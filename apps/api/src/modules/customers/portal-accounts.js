@@ -4,6 +4,7 @@ import { pool } from "../../lib/db.js";
 import { getSettings } from "../settings/service.js";
 import { sendPortalInviteEmail, sendPortalPasswordResetEmail } from "../integrations/email.js";
 import { getOrCreatePortalToken } from "./service.js";
+import { assertPasswordStrength, sha256 } from "../../lib/security.js";
 
 // Sortilog-inloggning: ett konto per person hos kunden (e-post + lösenord).
 // Personalen skapar kontot och en inbjudan skickas; personen väljer sitt
@@ -13,7 +14,6 @@ import { getOrCreatePortalToken } from "./service.js";
 // kunna nå något i själva systemet.
 
 const SALT_ROUNDS = 10;
-const MIN_PASSWORD_LENGTH = 8;
 const SESSION_TTL_DAYS = 30;
 const INVITE_TTL_HOURS = 7 * 24;
 const RESET_TTL_HOURS = 1;
@@ -25,8 +25,10 @@ export const PORTAL_SESSION_COOKIE = "sortilog_session";
 export const PORTAL_SESSION_MAX_AGE_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 function hashToken(token) {
-  return crypto.createHash("sha256").update(String(token ?? "")).digest("hex");
+  return sha256(token);
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normalizeEmail(email) {
   return String(email ?? "").trim().toLowerCase();
@@ -88,9 +90,14 @@ async function sendInvite(account, origin) {
   return result.ok ? { sent: true } : { sent: false, reason: result.note ?? result.reason, inviteUrl: url };
 }
 
-export async function createAccount(customerId, { email, name }, origin) {
+// Skapar en inloggning. Med `password` sätter administratören lösenordet
+// direkt (ingen inbjudan skickas); utan skickas en inbjudan där personen
+// väljer sitt eget.
+export async function createAccount(customerId, { email, name, password }, origin) {
   const normalized = normalizeEmail(email);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) throw new Error("INVALID_EMAIL");
+  if (!EMAIL_PATTERN.test(normalized) || normalized.length > 255) throw new Error("INVALID_EMAIL");
+  const hasPassword = typeof password === "string" && password !== "";
+  if (hasPassword) assertPasswordStrength(password);
 
   const [[existing]] = await pool.query(`SELECT * FROM portal_accounts WHERE email = ?`, [normalized]);
   let accountId;
@@ -114,8 +121,63 @@ export async function createAccount(customerId, { email, name }, origin) {
   // Kunden behöver en portal_token — den inloggade sidan bygger på samma
   // sida/API som länkarna.
   await getOrCreatePortalToken(customerId);
+  if (hasPassword) {
+    await pool.query(`UPDATE portal_accounts SET password_hash = ? WHERE id = ?`, [
+      await bcrypt.hash(password, SALT_ROUNDS),
+      accountId,
+    ]);
+  }
   const [[account]] = await pool.query(`SELECT * FROM portal_accounts WHERE id = ?`, [accountId]);
-  return { account: publicAccount(account), invite: await sendInvite(account, origin) };
+  return { account: publicAccount(account), invite: hasPassword ? null : await sendInvite(account, origin) };
+}
+
+// Administratören ändrar namn, e-post och/eller lösenord. Nytt lösenord
+// eller ny e-post loggar ut alla pågående inloggningar för kontot.
+export async function updateAccount(customerId, accountId, { name, email, password }) {
+  const [[account]] = await pool.query(
+    `SELECT * FROM portal_accounts WHERE id = ? AND customer_id = ? AND active = 1`,
+    [accountId, customerId]
+  );
+  if (!account) throw new Error("ACCOUNT_NOT_FOUND");
+
+  const sets = [];
+  const values = [];
+  if (name !== undefined) {
+    sets.push("name = ?");
+    values.push(String(name ?? "").trim() || null);
+  }
+  let emailChanged = false;
+  if (email !== undefined) {
+    const normalized = normalizeEmail(email);
+    if (!EMAIL_PATTERN.test(normalized) || normalized.length > 255) throw new Error("INVALID_EMAIL");
+    if (normalized !== account.email) {
+      const [[taken]] = await pool.query(`SELECT id, active FROM portal_accounts WHERE email = ? AND id <> ?`, [
+        normalized,
+        accountId,
+      ]);
+      if (taken?.active) throw new Error("EMAIL_TAKEN");
+      // Ett gammalt borttaget konto med adressen frigör den.
+      if (taken) await pool.query(`UPDATE portal_accounts SET email = CONCAT('borttagen-', id, '@invalid') WHERE id = ?`, [taken.id]);
+      sets.push("email = ?");
+      values.push(normalized);
+      emailChanged = true;
+    }
+  }
+  const hasPassword = typeof password === "string" && password !== "";
+  if (hasPassword) {
+    assertPasswordStrength(password);
+    sets.push("password_hash = ?");
+    values.push(await bcrypt.hash(password, SALT_ROUNDS));
+  }
+  if (sets.length > 0) {
+    await pool.query(`UPDATE portal_accounts SET ${sets.join(", ")} WHERE id = ?`, [...values, accountId]);
+  }
+  if (hasPassword || emailChanged) {
+    await pool.query(`DELETE FROM portal_sessions WHERE account_id = ?`, [accountId]);
+    await pool.query(`UPDATE portal_password_tokens SET used_at = NOW() WHERE account_id = ? AND used_at IS NULL`, [accountId]);
+  }
+  const [[updated]] = await pool.query(`SELECT * FROM portal_accounts WHERE id = ?`, [accountId]);
+  return publicAccount(updated);
 }
 
 export async function resendInvite(customerId, accountId, origin) {
@@ -215,7 +277,7 @@ export async function getPasswordToken(token) {
 
 // Sätter lösenord via inbjudan eller återställning och loggar in direkt.
 export async function setPassword(token, password) {
-  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) throw new Error("WEAK_PASSWORD");
+  assertPasswordStrength(password);
   const [[row]] = await pool.query(
     `SELECT t.account_id, pa.email FROM portal_password_tokens t
      JOIN portal_accounts pa ON pa.id = t.account_id
