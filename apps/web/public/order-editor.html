@@ -69,6 +69,14 @@
             <span class="text-slate-700">Kostnadsställe / kundens ordernr</span>
             <input id="cost-center" maxlength="30" class="input mt-1" />
           </label>
+          <label class="col-span-2 block text-sm">
+            <span class="text-slate-700">E-post till den som hämtar (valfritt)</span>
+            <input id="notify-email" type="email" maxlength="255" class="input mt-1" />
+            <span class="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span id="notify-email-hint" class="text-xs text-slate-500"></span>
+              <button type="button" id="use-contact-email-btn" class="link hidden text-xs"></button>
+            </span>
+          </label>
         </div>
         <p class="mt-1 text-xs text-slate-500">Er referens och kostnadsställe står på fakturan i Fortnox.</p>
         <label class="mt-4 flex items-start gap-2.5 text-sm">

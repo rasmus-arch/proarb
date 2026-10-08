@@ -34,6 +34,9 @@ const el = {
   skipInventory: document.getElementById("skip-inventory"),
   customerReference: document.getElementById("customer-reference"),
   costCenter: document.getElementById("cost-center"),
+  notifyEmail: document.getElementById("notify-email"),
+  notifyEmailHint: document.getElementById("notify-email-hint"),
+  useContactEmailBtn: document.getElementById("use-contact-email-btn"),
   newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
   newPickupContactQuickBtn: document.getElementById("new-pickup-contact-quick-btn"),
@@ -177,6 +180,36 @@ function renderTotals() {
 }
 
 const isNewOrder = () => !orderId;
+
+// --- E-post till den som hämtar ------------------------------------------------
+// Valfri. Statusmejlen (redo, påminnelse, utlämnad) går hit, annars till
+// kundkortets e-post. Har vald referensperson en e-post kan den fyllas i
+// med ett klick.
+
+function updateNotifyEmailHint() {
+  const fallback = state.customerEmail;
+  el.notifyEmail.placeholder = fallback || "kundkortet saknar e-post";
+  el.notifyEmailHint.textContent = el.notifyEmail.value.trim()
+    ? "Statusmejlen för den här ordern går hit."
+    : fallback
+      ? `Tomt = mejlen går till kundkortets e-post (${fallback}).`
+      : "Tomt = inga statusmejl, kundkortet saknar e-post.";
+  const contact = state.contacts.find((c) => String(c.id) === String(el.referenceSelect.value));
+  const contactEmail = contact?.email?.trim();
+  const show = Boolean(contactEmail) && contactEmail !== el.notifyEmail.value.trim() && !el.notifyEmail.disabled;
+  el.useContactEmailBtn.classList.toggle("hidden", !show);
+  if (show) {
+    el.useContactEmailBtn.textContent = `Använd ${contactEmail}`;
+    el.useContactEmailBtn.dataset.email = contactEmail;
+  }
+}
+
+el.notifyEmail.addEventListener("input", updateNotifyEmailHint);
+el.referenceSelect.addEventListener("change", updateNotifyEmailHint);
+el.useContactEmailBtn.addEventListener("click", () => {
+  el.notifyEmail.value = el.useContactEmailBtn.dataset.email ?? "";
+  updateNotifyEmailHint();
+});
 
 // --- Kreditgräns & förfallna fakturor ---------------------------------------
 // Bara en varning — ordern går alltid att spara.
@@ -631,6 +664,7 @@ el.newPickupContactQuickBtn.addEventListener("click", () => {
 async function loadContacts(customerId, selectedId) {
   const customer = await api.get(`/customers/${customerId}`);
   state.contacts = customer.contacts;
+  state.customerEmail = customer.email ?? "";
   applyCashMode(Boolean(customer.is_cash_customer));
   loadCreditStatus(customerId);
 
@@ -651,6 +685,7 @@ async function loadContacts(customerId, selectedId) {
     customer.contacts
       .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${c.can_pickup ? " (hämtbehörig)" : ""}</option>`)
       .join("");
+  updateNotifyEmailHint();
 }
 
 // Kontantkund (t.ex. Swish-kunden): köpet är betalt på plats. En ny order
@@ -725,6 +760,7 @@ async function createOrder({ completeCash }) {
     skipInventory: el.skipInventory.checked,
     customerReference: el.customerReference.value,
     costCenter: el.costCenter.value,
+    notifyEmail: el.notifyEmail.value,
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
       description: l.productVariantId ? null : l.description ?? l.name,
@@ -875,6 +911,7 @@ function renderActionButtons(order) {
         skipInventory: el.skipInventory.checked,
         customerReference: el.customerReference.value,
         costCenter: el.costCenter.value,
+        notifyEmail: el.notifyEmail.value,
         lines: state.lines.map((l) => ({
           productVariantId: l.productVariantId,
           description: l.productVariantId ? null : l.description ?? l.name,
@@ -1037,6 +1074,7 @@ function applyReadOnlyState() {
   el.skipInventory.disabled = !linesEditable;
   el.customerReference.disabled = !linesEditable;
   el.costCenter.disabled = !linesEditable;
+  el.notifyEmail.disabled = !linesEditable;
 
   // "Spara" (skapa ny order) är bara för en helt osparad order — en
   // befintlig sparas via "Spara ändringar" i åtgärdsknapparna istället
@@ -1084,6 +1122,7 @@ async function init() {
     el.skipInventory.checked = Boolean(order.skip_inventory);
     el.customerReference.value = order.customer_reference ?? "";
     el.costCenter.value = order.cost_center ?? "";
+    el.notifyEmail.value = order.notify_email ?? "";
 
     selectCustomer(order.customer_id, order.customer_name);
     await loadContacts(order.customer_id, order.reference_contact_id);

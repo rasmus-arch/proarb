@@ -403,6 +403,8 @@ CREATE TABLE IF NOT EXISTS portal_order_requests (
   -- Vart bekräftelsemejlen går: den inloggade Sortilog-användaren, annars
   -- kundens e-post.
   requester_email       VARCHAR(255) NULL,
+  -- Valfri e-post till den som hämtar ut — blir orderns notify_email.
+  pickup_email          VARCHAR(255) NULL,
   customer_reference    VARCHAR(50) NULL,
   cost_center           VARCHAR(30) NULL,
   status                ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',

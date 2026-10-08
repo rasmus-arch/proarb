@@ -42,10 +42,12 @@ router.post("/:token/request", publicFormLimiter, async (req, res, next) => {
       requesterEmail: await requesterEmail(req),
       customerReference: typeof req.body?.customerReference === "string" ? req.body.customerReference : null,
       costCenter: typeof req.body?.costCenter === "string" ? req.body.costCenter : null,
+      pickupEmail: typeof req.body?.pickupEmail === "string" ? req.body.pickupEmail : null,
     });
     res.status(201).json(result);
   } catch (err) {
     if (err.message === "CUSTOMER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Kontrollera e-postadressen till den som hämtar" });
     if (err.message === "INVALID_REQUEST") {
       return res.status(400).json({ error: "Ange minst ett antal för en produkt i sortimentet" });
     }

@@ -459,6 +459,9 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             </div>
             <p id="contact-error" style="display:none;color:#dc2626;font-size:13px;margin:6px 0 0;"></p>
 
+            <label style="display:block;font-size:13px;color:#334155;margin:14px 0 6px;">E-post till den som hämtar (valfritt)</label>
+            <input id="pickup-email" type="email" maxlength="255" class="name-input" placeholder="Hit skickas besked när ordern är redo" />
+
             <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;">
               <label style="flex:1;min-width:180px;font-size:13px;color:#334155;">Er referens (valfritt)
                 <input id="customer-reference" type="text" maxlength="50" class="name-input" style="margin-top:6px;" placeholder="Står på fakturan" />
@@ -641,6 +644,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             referenceContactId: referenceContactId,
             customerReference: document.getElementById("customer-reference").value || null,
             costCenter: document.getElementById("cost-center").value || null,
+            pickupEmail: document.getElementById("pickup-email").value || null,
             lines: lines,
           }),
         })
@@ -654,6 +658,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             document.getElementById("requested-by-name").value = "";
             document.getElementById("customer-reference").value = "";
             document.getElementById("cost-center").value = "";
+            document.getElementById("pickup-email").value = "";
             pickupSelect.value = "";
             newContactWrap.style.display = "none";
             successEl.style.display = "block";

@@ -337,6 +337,16 @@ export function cleanText(value, max) {
   return String(value ?? "").trim().slice(0, max) || null;
 }
 
+// E-post till den som hämtar ut ordern (valfri). Statusmejlen går dit,
+// annars till kundkortets e-post. Ogiltig adress = INVALID_EMAIL.
+export function cleanEmail(value) {
+  if (value === undefined) return undefined;
+  const email = String(value ?? "").trim().toLowerCase();
+  if (!email) return null;
+  if (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("INVALID_EMAIL");
+  return email;
+}
+
 // Direct order creation ("lägg en order direkt", without going via an
 // offert first).
 export async function createOrder(data, userId) {
@@ -344,6 +354,7 @@ export async function createOrder(data, userId) {
     throw new Error("INVALID_ORDER");
   }
   assertValidLines(data.lines);
+  const notifyEmail = cleanEmail(data.notifyEmail) ?? null;
 
   const connection = await pool.getConnection();
   try {
@@ -352,8 +363,8 @@ export async function createOrder(data, userId) {
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
-                           customer_reference, cost_center)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           customer_reference, cost_center, notify_email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         data.customerId,
@@ -365,6 +376,7 @@ export async function createOrder(data, userId) {
         data.skipInventory ? 1 : 0,
         cleanText(data.customerReference, 50) ?? null,
         cleanText(data.costCenter, 30) ?? null,
+        notifyEmail,
       ]
     );
     const orderId = result.insertId;
@@ -465,18 +477,21 @@ export async function updateOrderLines(id, lines, fields = {}) {
   if (!order) throw new Error("ORDER_NOT_FOUND");
   if (PICKUP_BLOCKED_STATUSES.includes(order.status)) throw new Error("ORDER_LINES_LOCKED");
   assertValidLines(lines);
+  const notifyEmail = cleanEmail(fields.notifyEmail);
 
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     await connection.query(
-      `UPDATE orders SET reference_contact_id = ?, delivery_method = ?, skip_inventory = ?, customer_reference = ?, cost_center = ? WHERE id = ?`,
+      `UPDATE orders SET reference_contact_id = ?, delivery_method = ?, skip_inventory = ?, customer_reference = ?, cost_center = ?,
+                         notify_email = ? WHERE id = ?`,
       [
         fields.referenceContactId === undefined ? order.reference_contact_id : fields.referenceContactId || null,
         fields.deliveryMethod ?? order.delivery_method,
         fields.skipInventory === undefined ? order.skip_inventory : fields.skipInventory ? 1 : 0,
         fields.customerReference === undefined ? order.customer_reference : cleanText(fields.customerReference, 50),
         fields.costCenter === undefined ? order.cost_center : cleanText(fields.costCenter, 30),
+        notifyEmail === undefined ? order.notify_email : notifyEmail,
         id,
       ]
     );

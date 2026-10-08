@@ -35,6 +35,7 @@ router.post("/", async (req, res, next) => {
     if (err.message === "INVALID_ORDER") {
       return res.status(400).json({ error: "customerId och minst en rad krävs" });
     }
+    if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Ogiltig e-postadress till den som hämtar" });
     if (err.message === "INVALID_LINE") {
       return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning (fritextrad), plus antal och pris" });
     }
@@ -164,13 +165,14 @@ router.patch("/:id/lines", async (req, res, next) => {
     if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
       return res.status(400).json({ error: "Minst en rad krävs" });
     }
-    const { referenceContactId, deliveryMethod, skipInventory, customerReference, costCenter } = req.body;
+    const { referenceContactId, deliveryMethod, skipInventory, customerReference, costCenter, notifyEmail } = req.body;
     const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines, {
       referenceContactId,
       deliveryMethod: ["PICKUP", "SHIPPING"].includes(deliveryMethod) ? deliveryMethod : undefined,
       skipInventory,
       customerReference,
       costCenter,
+      notifyEmail,
     });
     res.json(order);
   } catch (err) {
@@ -178,6 +180,7 @@ router.patch("/:id/lines", async (req, res, next) => {
     if (err.message === "ORDER_LINES_LOCKED") {
       return res.status(409).json({ error: "Ordern kan inte längre redigeras (redan utlämnad/fakturerad/avbruten)" });
     }
+    if (err.message === "INVALID_EMAIL") return res.status(400).json({ error: "Ogiltig e-postadress till den som hämtar" });
     if (err.message === "INVALID_LINE") {
       return res.status(400).json({ error: "Varje rad behöver antingen en produkt eller en beskrivning, plus antal och pris" });
     }

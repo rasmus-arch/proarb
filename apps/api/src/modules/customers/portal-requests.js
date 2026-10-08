@@ -1,5 +1,5 @@
 import { pool } from "../../lib/db.js";
-import { cleanText, createOrder, getOrder } from "../orders/service.js";
+import { cleanEmail, cleanText, createOrder, getOrder } from "../orders/service.js";
 import { notifyOrderConfirmed, notifyRequestReceived } from "../orders/notifications.js";
 import { assortmentDiscountSelect, addContact } from "./service.js";
 
@@ -15,8 +15,9 @@ import { assortmentDiscountSelect, addContact } from "./service.js";
 // går dit), annars null och kundens e-post används.
 export async function createPortalOrderRequest(
   token,
-  { requestedByName, referenceContactId, lines, requesterEmail, customerReference, costCenter }
+  { requestedByName, referenceContactId, lines, requesterEmail, customerReference, costCenter, pickupEmail }
 ) {
+  const pickup = cleanEmail(pickupEmail) ?? null;
   const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (!Array.isArray(lines) || lines.length === 0) throw new Error("INVALID_REQUEST");
@@ -38,8 +39,8 @@ export async function createPortalOrderRequest(
 
     const [result] = await connection.query(
       `INSERT INTO portal_order_requests
-         (customer_id, requested_by_name, reference_contact_id, requester_email, customer_reference, cost_center)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+         (customer_id, requested_by_name, reference_contact_id, requester_email, customer_reference, cost_center, pickup_email)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         customer.id,
         requestedByName || null,
@@ -47,6 +48,7 @@ export async function createPortalOrderRequest(
         requesterEmail || null,
         cleanText(customerReference, 50) ?? null,
         cleanText(costCenter, 30) ?? null,
+        pickup,
       ]
     );
     const requestId = result.insertId;
@@ -269,8 +271,11 @@ export async function convertPortalOrderRequest(id, userId) {
     [order.id, userId, id]
   );
 
-  if (request.requester_email) {
-    await pool.query(`UPDATE orders SET notify_email = ? WHERE id = ?`, [request.requester_email, order.id]);
+  // Statusmejl för ordern: den som ska hämta om kunden angett det, annars
+  // den som beställde, annars kundkortets e-post.
+  const notifyEmail = request.pickup_email || request.requester_email;
+  if (notifyEmail) {
+    await pool.query(`UPDATE orders SET notify_email = ? WHERE id = ?`, [notifyEmail, order.id]);
   }
   const confirmed = await getOrder(order.id);
   notifyOrderConfirmed(confirmed);

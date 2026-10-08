@@ -178,6 +178,7 @@ export async function run() {
     "ALTER TABLE orders ADD COLUMN cost_center VARCHAR(30) NULL",
     "ALTER TABLE portal_order_requests ADD COLUMN customer_reference VARCHAR(50) NULL",
     "ALTER TABLE portal_order_requests ADD COLUMN cost_center VARCHAR(30) NULL",
+    "ALTER TABLE portal_order_requests ADD COLUMN pickup_email VARCHAR(255) NULL",
     "ALTER TABLE purchase_orders ADD COLUMN confirmed_at DATETIME NULL",
     "ALTER TABLE purchase_orders ADD COLUMN confirmed_note VARCHAR(255) NULL",
     "ALTER TABLE invoices ADD COLUMN paid_at DATETIME NULL",
