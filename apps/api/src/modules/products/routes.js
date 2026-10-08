@@ -28,6 +28,16 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+// Merförsäljning i order-/offert-editorn: ?variantIds=1,2,3
+router.get("/bought-together", async (req, res, next) => {
+  try {
+    const ids = String(req.query.variantIds ?? "").split(",").filter(Boolean);
+    res.json({ rows: await products.boughtTogether(ids) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/search", async (req, res, next) => {
   try {
     const customerId = req.query.customerId ? Number(req.query.customerId) : null;

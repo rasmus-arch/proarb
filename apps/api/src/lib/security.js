@@ -120,7 +120,7 @@ export function securityHeaders(req, res, next) {
   res.set("X-Content-Type-Options", "nosniff");
   res.set("X-Frame-Options", "DENY");
   res.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
   res.set("Cross-Origin-Opener-Policy", "same-origin");
   // Sidorna har inline-skript, så script-src kan inte låsas helt; resten
   // stängs: inga plugins, ingen inbäddning i andra sajter, formulär och

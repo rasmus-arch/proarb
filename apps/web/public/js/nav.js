@@ -38,7 +38,7 @@ function renderNav(user, branding) {
   // without a logo yet still shows something meaningful.
   const brandMark = branding?.seller_logo_path
     ? `<img src="/uploads/${branding.seller_logo_path}" alt="${escapeHtml(branding.seller_name)}" class="h-8 w-auto" />`
-    : `<span class="text-sm font-semibold tracking-tight text-slate-900">${escapeHtml(branding?.seller_name || "ProArb")}</span>`;
+    : `<span class="hidden text-sm font-semibold tracking-tight text-slate-900 sm:inline">${escapeHtml(branding?.seller_name || "ProArb")}</span>`;
 
   const initials = String(user.name ?? "")
     .split(/\s+/)
@@ -49,7 +49,7 @@ function renderNav(user, branding) {
 
   mount.innerHTML = `
     <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div class="mx-auto flex h-14 max-w-7xl items-stretch gap-5 px-4">
+      <div class="mx-auto flex h-14 max-w-7xl items-stretch gap-3 px-4 sm:gap-5">
         <a href="/index.html" class="flex shrink-0 items-center">${brandMark}</a>
         <nav class="-mx-3 flex items-stretch overflow-x-auto">
           ${links
@@ -60,7 +60,7 @@ function renderNav(user, branding) {
             .join("")}
         </nav>
         <div class="relative ml-auto flex shrink-0 items-center">
-          <label class="relative">
+          <label class="relative hidden sm:block">
             <span class="sr-only">Sök eller skanna</span>
             <svg class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="5.5"/><path stroke-linecap="round" d="m13.5 13.5 3 3"/></svg>
             <input id="nav-search" type="search" autocomplete="off" spellcheck="false" placeholder="Sök eller skanna…"

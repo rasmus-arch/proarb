@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
-import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { DEFAULT_WAREHOUSE_ID, reservedQtySql } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
 import { sendInactiveCustomerReminderEmail } from "../integrations/email.js";
 import { sqlLineTotal } from "../../lib/lines.js";
@@ -324,7 +324,9 @@ export async function getCustomerByPortalToken(token) {
     `SELECT p.id AS product_id, p.article_number, p.name, p.base_price, p.image_url, p.discontinued, p.tax_rate_percent,
             ca.print_description, ca.print_price, ca.print_discount_percent,
             v.id AS variant_id, v.sku, v.color, v.size, v.price_override,
-            sl.quantity_on_hand,
+            -- Sortilog visar det som går att få: saldo minus det som redan
+            -- är reserverat för andra öppna ordrar.
+            COALESCE(sl.quantity_on_hand, 0) - ${reservedQtySql("v.id")} AS quantity_on_hand,
             ${assortmentDiscountSelect(customer.id)}
      FROM customer_assortment ca
      JOIN products p ON p.id = ca.product_id
@@ -356,7 +358,15 @@ export async function getCustomerByPortalToken(token) {
     [customer.id]
   );
 
-  return { customer, products, orders, contacts, pendingRequests };
+  // Kostnadsställen kunden använt tidigare — förslag i beställningsformuläret.
+  const [costCenterRows] = await pool.query(
+    `SELECT cost_center FROM orders WHERE customer_id = ? AND cost_center IS NOT NULL
+     GROUP BY cost_center ORDER BY MAX(created_at) DESC LIMIT 20`,
+    [customer.id]
+  );
+  const costCenters = costCenterRows.map((r) => r.cost_center);
+
+  return { customer, products, orders, contacts, pendingRequests, costCenters };
 }
 
 // --- Sortiment ("Mina sidor") ----------------------------------------------

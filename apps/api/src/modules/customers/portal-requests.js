@@ -1,5 +1,5 @@
 import { pool } from "../../lib/db.js";
-import { createOrder, getOrder } from "../orders/service.js";
+import { cleanText, createOrder, getOrder } from "../orders/service.js";
 import { notifyOrderConfirmed, notifyRequestReceived } from "../orders/notifications.js";
 import { assortmentDiscountSelect, addContact } from "./service.js";
 
@@ -13,7 +13,10 @@ import { assortmentDiscountSelect, addContact } from "./service.js";
 
 // requesterEmail = den inloggade Sortilog-användarens e-post (bekräftelser
 // går dit), annars null och kundens e-post används.
-export async function createPortalOrderRequest(token, { requestedByName, referenceContactId, lines, requesterEmail }) {
+export async function createPortalOrderRequest(
+  token,
+  { requestedByName, referenceContactId, lines, requesterEmail, customerReference, costCenter }
+) {
   const [[customer]] = await pool.query(`SELECT id FROM customers WHERE portal_token = ?`, [token]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (!Array.isArray(lines) || lines.length === 0) throw new Error("INVALID_REQUEST");
@@ -34,9 +37,17 @@ export async function createPortalOrderRequest(token, { requestedByName, referen
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO portal_order_requests (customer_id, requested_by_name, reference_contact_id, requester_email)
-       VALUES (?, ?, ?, ?)`,
-      [customer.id, requestedByName || null, contactId, requesterEmail || null]
+      `INSERT INTO portal_order_requests
+         (customer_id, requested_by_name, reference_contact_id, requester_email, customer_reference, cost_center)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        customer.id,
+        requestedByName || null,
+        contactId,
+        requesterEmail || null,
+        cleanText(customerReference, 50) ?? null,
+        cleanText(costCenter, 30) ?? null,
+      ]
     );
     const requestId = result.insertId;
 
@@ -233,6 +244,8 @@ export async function convertPortalOrderRequest(id, userId) {
     {
       customerId: request.customer_id,
       referenceContactId: request.reference_contact_id,
+      customerReference: request.customer_reference,
+      costCenter: request.cost_center,
       notes: request.requested_by_name
         ? `Beställning via Sortilog (${request.requested_by_name}).`
         : "Beställning via Sortilog.",

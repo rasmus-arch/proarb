@@ -23,6 +23,7 @@ const STATUS_TABS = [
   { key: "DELIVERED", label: "Utlämnad, ej fakturerad" },
   { key: "INVOICED", label: "Fakturerad" },
   { key: "CANCELLED", label: "Avbruten" },
+  { key: "UNPAID", label: "Obetalda" },
 ];
 let currentStatus = new URLSearchParams(location.search).get("status") || "";
 const selected = new Set();
@@ -49,7 +50,9 @@ function renderRows(orders) {
         <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(o.order_number)}</td>
         <td class="py-2 pr-4">${escapeHtml(o.customer_name)}</td>
         <td class="py-2 pr-4">
-          <span class="rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_COLORS[o.status] ?? ""}">${ORDER_STATUS_LABELS[o.status] ?? o.status}</span>
+          <span class="rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_COLORS[o.status] ?? ""}">${ORDER_STATUS_LABELS[o.status] ?? o.status}</span>${
+            o.paid_at ? ` <span class="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Betald</span>` : ""
+          }
         </td>
         <td class="py-2 pr-4 text-slate-500">${new Date(o.created_at).toLocaleDateString("sv-SE")}${
           o.status === "DELIVERED" && o.delivered_at ? `<div class="text-xs">Utlämnad ${new Date(o.delivered_at).toLocaleDateString("sv-SE")}</div>` : ""

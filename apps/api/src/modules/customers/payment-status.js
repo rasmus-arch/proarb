@@ -1,7 +1,7 @@
 import { pool } from "../../lib/db.js";
 import { sqlLineTotal } from "../../lib/lines.js";
 import { getSettings } from "../settings/service.js";
-import { fetchUnpaidInvoices, isFortnoxConfigured } from "../integrations/fortnox.js";
+import { fetchFullyPaidInvoices, fetchUnpaidInvoices, isFortnoxConfigured } from "../integrations/fortnox.js";
 
 // Betalstatus från Fortnox och kreditgräns per kund.
 //
@@ -37,7 +37,44 @@ async function doRefresh(settings) {
   } finally {
     connection.release();
   }
+  try {
+    // Nyckeln kan ha förnyats under hämtningen ovan — läs om inställningarna.
+    await markPaidInvoices(await getSettings());
+  } catch (err) {
+    console.warn(`Betalda fakturor från Fortnox kunde inte hämtas: ${err.message}`);
+  }
   return invoices.length;
+}
+
+// Inbetalningar: Fokus-fakturor som Fortnox visar som helt betalda får
+// paid_at (ordern visas då som Betald). Bara fakturor som fortfarande
+// väntar på betalning frågas om — från den äldsta av dem och framåt.
+// Kontantfakturor är betalda på plats.
+export async function markPaidInvoices(settings) {
+  await pool.query(
+    `UPDATE invoices SET paid_at = created_at WHERE type = 'CASH_INVOICE' AND status = 'SYNCED' AND paid_at IS NULL`
+  );
+  const [waiting] = await pool.query(
+    `SELECT id, external_ref, created_at FROM invoices
+     WHERE type = 'CUSTOMER_INVOICE' AND external_ref IS NOT NULL AND paid_at IS NULL`
+  );
+  if (waiting.length === 0) return 0;
+  const oldest = new Date(Math.min(...waiting.map((i) => new Date(i.created_at).getTime())));
+  // Fakturadatum kan ligga någon dag före när raden skapades här.
+  oldest.setDate(oldest.getDate() - 7);
+  const paid = await fetchFullyPaidInvoices(settings, oldest.toLocaleDateString("sv-SE"));
+  const byNumber = new Map(paid.map((p) => [p.documentNumber, p]));
+  let marked = 0;
+  for (const invoice of waiting) {
+    const match = byNumber.get(String(invoice.external_ref));
+    if (!match) continue;
+    await pool.query(`UPDATE invoices SET paid_at = COALESCE(?, NOW()) WHERE id = ? AND paid_at IS NULL`, [
+      match.finalPayDate,
+      invoice.id,
+    ]);
+    marked++;
+  }
+  return marked;
 }
 
 // Returnerar { ok, count } eller { ok: false, error }. Aldrig ett kastat fel —

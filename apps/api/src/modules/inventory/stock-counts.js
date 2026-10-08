@@ -296,3 +296,111 @@ export async function completeStockCount(countId) {
   await pool.query(`UPDATE stock_counts SET status = 'COMPLETED', completed_at = NOW() WHERE id = ?`, [countId]);
   return getStockCount(countId);
 }
+
+// --- Mobilinventering, hylla för hylla -------------------------------------
+// Hyllorna kommer från products.shelf_location. En hylla visar det som
+// borde stå där (saldo > 0 inom inventeringens omfattning) plus det som
+// redan räknats; varor utan hyllplats samlas under "" ("Utan hyllplats").
+// Räkningen är fortfarande per variant i hela lagret — samma rader som
+// inventeringen på datorn, så avvikelser beslutas där som vanligt.
+
+async function countForShelves(countId) {
+  const count = await getStockCount(countId);
+  if (!count) throw new Error("COUNT_NOT_FOUND");
+  return count;
+}
+
+function shelfItemsQuery(count, shelfSql) {
+  const scope = scopeCondition(count);
+  return {
+    sql: `SELECT v.id AS variant_id, v.sku, v.barcode, v.color, v.size, p.name AS product_name,
+                 COALESCE(p.shelf_location, '') AS shelf_location,
+                 COALESCE(sl.quantity_on_hand, 0) AS expected_qty, scl.counted_qty
+          FROM product_variants v
+          JOIN products p ON p.id = v.product_id
+          LEFT JOIN stock_levels sl ON sl.product_variant_id = v.id AND sl.warehouse_id = ?
+          LEFT JOIN stock_count_lines scl ON scl.product_variant_id = v.id AND scl.stock_count_id = ?
+          WHERE (scl.id IS NOT NULL OR (COALESCE(sl.quantity_on_hand, 0) > 0 AND v.active = 1 ${
+            count.scope_type === "SCANNED" ? "AND 1 = 0" : scope.sql
+          }))
+            ${shelfSql}`,
+    params: [count.warehouse_id, count.id, ...(count.scope_type === "SCANNED" ? [] : scope.params)],
+  };
+}
+
+export async function listCountShelves(countId) {
+  const count = await countForShelves(countId);
+  const q = shelfItemsQuery(count, "");
+  const [rows] = await pool.query(
+    `SELECT items.shelf_location, COUNT(*) AS item_count,
+            SUM(items.counted_qty IS NOT NULL) AS counted_count,
+            scs.completed_at, u.name AS completed_by_name
+     FROM (${q.sql}) items
+     LEFT JOIN stock_count_shelves scs ON scs.stock_count_id = ? AND scs.shelf_location = items.shelf_location
+     LEFT JOIN users u ON u.id = scs.completed_by
+     GROUP BY items.shelf_location, scs.completed_at, u.name`,
+    [...q.params, count.id]
+  );
+  const collator = new Intl.Collator("sv", { numeric: true, sensitivity: "base" });
+  rows.sort((a, b) => (a.shelf_location === "") - (b.shelf_location === "") || collator.compare(a.shelf_location, b.shelf_location));
+  return {
+    count: { id: count.id, status: count.status, scope_type: count.scope_type, scope_label: count.scope_label, started_at: count.started_at },
+    shelves: rows.map((r) => ({
+      ...r,
+      item_count: Number(r.item_count),
+      counted_count: Number(r.counted_count),
+      done: Boolean(r.completed_at),
+    })),
+  };
+}
+
+export async function getCountShelf(countId, shelf) {
+  const count = await countForShelves(countId);
+  const q = shelfItemsQuery(count, "AND COALESCE(p.shelf_location, '') = ?");
+  const [items] = await pool.query(`${q.sql} ORDER BY p.name ASC, v.color ASC, v.size ASC`, [...q.params, shelf]);
+  const [[done]] = await pool.query(
+    `SELECT completed_at FROM stock_count_shelves WHERE stock_count_id = ? AND shelf_location = ?`,
+    [count.id, shelf]
+  );
+  return {
+    count: { id: count.id, status: count.status },
+    shelf,
+    done: Boolean(done),
+    items: items.map((i) => ({
+      ...i,
+      expected_qty: Number(i.expected_qty),
+      counted_qty: i.counted_qty === null ? null : Number(i.counted_qty),
+    })),
+  };
+}
+
+// Sätter det räknade antalet exakt (rätta en felskanning), till skillnad
+// från skanningen som lägger till.
+export async function setCountedQty(countId, variantId, quantity) {
+  const count = await countForShelves(countId);
+  if (count.status !== "IN_PROGRESS") throw new Error("COUNT_NOT_IN_PROGRESS");
+  const qty = Math.max(0, Number(quantity) || 0);
+  const [[existing]] = await pool.query(
+    `SELECT id FROM stock_count_lines WHERE stock_count_id = ? AND product_variant_id = ?`,
+    [countId, variantId]
+  );
+  if (existing) {
+    await pool.query(`UPDATE stock_count_lines SET counted_qty = ? WHERE id = ?`, [qty, existing.id]);
+  } else {
+    await upsertCountLine(countId, count.warehouse_id, variantId, qty);
+  }
+}
+
+export async function setShelfDone(countId, shelf, { done, userId }) {
+  const count = await countForShelves(countId);
+  if (count.status !== "IN_PROGRESS") throw new Error("COUNT_NOT_IN_PROGRESS");
+  if (done) {
+    await pool.query(
+      `INSERT INTO stock_count_shelves (stock_count_id, shelf_location, completed_by) VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE completed_by = VALUES(completed_by), completed_at = NOW()`,
+      [countId, shelf, userId]
+    );
+  } else {
+    await pool.query(`DELETE FROM stock_count_shelves WHERE stock_count_id = ? AND shelf_location = ?`, [countId, shelf]);
+  }
+}

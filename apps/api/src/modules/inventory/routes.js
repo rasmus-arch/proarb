@@ -53,6 +53,29 @@ router.get("/stock-levels/export", async (req, res, next) => {
   }
 });
 
+router.get("/variants/:id/history", async (req, res, next) => {
+  try {
+    const months = Math.min(36, Math.max(1, Number(req.query.months) || 12));
+    const history = await inventory.getVariantHistory(Number(req.params.id), months);
+    if (!history) return res.status(404).json({ error: "Not found" });
+    res.json(history);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Inkurans — antal månader styrs av Inställningar (obsolete_stock_months),
+// kan överstyras med ?months=.
+router.get("/obsolete", async (req, res, next) => {
+  try {
+    const settings = await getSettings();
+    const months = Math.min(120, Math.max(1, Number(req.query.months) || Number(settings?.obsolete_stock_months) || 12));
+    res.json(await inventory.getObsoleteStock(months));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/stock-levels/:variantId/:warehouseId/reorder", canAdjustStock, async (req, res, next) => {
   try {
     await inventory.setReorderSettings(Number(req.params.variantId), Number(req.params.warehouseId), req.body ?? {});
@@ -96,6 +119,35 @@ router.post("/purchase-orders", canAdjustStock, async (req, res, next) => {
     if (err.message === "INVALID_PURCHASE_ORDER") {
       return res.status(400).json({ error: "supplierId och minst en rad krävs" });
     }
+    next(err);
+  }
+});
+
+router.get("/purchase-orders/alerts", async (req, res, next) => {
+  try {
+    res.json({ rows: await purchaseOrders.getPurchaseOrderAlerts() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/purchase-orders/:id/confirm", canAdjustStock, async (req, res, next) => {
+  try {
+    const po = await purchaseOrders.confirmPurchaseOrder(Number(req.params.id), {
+      expectedDate: req.body?.expectedDate,
+      note: req.body?.note,
+    });
+    res.json(po);
+  } catch (err) {
+    if (err.message === "PO_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
+router.delete("/purchase-orders/:id/confirm", canAdjustStock, async (req, res, next) => {
+  try {
+    res.json(await purchaseOrders.unconfirmPurchaseOrder(Number(req.params.id)));
+  } catch (err) {
     next(err);
   }
 });
@@ -229,6 +281,51 @@ router.post("/stock-counts/:id/scan", canAdjustStock, async (req, res, next) => 
     if (err.message === "COUNT_NOT_IN_PROGRESS") return res.status(409).json({ error: "Inventeringen är avslutad" });
     if (err.message === "BARCODE_NOT_FOUND") return res.status(404).json({ error: "Okänd streckkod" });
     next(err);
+  }
+});
+
+// --- Mobilinventering hylla för hylla (inventera.html) ---
+function countError(err, res, next) {
+  if (err.message === "COUNT_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+  if (err.message === "COUNT_NOT_IN_PROGRESS") return res.status(409).json({ error: "Inventeringen är avslutad" });
+  next(err);
+}
+
+router.get("/stock-counts/:id/shelves", async (req, res, next) => {
+  try {
+    res.json(await stockCounts.listCountShelves(Number(req.params.id)));
+  } catch (err) {
+    countError(err, res, next);
+  }
+});
+
+// Hyllan i query (?shelf=) eftersom en hyllplats kan innehålla "/".
+router.get("/stock-counts/:id/shelf", async (req, res, next) => {
+  try {
+    res.json(await stockCounts.getCountShelf(Number(req.params.id), String(req.query.shelf ?? "")));
+  } catch (err) {
+    countError(err, res, next);
+  }
+});
+
+router.post("/stock-counts/:id/shelf-done", canAdjustStock, async (req, res, next) => {
+  try {
+    await stockCounts.setShelfDone(Number(req.params.id), String(req.body?.shelf ?? ""), {
+      done: req.body?.done !== false,
+      userId: req.user.id,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    countError(err, res, next);
+  }
+});
+
+router.put("/stock-counts/:id/variants/:variantId", canAdjustStock, async (req, res, next) => {
+  try {
+    await stockCounts.setCountedQty(Number(req.params.id), Number(req.params.variantId), req.body?.countedQty);
+    res.json({ ok: true });
+  } catch (err) {
+    countError(err, res, next);
   }
 });
 

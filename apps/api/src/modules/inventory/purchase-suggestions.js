@@ -28,7 +28,7 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
   const [restockRows] = await pool.query(
     `SELECT product_variant_id, quantity_on_hand, reorder_point, reorder_quantity
      FROM stock_levels
-     WHERE warehouse_id = ? AND reorder_point IS NOT NULL AND quantity_on_hand < reorder_point`,
+     WHERE warehouse_id = ? AND reorder_point IS NOT NULL`,
     [warehouseId]
   );
 
@@ -71,12 +71,16 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
     }
   }
 
+  // Min-saldo jämförs med det som är kvar efter öppna ordrar (tillgängligt),
+  // inte med hyllsaldot — annars märks det inte att lagret redan är lovat bort.
   for (const row of restockRows) {
-    const deficit = Number(row.reorder_point) - Number(row.quantity_on_hand);
+    const available = stockLeft.get(row.product_variant_id) ?? Number(row.quantity_on_hand);
+    if (available >= Number(row.reorder_point)) continue;
+    const deficit = Number(row.reorder_point) - available;
     const qty = row.reorder_quantity ? Number(row.reorder_quantity) : Math.ceil(deficit);
     const n = need(row.product_variant_id);
     n.restockQty += qty;
-    n.reasons.push({ type: "restock", quantity_on_hand: Number(row.quantity_on_hand), reorder_point: Number(row.reorder_point) });
+    n.reasons.push({ type: "restock", quantity_on_hand: available, reorder_point: Number(row.reorder_point) });
   }
 
   const variantIds = [...needs.entries()]

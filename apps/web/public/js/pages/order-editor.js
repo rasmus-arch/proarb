@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { createUpsell } from "../upsell.js";
 import { loadMarginThresholds, marginCellHtml, renderMarginCell, marginLevel, marginSummaryText } from "../margin.js";
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from "../order-status.js";
 import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
@@ -31,6 +32,8 @@ const el = {
   referenceSelect: document.getElementById("reference-select"),
   deliveryMethod: document.getElementById("delivery-method"),
   skipInventory: document.getElementById("skip-inventory"),
+  customerReference: document.getElementById("customer-reference"),
+  costCenter: document.getElementById("cost-center"),
   newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
   newPickupContactQuickBtn: document.getElementById("new-pickup-contact-quick-btn"),
@@ -237,8 +240,14 @@ function renderCreditBanner(orderTotal) {
 const LINE_EDITABLE_STATUSES = ["NEW", "READY_FOR_PICKUP"];
 const canEditLines = () => isNewOrder() || LINE_EDITABLE_STATUSES.includes(state.status);
 
+const upsell = createUpsell({ container: document.getElementById("upsell"), searchInput: el.lineSearch });
+
 function renderLines() {
   el.linesEmpty.classList.toggle("hidden", state.lines.length > 0);
+  upsell.update(
+    state.lines.map((l) => l.productVariantId),
+    { editable: canEditLines() }
+  );
 
   el.lineRows.innerHTML = state.lines
     .map((line, index) => {
@@ -246,7 +255,11 @@ function renderLines() {
         !line.productVariantId && canEditLines()
           ? `<label class="mt-1 flex items-center gap-1.5 text-xs text-slate-500">Inköpspris <input type="number" min="0" step="0.01" class="input w-24 py-1 text-xs" placeholder="saknas" data-field="costPrice" data-index="${index}" value="${line.costPrice ?? ""}" /></label>`
           : "";
-      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>${costInput}`;
+      const short =
+        line.available !== null && line.available !== undefined && !el.skipInventory.checked && Number(line.quantity) > line.available
+          ? `<div class="text-xs text-amber-700">${line.available > 0 ? `Bara ${line.available} tillgängliga` : "Inget tillgängligt"} i lager — resten behöver beställas</div>`
+          : "";
+      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>${short}${costInput}`;
 
       if (!canEditLines()) {
         const printSummary = line.printDescription
@@ -350,6 +363,13 @@ el.lineRows.addEventListener("click", (event) => {
 
 // Shared by barcode scan and product search — both resolve to a variant
 // shaped the same way.
+function stockText(v) {
+  if (v.quantity_on_hand === undefined) return "";
+  const available = Number(v.quantity_on_hand) - Number(v.reserved_qty ?? 0);
+  const reserved = Number(v.reserved_qty ?? 0);
+  return ` · <span class="${available > 0 ? "text-slate-600" : "text-amber-700"}">${available} tillgängliga${reserved > 0 ? ` (${reserved} reserverade)` : ""}</span>`;
+}
+
 function variantToLine(v) {
   return {
     productVariantId: v.variant_id,
@@ -364,6 +384,9 @@ function variantToLine(v) {
     printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
+    // Tillgängligt i lager just nu (saldo minus reserverat på andra öppna
+    // ordrar) — bara för en varning på raden, aldrig ett stopp.
+    available: v.quantity_on_hand === undefined ? null : Number(v.quantity_on_hand) - Number(v.reserved_qty ?? 0),
   };
 }
 
@@ -413,7 +436,7 @@ el.lineSearch.addEventListener("input", () => {
         (v) => `
         <button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-variant='${JSON.stringify(v).replace(/'/g, "&#39;")}'>
           <div class="font-medium text-slate-900">${escapeHtml(v.name)}${v.discontinued ? `<span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått · ${Number(v.quantity_on_hand) || 0} i lager</span>` : ""}</div>
-          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))} — ${money(v.price_override ?? v.base_price)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))} — ${money(v.price_override ?? v.base_price)}${stockText(v)}</div>
         </button>`
       )
       .join("");
@@ -700,6 +723,8 @@ async function createOrder({ completeCash }) {
     referenceContactId: el.referenceSelect.value || null,
     deliveryMethod: el.deliveryMethod.value,
     skipInventory: el.skipInventory.checked,
+    customerReference: el.customerReference.value,
+    costCenter: el.costCenter.value,
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
       description: l.productVariantId ? null : l.description ?? l.name,
@@ -752,6 +777,7 @@ function invoiceHistoryItem(inv) {
   else if (inv.status === "FAILED") state = `<span class="text-red-600">misslyckades i Fortnox: ${escapeHtml(inv.status_note ?? "okänt fel")}</span>`;
   else state = `inte skickad till Fortnox${inv.status_note ? ` (${escapeHtml(inv.status_note)})` : ""}`;
   if (inv.status === "SYNCED" && inv.sent_at) state += " · skickad till kunden";
+  if (inv.paid_at) state += ` · <span class="font-medium text-green-700">betald ${new Date(inv.paid_at).toLocaleDateString("sv-SE")}</span>`;
   // Allt som inte kom fram (inte skapad, eller skapad men inte utskickad)
   // kan försökas igen — t.ex. efter att Fortnox anslutits på nytt.
   // Kontantköp med anteckning = skapat men inte bokfört/betalt (äldre
@@ -847,6 +873,8 @@ function renderActionButtons(order) {
         referenceContactId: el.referenceSelect.value || null,
         deliveryMethod: el.deliveryMethod.value,
         skipInventory: el.skipInventory.checked,
+        customerReference: el.customerReference.value,
+        costCenter: el.costCenter.value,
         lines: state.lines.map((l) => ({
           productVariantId: l.productVariantId,
           description: l.productVariantId ? null : l.description ?? l.name,
@@ -1007,6 +1035,8 @@ function applyReadOnlyState() {
   el.referenceSelect.disabled = !linesEditable;
   el.deliveryMethod.disabled = !linesEditable;
   el.skipInventory.disabled = !linesEditable;
+  el.customerReference.disabled = !linesEditable;
+  el.costCenter.disabled = !linesEditable;
 
   // "Spara" (skapa ny order) är bara för en helt osparad order — en
   // befintlig sparas via "Spara ändringar" i åtgärdsknapparna istället
@@ -1047,8 +1077,13 @@ async function init() {
     el.title.textContent = `Order ${order.order_number}`;
     el.statusBadge.textContent = ORDER_STATUS_LABELS[order.status] ?? order.status;
     el.statusBadge.className = `mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${ORDER_STATUS_COLORS[order.status] ?? ""}`;
+    // Betald enligt Fortnox (inbetalningar hämtas med betalstatusen).
+    const billed = (order.invoices ?? []).filter((i) => i.type !== "CREDIT_INVOICE");
+    if (billed.length > 0 && billed.every((i) => i.paid_at)) el.statusBadge.textContent += " · Betald";
     el.deliveryMethod.value = order.delivery_method;
     el.skipInventory.checked = Boolean(order.skip_inventory);
+    el.customerReference.value = order.customer_reference ?? "";
+    el.costCenter.value = order.cost_center ?? "";
 
     selectCustomer(order.customer_id, order.customer_name);
     await loadContacts(order.customer_id, order.reference_contact_id);

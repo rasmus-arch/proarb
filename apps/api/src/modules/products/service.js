@@ -1,6 +1,6 @@
 import { pool } from "../../lib/db.js";
 import { resolveNameToId } from "../catalog/service.js";
-import { DEFAULT_WAREHOUSE_ID } from "../inventory/service.js";
+import { DEFAULT_WAREHOUSE_ID, reservedQtySql } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
 import { customerDiscountSelect } from "../../lib/customer-pricing.js";
 
@@ -73,7 +73,8 @@ const PRINT_PREFILL_SELECT = `
 // Lagersaldo i standardlagret — visas vid sökträffar så att en utgången
 // produkt syns med hur många som finns kvar att sälja.
 const STOCK_SELECT = `COALESCE((SELECT sl.quantity_on_hand FROM stock_levels sl
-     WHERE sl.product_variant_id = v.id AND sl.warehouse_id = ${Number(DEFAULT_WAREHOUSE_ID)}), 0) AS quantity_on_hand`;
+     WHERE sl.product_variant_id = v.id AND sl.warehouse_id = ${Number(DEFAULT_WAREHOUSE_ID)}), 0) AS quantity_on_hand,
+     ${reservedQtySql("v.id")} AS reserved_qty`;
 
 // Used by the POS / warehouse scanning flows: look up a sellable variant
 // directly by the barcode a scanner just read. SKU räknas också — det är
@@ -253,4 +254,31 @@ export async function addVariant(productId, data, articleNumberForSku, index = 0
 
   const [[variant]] = await pool.query(`SELECT * FROM product_variants WHERE id = ?`, [result.insertId]);
   return variant;
+}
+
+// "Köps ofta med": produkter som oftast funnits på samma ordrar som
+// produkterna i `variantIds` de senaste 18 månaderna. Minst två gemensamma
+// ordrar för att räknas — en enstaka slump är inget mönster.
+export async function boughtTogether(variantIds, limit = 5) {
+  const ids = [...new Set(variantIds.map(Number).filter((id) => id > 0))].slice(0, 50);
+  if (ids.length === 0) return [];
+  const [rows] = await pool.query(
+    `SELECT p2.id AS product_id, p2.name, p2.article_number, COUNT(DISTINCT ol2.order_id) AS times
+     FROM product_variants v1
+     JOIN order_lines ol1 ON ol1.product_variant_id = v1.id
+     JOIN orders o ON o.id = ol1.order_id
+     JOIN order_lines ol2 ON ol2.order_id = ol1.order_id
+     JOIN product_variants v2 ON v2.id = ol2.product_variant_id
+     JOIN products p2 ON p2.id = v2.product_id
+     WHERE v1.id IN (?)
+       AND p2.id NOT IN (SELECT product_id FROM product_variants WHERE id IN (?))
+       AND o.status <> 'CANCELLED' AND o.created_at >= DATE_SUB(NOW(), INTERVAL 18 MONTH)
+       AND p2.active = 1 AND p2.discontinued = 0
+     GROUP BY p2.id
+     HAVING times >= 2
+     ORDER BY times DESC, p2.name ASC
+     LIMIT ?`,
+    [ids, ids, limit]
+  );
+  return rows.map((r) => ({ ...r, times: Number(r.times) }));
 }

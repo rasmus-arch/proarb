@@ -40,6 +40,8 @@ router.post("/:token/request", publicFormLimiter, async (req, res, next) => {
       referenceContactId: req.body?.referenceContactId ? Number(req.body.referenceContactId) : null,
       lines: Array.isArray(req.body?.lines) ? req.body.lines : [],
       requesterEmail: await requesterEmail(req),
+      customerReference: typeof req.body?.customerReference === "string" ? req.body.customerReference : null,
+      costCenter: typeof req.body?.costCenter === "string" ? req.body.costCenter : null,
     });
     res.status(201).json(result);
   } catch (err) {

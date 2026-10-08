@@ -1,4 +1,5 @@
 import { api } from "../api.js";
+import { createUpsell } from "../upsell.js";
 import { loadMarginThresholds, marginCellHtml, renderMarginCell, marginLevel, marginSummaryText } from "../margin.js";
 import { openNewCustomerDialog, openNewContactDialog } from "../quick-add.js";
 
@@ -193,8 +194,14 @@ function renderExpiryNote(quote, warningDays) {
   }
 }
 
+const upsell = createUpsell({ container: document.getElementById("upsell"), searchInput: el.lineSearch });
+
 function renderLines() {
   el.linesEmpty.classList.toggle("hidden", state.lines.length > 0);
+  upsell.update(
+    state.lines.map((l) => l.productVariantId),
+    { editable: isEditable() }
+  );
 
   el.lineRows.innerHTML = state.lines
     .map((line, index) => {

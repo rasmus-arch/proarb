@@ -307,6 +307,47 @@ export async function fetchUnpaidInvoices(settings) {
   }));
 }
 
+// Fullt betalda kundfakturor med fakturadatum från och med `fromDate`
+// (YYYY-MM-DD) — för att markera ordrar som betalda i Fokus.
+export async function fetchFullyPaidInvoices(settings, fromDate) {
+  if (!isFortnoxConfigured(settings)) throw new Error("NOT_CONFIGURED");
+  const all = [];
+  let current = settings;
+  const from = fromDate ? `&fromdate=${encodeURIComponent(fromDate)}` : "";
+  for (let page = 1; page <= 200; page++) {
+    const { data, settings: next } = await step("Kunde inte hämta betalda fakturor från Fortnox", () =>
+      fortnoxRequest(current, `/invoices?filter=fullypaid${from}&limit=500&page=${page}`)
+    );
+    current = next;
+    all.push(...(data.Invoices ?? []));
+    const totalPages = Number(data.MetaInformation?.["@TotalPages"] ?? 1);
+    if (page >= totalPages) break;
+  }
+  return all.map((i) => ({ documentNumber: String(i.DocumentNumber), finalPayDate: i.FinalPayDate || null }));
+}
+
+// Fakturan som PDF (för nedladdning i Sortilog). Egen request eftersom
+// svaret är binärt, inte JSON.
+export async function fetchInvoicePdf(settings, documentNumber) {
+  if (!isFortnoxConfigured(settings)) throw new Error("NOT_CONFIGURED");
+  let fresh = await ensureFreshToken(settings);
+  const send = () =>
+    fetch(`${API_BASE}/invoices/${encodeURIComponent(documentNumber)}/print`, {
+      headers: { Authorization: `Bearer ${fresh.fortnox_access_token}`, Accept: "application/pdf" },
+    });
+  let res = await send();
+  if (res.status === 401) {
+    fresh = await refreshToken(fresh);
+    res = await send();
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.warn(`Fortnox GET /invoices/${documentNumber}/print -> ${res.status}: ${text.slice(0, 300)}`);
+    throw new Error(`Fortnox svarade ${res.status}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 const digits = (value) => String(value ?? "").replace(/\D/g, "");
 const sameName = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 
@@ -453,7 +494,16 @@ function today() {
 //    Bokföring → Betalsätt). Då skapas en vanlig faktura som bokförs och
 //    direkt registreras som betald med det betalsättet — så att pengarna
 //    hamnar på betalsättets konto (t.ex. 1930 för Swish).
-export async function createCustomerInvoice({ settings, customerId, lines, orderId, orderNumber, cash = false } = {}) {
+export async function createCustomerInvoice({
+  settings,
+  customerId,
+  lines,
+  orderId,
+  orderNumber,
+  customerReference,
+  costCenter,
+  cash = false,
+} = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   const invoiceRows = buildInvoiceRows(lines);
   if (invoiceRows.length === 0) throw new Error("Ordern har inga rader att fakturera.");
@@ -474,7 +524,11 @@ export async function createCustomerInvoice({ settings, customerId, lines, order
       body: {
         Invoice: {
           CustomerNumber: customerNumber,
-          YourOrderNumber: orderNumber ?? (orderId != null ? String(orderId) : undefined),
+          // Kundens kostnadsställe/beställningsnr går före vårt ordernummer
+          // (som då står i Anteckningar istället).
+          YourOrderNumber: costCenter || orderNumber || (orderId != null ? String(orderId) : undefined),
+          ...(customerReference ? { YourReference: String(customerReference).slice(0, 50) } : {}),
+          ...(costCenter && orderNumber ? { Remarks: `Vår order ${orderNumber}` } : {}),
           InvoiceRows: invoiceRows,
           ...extraFields,
         },

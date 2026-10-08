@@ -61,7 +61,16 @@
               <option value="SHIPPING">Leverans</option>
             </select>
           </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Er referens</span>
+            <input id="customer-reference" maxlength="50" class="input mt-1" placeholder="Kundens referens" />
+          </label>
+          <label class="block text-sm">
+            <span class="text-slate-700">Kostnadsställe / kundens ordernr</span>
+            <input id="cost-center" maxlength="30" class="input mt-1" />
+          </label>
         </div>
+        <p class="mt-1 text-xs text-slate-500">Er referens och kostnadsställe står på fakturan i Fortnox.</p>
         <label class="mt-4 flex items-start gap-2.5 text-sm">
           <input id="skip-inventory" type="checkbox" class="mt-0.5" />
           <span>
@@ -88,6 +97,7 @@
           <button type="button" id="add-product-btn" class="btn-secondary whitespace-nowrap">+ Ny produkt</button>
           <button type="button" id="add-kit-btn-open" class="btn-secondary whitespace-nowrap">+ Paket</button>
         </div>
+        <div id="upsell" class="mt-2 hidden text-sm"></div>
 
         <div class="mt-3 overflow-x-auto">
           <table class="min-w-full divide-y divide-slate-200 text-sm">

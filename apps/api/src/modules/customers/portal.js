@@ -1,6 +1,8 @@
 import path from "node:path";
 import * as customers from "./service.js";
 import { getSettings } from "../settings/service.js";
+import { listCustomerInvoices } from "./portal-invoices.js";
+import { refreshUnpaidInvoices } from "./payment-status.js";
 import { ensurePreviewFile, isPreviewable } from "../../lib/preview.js";
 
 const BROWSER_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".svg", ".webp"]);
@@ -205,7 +207,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     ? `<img src="/uploads/${settings.seller_logo_path}" alt="${escapeHtml(sellerName)}" style="height:52px;width:auto;max-width:240px;margin:0 auto;display:block;" />`
     : `<div style="font-size:20px;font-weight:700;color:${brandColor};">${escapeHtml(sellerName)}</div>`;
 
-  const { customer, products: flatProducts, orders, contacts, pendingRequests } = result;
+  const { customer, products: flatProducts, orders, contacts, pendingRequests, costCenters } = result;
   const products = groupByProduct(flatProducts);
   const logos = await portalLogos(customer.id);
   // Första uppladdade loggan som går att visa = kundens "huvudlogga" i sidhuvudet.
@@ -293,6 +295,37 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
         </details>`;
     })
     .join("");
+
+  // Fakturor bara för inloggade (inte via länk utan inloggning).
+  let invoiceRows = "";
+  if (account) {
+    refreshUnpaidInvoices(); // i bakgrunden — status uppdateras till nästa visning
+    const invoices = await listCustomerInvoices(customer.id);
+    invoiceRows = invoices
+      .map((i) => {
+        const state = i.type === "CREDIT_INVOICE"
+          ? { text: "Kredit", bg: "#f1f5f9", fg: "#475569" }
+          : i.paid_at
+            ? { text: "Betald", bg: "#dcfce7", fg: "#15803d" }
+            : i.overdue
+              ? { text: "Förfallen", bg: "#fee2e2", fg: "#dc2626" }
+              : { text: "Obetald", bg: "#fef3c7", fg: "#b45309" };
+        const amount = Number(i.balance ?? i.amount).toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return `<tr>
+          <td style="padding:6px 8px;font-weight:500;">${escapeHtml(i.invoice_number ?? "")}</td>
+          <td style="padding:6px 8px;color:#64748b;">${new Date(i.created_at).toLocaleDateString("sv-SE")}${
+            i.due_date && !i.paid_at ? `<div style="font-size:11px;">Förfaller ${escapeHtml(i.due_date)}</div>` : ""
+          }</td>
+          <td style="padding:6px 8px;color:#64748b;">${escapeHtml(i.order_number ?? "")}</td>
+          <td style="padding:6px 8px;text-align:right;white-space:nowrap;">${amount} kr${i.balance !== null && !i.paid_at ? `<div style="font-size:11px;color:#64748b;">kvar att betala</div>` : ""}</td>
+          <td style="padding:6px 8px;text-align:right;">
+            <span style="display:inline-block;border-radius:9999px;background:${state.bg};color:${state.fg};font-size:11px;font-weight:600;padding:2px 9px;white-space:nowrap;">${state.text}</span>
+          </td>
+          <td style="padding:6px 8px;text-align:right;"><a href="/sortilog/faktura/${i.id}" target="_blank" rel="noopener" style="font-size:12px;color:#334155;">PDF</a></td>
+        </tr>`;
+      })
+      .join("");
+  }
 
   const pendingRows = (pendingRequests ?? [])
     .map(
@@ -382,6 +415,19 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
       : ""
   }
 
+  ${
+    invoiceRows
+      ? `<div class="card">
+          <h2 class="section-heading">Fakturor</h2>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;">
+              <tbody>${invoiceRows}</tbody>
+            </table>
+          </div>
+        </div>`
+      : ""
+  }
+
   <div class="card">
     <h2 class="section-heading">Sortiment</h2>
     <p style="color:#64748b;font-size:13px;margin:4px 0 0;">Priser är exklusive moms. Ange antal för det du vill beställa nedan.</p>
@@ -412,6 +458,16 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
               <button type="button" id="add-contact-btn" class="order-btn" style="padding:8px 14px;">Lägg till</button>
             </div>
             <p id="contact-error" style="display:none;color:#dc2626;font-size:13px;margin:6px 0 0;"></p>
+
+            <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;">
+              <label style="flex:1;min-width:180px;font-size:13px;color:#334155;">Er referens (valfritt)
+                <input id="customer-reference" type="text" maxlength="50" class="name-input" style="margin-top:6px;" placeholder="Står på fakturan" />
+              </label>
+              <label style="flex:1;min-width:180px;font-size:13px;color:#334155;">Kostnadsställe / ert ordernr (valfritt)
+                <input id="cost-center" type="text" maxlength="30" class="name-input" style="margin-top:6px;" list="cost-center-options" />
+                <datalist id="cost-center-options">${(costCenters ?? []).map((c) => `<option value="${escapeHtml(c)}">`).join("")}</datalist>
+              </label>
+            </div>
 
             <div id="order-summary" style="display:none;margin-top:18px;border:1px solid #e2e8f0;border-radius:8px;padding:14px;background:#f8fafc;">
               <div style="font-weight:600;font-size:14px;margin-bottom:8px;">Din beställning</div>
@@ -583,6 +639,8 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
           body: JSON.stringify({
             requestedByName: document.getElementById("requested-by-name").value || null,
             referenceContactId: referenceContactId,
+            customerReference: document.getElementById("customer-reference").value || null,
+            costCenter: document.getElementById("cost-center").value || null,
             lines: lines,
           }),
         })
@@ -594,6 +652,8 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             document.querySelectorAll(".qty-input").forEach(function (input) { input.value = ""; });
             if (window.__updateOrderSummary) window.__updateOrderSummary();
             document.getElementById("requested-by-name").value = "";
+            document.getElementById("customer-reference").value = "";
+            document.getElementById("cost-center").value = "";
             pickupSelect.value = "";
             newContactWrap.style.display = "none";
             successEl.style.display = "block";

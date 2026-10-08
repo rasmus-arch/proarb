@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProArb – Inventera</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50" data-active="lager">
+    <div id="nav"></div>
+
+    <main class="mx-auto max-w-xl px-4 py-5">
+      <!-- Välj inventering -->
+      <section id="pick-count-view" class="hidden">
+        <h1 class="page-title">Inventera</h1>
+        <p class="mt-1 text-sm text-slate-600">Välj en pågående inventering. Nya startas under Lager → Inventering.</p>
+        <ul id="count-list" class="mt-4 space-y-2"></ul>
+        <p id="count-list-empty" class="mt-4 hidden text-sm text-slate-500">Ingen inventering pågår.</p>
+      </section>
+
+      <!-- Hyllor -->
+      <section id="shelves-view" class="hidden">
+        <a href="/inventera.html" class="link text-sm">← Inventeringar</a>
+        <h1 id="shelves-title" class="page-title mt-2">Inventering</h1>
+        <p id="shelves-sub" class="mt-1 text-sm text-slate-600"></p>
+        <div id="shelves-progress" class="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+          <div class="h-2 bg-green-600" style="width: 0%"></div>
+        </div>
+        <ul id="shelf-list" class="mt-4 space-y-2"></ul>
+      </section>
+
+      <!-- En hylla -->
+      <section id="shelf-view" class="hidden">
+        <button type="button" id="back-to-shelves" class="link text-sm">← Alla hyllor</button>
+        <div class="mt-2 flex items-start justify-between gap-3">
+          <div>
+            <h1 id="shelf-title" class="page-title"></h1>
+            <p id="shelf-sub" class="mt-0.5 text-sm text-slate-600"></p>
+          </div>
+          <span id="shelf-done-badge" class="hidden rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">Klar</span>
+        </div>
+
+        <button type="button" id="shelf-camera-btn" class="btn mt-4 hidden w-full justify-center py-3 text-base">Skanna med kameran</button>
+        <input id="shelf-scan-input" type="text" enterkeyhint="done" autocomplete="off" class="input mt-3 text-lg" placeholder="Skanna eller skriv streckkod…" />
+        <p id="shelf-msg" class="mt-2 hidden text-sm"></p>
+        <p id="queue-msg" class="mt-2 hidden rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"></p>
+
+        <ul id="shelf-items" class="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white"></ul>
+        <p id="shelf-empty" class="mt-4 hidden text-sm text-slate-500">Inget förväntas på den här hyllan. Skanna det som står där.</p>
+
+        <button type="button" id="shelf-done-btn" class="btn mt-5 w-full justify-center py-3 text-base">Klar med hyllan</button>
+        <button type="button" id="shelf-reopen-btn" class="mt-3 hidden w-full rounded-md border border-slate-200 py-3 text-sm text-slate-600">Räkna om hyllan</button>
+      </section>
+    </main>
+
+    <script type="module" src="/js/nav.js"></script>
+    <script type="module" src="/js/pages/inventera.js"></script>
+  </body>
+</html>

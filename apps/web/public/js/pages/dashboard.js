@@ -400,7 +400,7 @@ async function loadLowStock() {
           <span class="font-medium text-slate-900">${escapeHtml(r.product_name)}</span>
           <span class="ml-2 text-slate-500">${escapeHtml([r.color, r.size].filter(Boolean).join(" / "))}</span>
         </div>
-        <span class="text-xs text-amber-600">Saldo ${r.quantity_on_hand} / min ${r.reorder_point}</span>
+        <span class="text-xs text-amber-600">Tillgängligt ${r.available_qty} / min ${r.reorder_point}</span>
       </li>`
     )
     .join("");
@@ -439,8 +439,40 @@ async function loadOverdue() {
       : "");
 }
 
+// Inköpsordrar som är försenade eller inte bekräftade av leverantören.
+async function loadPoAlerts() {
+  const { rows } = await api.get("/inventory/purchase-orders/alerts");
+  document.getElementById("po-alerts-section").classList.toggle("hidden", rows.length === 0);
+  document.getElementById("po-alerts-list").innerHTML = rows
+    .slice(0, 8)
+    .map(
+      (r) => `
+      <li class="flex items-center justify-between gap-3 py-2 text-sm">
+        <div>
+          <span class="font-medium text-slate-900">${escapeHtml(r.supplier_name)}</span>
+          <span class="ml-2 text-slate-500">${escapeHtml(r.po_number)}</span>
+        </div>
+        <span class="whitespace-nowrap text-xs ${r.late ? "text-red-600" : "text-amber-700"}">${
+          r.late ? `Försenad ${r.days_late} dagar (väntades ${r.expected_date})` : `Ej bekräftad, skickad för ${r.days_since_sent} dagar sedan`
+        }</span>
+      </li>`
+    )
+    .join("");
+}
+
+// Lagervärde som inte sålts på X månader (Inställningar → Funktioner).
+async function loadObsolete() {
+  const data = await api.get("/inventory/obsolete");
+  document.getElementById("obsolete-section").classList.toggle("hidden", data.items.length === 0);
+  document.getElementById("obsolete-text").innerHTML = `<span class="font-medium text-slate-900">${money(data.total_value)}</span> i lager (${
+    data.items.length
+  } artiklar) har inte sålts på ${data.months} månader.`;
+}
+
 loadGreeting();
 loadSalesChart();
+loadObsolete().catch(() => {});
+loadPoAlerts().catch(() => {});
 loadOverdue().catch(() => {});
 loadKpis();
 loadReminders();

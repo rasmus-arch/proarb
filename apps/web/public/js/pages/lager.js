@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { renderPager } from "../pagination.js";
+import { openStockHistory } from "../stock-history.js";
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -21,7 +22,7 @@ function variantLabel(v) {
 
 const tabButtons = [...document.querySelectorAll(".tab-btn")];
 const tabPanels = Object.fromEntries(
-  ["saldo", "inkopsordrar", "inleverans", "inventering", "inkopsforslag"].map((key) => [
+  ["saldo", "inkopsordrar", "inleverans", "inventering", "inkopsforslag", "inkurans"].map((key) => [
     key,
     document.getElementById(`tab-${key}`),
   ])
@@ -35,6 +36,8 @@ function activateTab(key) {
   if (key === "inleverans") loadPurchaseOrders();
   if (key === "inventering") loadStockCounts();
   if (key === "inkopsforslag") loadSuggestions();
+  if (key === "inkurans") loadObsolete();
+  history.replaceState(null, "", `${location.pathname}${location.search}#${key}`);
 }
 
 tabButtons.forEach((btn) => btn.addEventListener("click", () => activateTab(btn.dataset.tab)));
@@ -71,17 +74,27 @@ async function loadSaldo(page = saldoPage) {
           <div class="font-medium text-slate-900">${escapeHtml(r.product_name)}${r.discontinued ? `<span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått</span>` : ""}</div>
           <div class="text-xs text-slate-500">${escapeHtml([r.color, r.size, r.sku].filter(Boolean).join(" · "))}</div>
         </td>
-        <td class="py-2 pr-3 text-right ${r.reorder_point !== null && r.quantity_on_hand < r.reorder_point ? "font-semibold text-red-600" : ""}">${r.quantity_on_hand}</td>
+        <td class="py-2 pr-3 text-right">${r.quantity_on_hand}</td>
+        <td class="py-2 pr-3 text-right text-slate-500">${r.reserved_qty || "–"}</td>
+        <td class="py-2 pr-3 text-right ${
+          (r.reorder_point !== null && r.available_qty < r.reorder_point) || r.available_qty < 0 ? "font-semibold text-red-600" : ""
+        }">${r.available_qty}</td>
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_point ?? "–"}</td>
         <td class="py-2 pr-3 text-right text-slate-500">${r.reorder_quantity ?? "–"}</td>
         <td class="py-2 pr-2 text-right whitespace-nowrap">
-          <button type="button" class="link text-xs" data-adjust="${r.variant_id}" data-warehouse="${r.warehouse_id}">Justera</button>
+          <button type="button" class="link text-xs" data-history="${r.variant_id}">Historik</button>
+          <button type="button" class="link ml-2 text-xs" data-adjust="${r.variant_id}" data-warehouse="${r.warehouse_id}">Justera</button>
           <button type="button" class="link ml-2 text-xs" data-reorder="${r.variant_id}" data-warehouse="${r.warehouse_id}" data-point="${r.reorder_point ?? ""}" data-qty="${r.reorder_quantity ?? ""}">Min-saldo</button>
         </td>
       </tr>`
     )
     .join("");
 }
+
+saldoRows.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-history]");
+  if (btn) openStockHistory(Number(btn.dataset.history)).catch((err) => alert(err.message));
+});
 
 saldoSearch.addEventListener("input", () => loadSaldo(1));
 saldoLowOnly.addEventListener("change", () => loadSaldo(1));
@@ -142,6 +155,17 @@ const LineStatusColors = {
   CLOSED: "bg-slate-200 text-slate-600",
 };
 
+// Skickad → bekräftad av leverantören → väntas datum (rött när passerat).
+function poFollowUpHtml(po) {
+  if (!po.sent_at) return `<div class="text-xs text-amber-700">Ej skickad</div>`;
+  const late = po.status !== "RECEIVED" && po.expected_date && po.expected_date < new Date().toLocaleDateString("sv-SE");
+  const expected = po.expected_date ? ` · väntas ${po.expected_date}` : "";
+  if (po.confirmed_at) {
+    return `<div class="text-xs ${late ? "font-medium text-red-600" : "text-green-700"}">Bekräftad${expected}${late ? " (försenad)" : ""}</div>`;
+  }
+  return `<div class="text-xs ${late ? "font-medium text-red-600" : "text-amber-700"}">Skickad ${new Date(po.sent_at).toLocaleDateString("sv-SE")}, ej bekräftad${expected}</div>`;
+}
+
 function poRowHtml(po) {
   return `
     <tr class="cursor-pointer hover:bg-slate-50" data-po="${po.id}">
@@ -149,11 +173,7 @@ function poRowHtml(po) {
         <div class="font-medium text-slate-900">${escapeHtml(po.supplier_name)}</div>
         <div class="text-xs text-slate-500">${escapeHtml(po.po_number ?? "")}</div>
       </td>
-      <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}${
-        po.sent_at
-          ? `<div class="text-xs text-slate-500">Skickad ${new Date(po.sent_at).toLocaleDateString("sv-SE")}</div>`
-          : `<div class="text-xs text-amber-700">Ej skickad</div>`
-      }</td>
+      <td class="py-2 pr-3">${POStatusLabels[po.status] ?? po.status}${poFollowUpHtml(po)}</td>
       <td class="py-2 pr-3 text-right">${po.total_received_qty} / ${po.total_qty}</td>
       <td class="py-2 pr-3 text-slate-500">${new Date(po.created_at).toLocaleDateString("sv-SE")}</td>
     </tr>`;
@@ -248,7 +268,7 @@ async function renderPoDetail() {
   document.getElementById("po-detail-meta").textContent = [
     `Skapad ${new Date(po.created_at).toLocaleDateString("sv-SE")}`,
     po.sent_at ? `skickad ${new Date(po.sent_at).toLocaleDateString("sv-SE")} till ${po.sent_to}` : "inte skickad till leverantören",
-    po.expected_date ? `väntas ${new Date(po.expected_date).toLocaleDateString("sv-SE")}` : null,
+    po.expected_date ? `väntas ${po.expected_date}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -260,7 +280,35 @@ async function renderPoDetail() {
   document.getElementById("po-detail-status").textContent = POStatusLabels[po.status] ?? po.status;
   document.getElementById("po-line-rows").innerHTML = po.lines.map(poLineRowHtml).join("");
   document.getElementById("po-submit-receiving-btn").classList.toggle("hidden", po.status === "RECEIVED");
+
+  document.getElementById("po-confirm-box").classList.toggle("hidden", po.status === "RECEIVED" && !po.confirmed_at);
+  document.getElementById("po-confirm-status").textContent = po.confirmed_at
+    ? `Bekräftad ${new Date(po.confirmed_at).toLocaleDateString("sv-SE")}${po.confirmed_note ? ` · ${po.confirmed_note}` : ""}`
+    : "Inte bekräftad av leverantören ännu";
+  document.getElementById("po-confirm-date").value = po.expected_date ?? "";
+  document.getElementById("po-confirm-note").value = po.confirmed_note ?? "";
+  document.getElementById("po-confirm-btn").textContent = po.confirmed_at ? "Uppdatera" : "Markera bekräftad";
+  document.getElementById("po-unconfirm-btn").classList.toggle("hidden", !po.confirmed_at);
 }
+
+document.getElementById("po-confirm-btn").addEventListener("click", async () => {
+  try {
+    await api.post(`/inventory/purchase-orders/${currentPoId}/confirm`, {
+      expectedDate: document.getElementById("po-confirm-date").value || null,
+      note: document.getElementById("po-confirm-note").value,
+    });
+    await renderPoDetail();
+    loadPurchaseOrders();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+document.getElementById("po-unconfirm-btn").addEventListener("click", async () => {
+  await api.delete(`/inventory/purchase-orders/${currentPoId}/confirm`);
+  await renderPoDetail();
+  loadPurchaseOrders();
+});
 
 document.getElementById("po-send-btn").addEventListener("click", async (event) => {
   const message = document.getElementById("po-send-message");
@@ -833,4 +881,74 @@ suggestionsContainer.addEventListener("click", (event) => {
   openPoDetail(Number(btn.dataset.openPo));
 });
 
-activateTab("saldo");
+// ---------------------------------------------------------------------
+// Inkurans
+// ---------------------------------------------------------------------
+
+let obsoleteData = null;
+const dateOnly = (value) => (value ? new Date(value).toLocaleDateString("sv-SE") : "–");
+
+async function loadObsolete() {
+  obsoleteData = await api.get("/inventory/obsolete");
+  const { items, months, total_value, missing_cost } = obsoleteData;
+  document.getElementById("obsolete-months-text").textContent = months;
+  document.getElementById("obsolete-total").textContent = money(total_value);
+  document.getElementById("obsolete-count").textContent = String(items.length);
+  const missing = document.getElementById("obsolete-missing-cost");
+  missing.classList.toggle("hidden", missing_cost === 0);
+  missing.textContent = `${missing_cost} artiklar saknar inköpspris och räknas inte med i värdet.`;
+  document.getElementById("obsolete-empty").classList.toggle("hidden", items.length > 0);
+  document.getElementById("obsolete-rows").innerHTML = items
+    .map(
+      (i) => `
+      <tr>
+        <td class="py-2 pr-3">${escapeHtml(variantLabel(i))}${
+          i.discontinued ? ` <span class="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Utgått</span>` : ""
+        }</td>
+        <td class="py-2 pr-3 text-slate-600">${escapeHtml(i.supplier_name ?? "–")}</td>
+        <td class="py-2 pr-3 text-right">${i.quantity_on_hand}</td>
+        <td class="py-2 pr-3 text-right">${i.stock_value === null ? "–" : money(i.stock_value)}</td>
+        <td class="py-2 pr-3 text-slate-600">${i.last_sale_at ? dateOnly(i.last_sale_at) : "Aldrig"}</td>
+        <td class="py-2 pr-3 text-slate-600">${dateOnly(i.last_receipt_at)}</td>
+        <td class="py-2 pr-3 text-right">${
+          i.discontinued ? "" : `<button type="button" class="link text-xs" data-discontinue="${i.product_id}">Markera utgått</button>`
+        }</td>
+      </tr>`
+    )
+    .join("");
+}
+
+document.getElementById("obsolete-rows").addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-discontinue]");
+  if (!btn) return;
+  if (!confirm("Markera produkten som utgången? Den säljs då bara så länge lagret räcker och kommer inte med i inköpsförslag.")) return;
+  btn.disabled = true;
+  try {
+    await api.patch(`/products/${btn.dataset.discontinue}`, { discontinued: true });
+    await loadObsolete();
+  } catch (err) {
+    btn.disabled = false;
+    alert(err.message);
+  }
+});
+
+document.getElementById("obsolete-export-btn").addEventListener("click", () => {
+  if (!obsoleteData) return;
+  const field = (v) => {
+    const str = String(v ?? "");
+    return /[";\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const header = ["Artikelnr", "Produkt", "Färg", "Storlek", "SKU", "Leverantör", "Antal", "Inköpspris", "Värde", "Senast såld", "Senaste inleverans"];
+  const rows = obsoleteData.items.map((i) => [
+    i.article_number, i.product_name, i.color, i.size, i.sku, i.supplier_name, i.quantity_on_hand,
+    i.cost_price ?? "", i.stock_value ?? "", i.last_sale_at ? dateOnly(i.last_sale_at) : "Aldrig", i.last_receipt_at ? dateOnly(i.last_receipt_at) : "",
+  ]);
+  const csv = "\ufeff" + [header, ...rows].map((r) => r.map(field).join(";")).join("\r\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  link.download = `inkurans-${new Date().toLocaleDateString("sv-SE")}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+activateTab(tabPanels[location.hash.slice(1)] ? location.hash.slice(1) : "saldo");

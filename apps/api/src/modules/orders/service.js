@@ -91,9 +91,16 @@ const PICKUP_BLOCKED_STATUSES = ["DELIVERED", "CANCELLED", "INVOICED"];
 export async function listOrders({ search = "", status = "", customerId = "", page = 1, pageSize = 25 }) {
   const offset = (page - 1) * pageSize;
   const like = `%${search}%`;
-  const statusClause = status ? "AND o.status = ?" : "";
+  // UNPAID = fakturerad i Fortnox men inte betald än (se payment-status.js).
+  const unpaid = status === "UNPAID";
+  const statusClause = unpaid
+    ? `AND EXISTS (SELECT 1 FROM invoices i WHERE i.order_id = o.id AND i.type = 'CUSTOMER_INVOICE'
+                     AND i.external_ref IS NOT NULL AND i.paid_at IS NULL)`
+    : status
+      ? "AND o.status = ?"
+      : "";
   const customerClause = customerId ? "AND o.customer_id = ?" : "";
-  const extra = [status ? status : null, customerId ? Number(customerId) : null].filter((v) => v !== null);
+  const extra = [status && !unpaid ? status : null, customerId ? Number(customerId) : null].filter((v) => v !== null);
   const params = [like, like, ...extra, pageSize, offset];
   const countParams = [like, like, ...extra];
 
@@ -101,6 +108,9 @@ export async function listOrders({ search = "", status = "", customerId = "", pa
     `SELECT o.id, o.order_number, o.status, o.delivery_method, o.created_at,
             c.id AS customer_id, c.name AS customer_name,
             (SELECT MAX(op.picked_up_at) FROM order_pickups op WHERE op.order_id = o.id) AS delivered_at,
+            -- Betald först när alla orderns fakturor är betalda.
+            (SELECT IF(COUNT(*) > 0 AND SUM(i.paid_at IS NULL) = 0, MAX(i.paid_at), NULL)
+             FROM invoices i WHERE i.order_id = o.id AND i.type IN ('CUSTOMER_INVOICE', 'CASH_INVOICE')) AS paid_at,
             COALESCE(SUM(${sqlLineTotal("ol")}), 0) AS total_amount
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
@@ -131,6 +141,13 @@ export async function getStatusSummary({ customerId = "" } = {}) {
     params
   );
   const counts = Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
+  const [[unpaid]] = await pool.query(
+    `SELECT COUNT(DISTINCT i.order_id) AS count FROM invoices i JOIN orders o ON o.id = i.order_id
+     WHERE i.type = 'CUSTOMER_INVOICE' AND i.external_ref IS NOT NULL AND i.paid_at IS NULL
+       ${customerId ? "AND o.customer_id = ?" : ""}`,
+    params
+  );
+  counts.UNPAID = Number(unpaid.count);
 
   const [[uninvoiced]] = await pool.query(
     `SELECT COUNT(DISTINCT o.id) AS count,
@@ -144,7 +161,7 @@ export async function getStatusSummary({ customerId = "" } = {}) {
 
   return {
     counts,
-    total: Object.values(counts).reduce((a, b) => a + b, 0),
+    total: Object.entries(counts).reduce((sum, [key, n]) => (key === "UNPAID" ? sum : sum + n), 0),
     uninvoiced: {
       count: Number(uninvoiced.count),
       amount_ex_vat: round2(Number(uninvoiced.amount_ex_vat)),
@@ -228,7 +245,7 @@ export async function getOrder(id) {
     [id]
   );
   const [invoices] = await pool.query(
-    `SELECT id, type, invoice_number, status, status_note, amount, sent_at, created_at
+    `SELECT id, type, invoice_number, status, status_note, amount, sent_at, paid_at, created_at
      FROM invoices WHERE order_id = ? ORDER BY id ASC`,
     [id]
   );
@@ -313,6 +330,13 @@ async function insertOrderLines(connection, orderId, lines) {
   }
 }
 
+// Kundens referens/kostnadsställe: trimmad, kapad till Fortnox maxlängd,
+// tom = NULL.
+export function cleanText(value, max) {
+  if (value === undefined) return undefined;
+  return String(value ?? "").trim().slice(0, max) || null;
+}
+
 // Direct order creation ("lägg en order direkt", without going via an
 // offert first).
 export async function createOrder(data, userId) {
@@ -327,8 +351,9 @@ export async function createOrder(data, userId) {
 
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
+                           customer_reference, cost_center)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         data.customerId,
@@ -338,6 +363,8 @@ export async function createOrder(data, userId) {
         userId,
         generateQrToken(),
         data.skipInventory ? 1 : 0,
+        cleanText(data.customerReference, 50) ?? null,
+        cleanText(data.costCenter, 30) ?? null,
       ]
     );
     const orderId = result.insertId;
@@ -366,8 +393,9 @@ export async function duplicateOrder(id, userId) {
 
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
-      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
+                           customer_reference, cost_center)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         order.customer_id,
@@ -377,6 +405,8 @@ export async function duplicateOrder(id, userId) {
         userId,
         generateQrToken(),
         order.skip_inventory ? 1 : 0,
+        order.customer_reference,
+        order.cost_center,
       ]
     );
     const orderId = result.insertId;
@@ -440,11 +470,13 @@ export async function updateOrderLines(id, lines, fields = {}) {
   try {
     await connection.beginTransaction();
     await connection.query(
-      `UPDATE orders SET reference_contact_id = ?, delivery_method = ?, skip_inventory = ? WHERE id = ?`,
+      `UPDATE orders SET reference_contact_id = ?, delivery_method = ?, skip_inventory = ?, customer_reference = ?, cost_center = ? WHERE id = ?`,
       [
         fields.referenceContactId === undefined ? order.reference_contact_id : fields.referenceContactId || null,
         fields.deliveryMethod ?? order.delivery_method,
         fields.skipInventory === undefined ? order.skip_inventory : fields.skipInventory ? 1 : 0,
+        fields.customerReference === undefined ? order.customer_reference : cleanText(fields.customerReference, 50),
+        fields.costCenter === undefined ? order.cost_center : cleanText(fields.costCenter, 30),
         id,
       ]
     );
@@ -626,6 +658,8 @@ async function syncInvoiceToFortnox(invoiceId, order, { cash }) {
       lines: order.lines,
       orderId: order.id,
       orderNumber: order.order_number,
+      customerReference: order.customer_reference,
+      costCenter: order.cost_center,
       cash,
     });
     if (result.ok) {

@@ -9,7 +9,8 @@ export async function listPurchaseOrders({ status = "" }) {
   const where = status ? "WHERE po.status = ?" : "";
   const params = status ? [status] : [];
   const [rows] = await pool.query(
-    `SELECT po.id, po.status, po.expected_date, po.created_at, po.sent_at, s.id AS supplier_id, s.name AS supplier_name,
+    `SELECT po.id, po.status, DATE_FORMAT(po.expected_date, '%Y-%m-%d') AS expected_date, po.created_at, po.sent_at,
+            po.confirmed_at, s.id AS supplier_id, s.name AS supplier_name,
             COALESCE(SUM(pol.quantity), 0) AS total_qty,
             COALESCE(SUM(pol.received_qty), 0) AS total_received_qty
      FROM purchase_orders po
@@ -25,7 +26,8 @@ export async function listPurchaseOrders({ status = "" }) {
 
 export async function getPurchaseOrder(id) {
   const [[po]] = await pool.query(
-    `SELECT po.*, s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone,
+    `SELECT po.*, DATE_FORMAT(po.expected_date, '%Y-%m-%d') AS expected_date,
+            s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone,
             s.contact_name AS supplier_contact_name, s.customer_number AS supplier_customer_number,
             s.lead_time_days AS supplier_lead_time_days
      FROM purchase_orders po JOIN suppliers s ON s.id = po.supplier_id WHERE po.id = ?`,
@@ -237,4 +239,49 @@ export async function sendPurchaseOrder(id, { to, pdf, settings, sendEmail }) {
     [recipient, po.supplier_lead_time_days, po.supplier_lead_time_days ?? 0, id]
   );
   return { sent: true, to: recipient };
+}
+
+// Leverantören har bekräftat ordern: sparar bekräftelsen och det utlovade
+// leveransdatumet. Kan göras om för att ändra datumet.
+export async function confirmPurchaseOrder(id, { expectedDate, note }) {
+  const date = expectedDate && /^\d{4}-\d{2}-\d{2}$/.test(String(expectedDate)) ? expectedDate : null;
+  const [result] = await pool.query(
+    `UPDATE purchase_orders
+     SET confirmed_at = NOW(), expected_date = COALESCE(?, expected_date), confirmed_note = ?
+     WHERE id = ?`,
+    [date, String(note ?? "").trim().slice(0, 255) || null, id]
+  );
+  if (result.affectedRows === 0) throw new Error("PO_NOT_FOUND");
+  return getPurchaseOrder(id);
+}
+
+export async function unconfirmPurchaseOrder(id) {
+  await pool.query(`UPDATE purchase_orders SET confirmed_at = NULL, confirmed_note = NULL WHERE id = ?`, [id]);
+  return getPurchaseOrder(id);
+}
+
+// Översikt: skickade inköp som leverantören inte bekräftat på
+// UNCONFIRMED_DAYS dagar, och inköp vars väntade datum har passerat utan
+// att allt kommit in.
+const UNCONFIRMED_DAYS = 3;
+
+export async function getPurchaseOrderAlerts() {
+  const [rows] = await pool.query(
+    `SELECT po.id, po.sent_at, DATE_FORMAT(po.expected_date, '%Y-%m-%d') AS expected_date, po.confirmed_at,
+            s.name AS supplier_name,
+            DATEDIFF(CURDATE(), po.expected_date) AS days_late,
+            DATEDIFF(CURDATE(), po.sent_at) AS days_since_sent
+     FROM purchase_orders po
+     JOIN suppliers s ON s.id = po.supplier_id
+     WHERE po.status <> 'RECEIVED'
+       AND ((po.expected_date IS NOT NULL AND po.expected_date < CURDATE())
+         OR (po.confirmed_at IS NULL AND po.sent_at IS NOT NULL AND po.sent_at < DATE_SUB(NOW(), INTERVAL ? DAY)))
+     ORDER BY po.expected_date ASC, po.sent_at ASC`,
+    [UNCONFIRMED_DAYS]
+  );
+  return rows.map((r) => ({
+    ...r,
+    po_number: purchaseOrderNumber(r.id),
+    late: r.expected_date !== null && Number(r.days_late) > 0,
+  }));
 }

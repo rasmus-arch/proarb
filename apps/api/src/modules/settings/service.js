@@ -16,7 +16,7 @@ export async function getBranding() {
     `SELECT seller_name, seller_logo_path, inactive_customer_months, auto_print_order_slip,
             margin_warning_percent, margin_critical_percent, quote_expiry_warning_days, quote_valid_days,
             pickup_reminder_days, default_tax_rate_percent, default_payment_terms_days,
-            shelf_locations_enabled, credit_limits_enabled, fortnox_payment_status_enabled
+            shelf_locations_enabled, credit_limits_enabled, fortnox_payment_status_enabled, obsolete_stock_months
      FROM app_settings WHERE id = 1`
   );
   return branding;
@@ -77,6 +77,8 @@ export async function updateSettings(data) {
     fortnox_payment_status_enabled: flag(data.fortnoxPaymentStatusEnabled),
     credit_limits_enabled: flag(data.creditLimitsEnabled),
     shelf_locations_enabled: flag(data.shelfLocationsEnabled),
+    obsolete_stock_months:
+      data.obsoleteStockMonths === undefined ? undefined : Math.min(120, Math.max(1, Math.round(Number(data.obsoleteStockMonths) || 12))),
     inactive_customer_months: data.inactiveCustomerMonths,
     auto_print_order_slip: data.autoPrintOrderSlip === undefined ? undefined : data.autoPrintOrderSlip ? 1 : 0,
     next_order_number: data.nextOrderNumber,

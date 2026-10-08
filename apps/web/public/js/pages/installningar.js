@@ -67,6 +67,7 @@ const el = {
   fortnoxPaymentStatus: document.getElementById("s-fortnox-payment-status"),
   creditLimits: document.getElementById("s-credit-limits"),
   shelfLocations: document.getElementById("s-shelf-locations"),
+  obsoleteMonths: document.getElementById("s-obsolete-months"),
 };
 
 // --- Flikar -----------------------------------------------------------------
@@ -134,6 +135,7 @@ function applySettings(settings) {
   el.fortnoxPaymentStatus.checked = Boolean(settings.fortnox_payment_status_enabled);
   el.creditLimits.checked = Boolean(settings.credit_limits_enabled);
   el.shelfLocations.checked = Boolean(settings.shelf_locations_enabled);
+  el.obsoleteMonths.value = settings.obsolete_stock_months ?? 12;
 
   if (settings.seller_logo_path) {
     el.logoPreview.src = `/uploads/${settings.seller_logo_path}`;
@@ -198,6 +200,7 @@ el.saveBtn.addEventListener("click", async () => {
       fortnoxPaymentStatusEnabled: el.fortnoxPaymentStatus.checked,
       creditLimitsEnabled: el.creditLimits.checked,
       shelfLocationsEnabled: el.shelfLocations.checked,
+      obsoleteStockMonths: Number(el.obsoleteMonths.value) || 12,
     });
     el.saveSuccess.textContent = "Sparat.";
     setTimeout(() => el.saveSuccess.classList.add("hidden"), 2500);

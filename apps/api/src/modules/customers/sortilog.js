@@ -2,6 +2,7 @@ import { Router } from "express";
 import { getSettings } from "../settings/service.js";
 import { renderPortal } from "./portal.js";
 import * as accounts from "./portal-accounts.js";
+import { getCustomerInvoicePdf } from "./portal-invoices.js";
 import {
   checkLoginAllowed,
   passwordFlowAllowed,
@@ -113,6 +114,25 @@ router.get("/", async (req, res, next) => {
     });
   } catch (err) {
     next(err);
+  }
+});
+
+// Faktura som PDF (hämtas från Fortnox). Kräver inloggning, och fakturan
+// måste höra till den inloggades företag.
+router.get("/faktura/:id", async (req, res, next) => {
+  try {
+    const account = await accounts.getSessionAccount(req.cookies?.[accounts.PORTAL_SESSION_COOKIE]);
+    if (!account) return res.redirect(303, "/sortilog");
+    const result = await getCustomerInvoicePdf(account.customer_id, Number(req.params.id));
+    if (!result) return res.status(404).send("Fakturan hittades inte");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${result.filename.replace(/[^\w.-]/g, "_")}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(result.pdf);
+  } catch (err) {
+    if (err.message === "NOT_CONFIGURED") return res.status(503).send("Fakturorna kan inte hämtas just nu.");
+    console.warn(`Sortilog-faktura kunde inte hämtas: ${err.message}`);
+    res.status(502).send("Fakturan kunde inte hämtas just nu — försök igen om en stund.");
   }
 });
 

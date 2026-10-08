@@ -92,6 +92,18 @@ router.get("/by-number/:orderNumber", async (req, res, next) => {
   }
 });
 
+// QR-koden på ordersedeln (…/qr/<token>) skannad med kameran i
+// Orderhantering.
+router.get("/by-qr/:token", async (req, res, next) => {
+  try {
+    const [[row]] = await pool.query(`SELECT id FROM orders WHERE pickup_qr_token = ?`, [String(req.params.token)]);
+    if (!row) return res.status(404).json({ error: "Ingen order med den QR-koden" });
+    res.json(await orders.getOrder(row.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const order = await orders.getOrder(Number(req.params.id));
@@ -152,11 +164,13 @@ router.patch("/:id/lines", async (req, res, next) => {
     if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
       return res.status(400).json({ error: "Minst en rad krävs" });
     }
-    const { referenceContactId, deliveryMethod, skipInventory } = req.body;
+    const { referenceContactId, deliveryMethod, skipInventory, customerReference, costCenter } = req.body;
     const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines, {
       referenceContactId,
       deliveryMethod: ["PICKUP", "SHIPPING"].includes(deliveryMethod) ? deliveryMethod : undefined,
       skipInventory,
+      customerReference,
+      costCenter,
     });
     res.json(order);
   } catch (err) {

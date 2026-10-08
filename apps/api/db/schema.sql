@@ -154,6 +154,8 @@ CREATE TABLE IF NOT EXISTS app_settings (
   credit_limits_enabled      TINYINT(1) NOT NULL DEFAULT 1,
   -- Hyllplats på produkter, visas på ordersedeln.
   shelf_locations_enabled    TINYINT(1) NOT NULL DEFAULT 1,
+  -- Inkurans: artiklar i lager som inte sålts på så här många månader.
+  obsolete_stock_months      INT NOT NULL DEFAULT 12,
   updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT chk_app_settings_singleton CHECK (id = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -401,6 +403,8 @@ CREATE TABLE IF NOT EXISTS portal_order_requests (
   -- Vart bekräftelsemejlen går: den inloggade Sortilog-användaren, annars
   -- kundens e-post.
   requester_email       VARCHAR(255) NULL,
+  customer_reference    VARCHAR(50) NULL,
+  cost_center           VARCHAR(30) NULL,
   status                ENUM('NEW', 'CONVERTED', 'DISMISSED') NOT NULL DEFAULT 'NEW',
   order_id              INT NULL,
   created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -571,6 +575,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Mottagare för statusmejl när den skiljer sig från kundens e-post
   -- (t.ex. personen som beställde via Sortilog).
   notify_email         VARCHAR(255) NULL,
+  -- Kundens egen referens och kostnadsställe/beställningsnummer. Följer
+  -- med till Fortnox-fakturan (YourReference / YourOrderNumber).
+  customer_reference   VARCHAR(50) NULL,
+  cost_center          VARCHAR(30) NULL,
   created_by           INT NOT NULL,
   notes                TEXT NULL,
   -- QR-koden på ordersedelns PDF (se orders/pdf.js). Unguessable token,
@@ -715,6 +723,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   -- När/till vem inköpsordern mejlades till leverantören.
   sent_at       DATETIME NULL,
   sent_to       VARCHAR(255) NULL,
+  -- Leverantören har bekräftat ordern (expected_date = utlovat datum).
+  confirmed_at  DATETIME NULL,
+  confirmed_note VARCHAR(255) NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_po_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -773,6 +784,18 @@ CREATE TABLE IF NOT EXISTS stock_count_lines (
   CONSTRAINT fk_scl_user FOREIGN KEY (decided_by) REFERENCES users(id),
   UNIQUE KEY uq_count_variant (stock_count_id, product_variant_id),
   INDEX idx_scl_count (stock_count_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Mobilinventering hylla för hylla: vilka hyllplatser som räknats klart i
+-- en inventering ('' = varor utan hyllplats).
+CREATE TABLE IF NOT EXISTS stock_count_shelves (
+  stock_count_id  INT NOT NULL,
+  shelf_location  VARCHAR(50) NOT NULL,
+  completed_by    INT NULL,
+  completed_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (stock_count_id, shelf_location),
+  CONSTRAINT fk_scs_count FOREIGN KEY (stock_count_id) REFERENCES stock_counts(id),
+  CONSTRAINT fk_scs_user FOREIGN KEY (completed_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------
@@ -858,6 +881,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   amount         DECIMAL(10,2) NOT NULL,
   due_date       DATE NULL,
   sent_at        DATETIME NULL,
+  -- Helt betald enligt Fortnox (customers/payment-status.js).
+  paid_at        DATETIME NULL,
   created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_invoices_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_invoices_sale FOREIGN KEY (sale_id) REFERENCES sales(id),

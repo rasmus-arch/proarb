@@ -174,6 +174,14 @@ export async function run() {
     "ALTER TABLE products ADD COLUMN shelf_location VARCHAR(50) NULL",
     "ALTER TABLE portal_order_requests ADD COLUMN requester_email VARCHAR(255) NULL",
     "ALTER TABLE orders ADD COLUMN notify_email VARCHAR(255) NULL",
+    "ALTER TABLE orders ADD COLUMN customer_reference VARCHAR(50) NULL",
+    "ALTER TABLE orders ADD COLUMN cost_center VARCHAR(30) NULL",
+    "ALTER TABLE portal_order_requests ADD COLUMN customer_reference VARCHAR(50) NULL",
+    "ALTER TABLE portal_order_requests ADD COLUMN cost_center VARCHAR(30) NULL",
+    "ALTER TABLE purchase_orders ADD COLUMN confirmed_at DATETIME NULL",
+    "ALTER TABLE purchase_orders ADD COLUMN confirmed_note VARCHAR(255) NULL",
+    "ALTER TABLE invoices ADD COLUMN paid_at DATETIME NULL",
+    "ALTER TABLE app_settings ADD COLUMN obsolete_stock_months INT NOT NULL DEFAULT 12",
     // Swish-kunden för småköp — skapas en gång. Finns det redan en
     // kontantkund (eller kundnummer SWISH) görs ingenting, så en omdöpt
     // eller borttagen Swish-kund dyker aldrig upp igen.

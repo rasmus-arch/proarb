@@ -18,6 +18,7 @@
         <button type="button" class="tab-btn" data-tab="inleverans">Inleverans</button>
         <button type="button" class="tab-btn" data-tab="inventering">Inventering</button>
         <button type="button" class="tab-btn" data-tab="inkopsforslag">Inköpsförslag</button>
+        <button type="button" class="tab-btn" data-tab="inkurans">Inkurans</button>
       </div>
 
       <!-- Saldo -->
@@ -40,6 +41,8 @@
               <tr class="text-left text-slate-500">
                 <th class="py-2 pr-3 font-medium">Produkt</th>
                 <th class="py-2 pr-3 font-medium text-right">Saldo</th>
+                <th class="py-2 pr-3 font-medium text-right" title="På öppna ordrar som inte hämtats ut">Reserverat</th>
+                <th class="py-2 pr-3 font-medium text-right">Tillgängligt</th>
                 <th class="py-2 pr-3 font-medium text-right">Min-saldo</th>
                 <th class="py-2 pr-3 font-medium text-right">Beställ</th>
                 <th></th>
@@ -108,6 +111,22 @@
               </div>
             </div>
             <p id="po-send-message" class="mt-2 hidden text-sm"></p>
+            <div id="po-confirm-box" class="mt-3 flex flex-wrap items-end gap-3 rounded-md border border-slate-200 p-3">
+              <div class="text-sm">
+                <div class="font-medium text-slate-900">Leverantörsbekräftelse</div>
+                <div id="po-confirm-status" class="text-xs text-slate-500"></div>
+              </div>
+              <label class="block text-sm">
+                <span class="text-slate-700">Utlovat leveransdatum</span>
+                <input id="po-confirm-date" type="date" class="input mt-1" />
+              </label>
+              <label class="block flex-1 text-sm" style="min-width: 12rem">
+                <span class="text-slate-700">Kommentar</span>
+                <input id="po-confirm-note" maxlength="255" class="input mt-1" placeholder="t.ex. ordererkännande nr 1234" />
+              </label>
+              <button type="button" id="po-confirm-btn" class="btn-secondary">Markera bekräftad</button>
+              <button type="button" id="po-unconfirm-btn" class="hidden text-xs text-slate-500 hover:text-red-600">Ångra</button>
+            </div>
             <div class="mt-3 max-w-xs">
               <label class="block text-sm">
                 <span class="text-slate-700">Skanna streckkod för att ta emot 1 st</span>
@@ -140,7 +159,10 @@
       <section id="tab-inventering" class="tab-panel mt-4 hidden">
         <div id="count-list-view">
           <div class="card">
-            <h2 class="section-title">Ny inventering</h2>
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 class="section-title">Ny inventering</h2>
+              <a href="/inventera.html" class="link text-sm">Inventera med mobilen (hylla för hylla) →</a>
+            </div>
             <p class="mt-1 text-sm text-slate-600">
               Inventera hela lagret, eller bara en del: en kategori, ett märke, en leverantör — eller bara det du räknar
               (stickprov). Bara varor inom omfattningen kan räknas som saknade; resten av lagret lämnas orört.
@@ -248,6 +270,44 @@
         <p id="suggestions-summary" class="mt-2 text-sm font-medium text-slate-900"></p>
         <div id="suggestions-container" class="mt-4 space-y-4"></div>
         <p id="suggestions-empty" class="hidden py-10 text-center text-sm text-slate-500">Inget att köpa in just nu.</p>
+      </section>
+      <!-- Inkurans: i lager men inte sålt på X månader -->
+      <section id="tab-inkurans" class="tab-panel mt-4 hidden">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <p class="text-sm text-slate-600">
+            Artiklar i lager som inte sålts på <span id="obsolete-months-text"></span> månader. Antalet månader ändras under
+            <a href="/installningar.html#funktioner" class="link">Inställningar → Funktioner</a>.
+          </p>
+          <button type="button" id="obsolete-export-btn" class="btn-secondary">Exportera (CSV)</button>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div class="card">
+            <div class="text-xs text-slate-500">Lagervärde (inköpspris)</div>
+            <div id="obsolete-total" class="mt-0.5 text-lg font-semibold text-slate-900">–</div>
+          </div>
+          <div class="card">
+            <div class="text-xs text-slate-500">Artiklar</div>
+            <div id="obsolete-count" class="mt-0.5 text-lg font-semibold text-slate-900">–</div>
+          </div>
+        </div>
+        <p id="obsolete-missing-cost" class="mt-2 hidden text-xs text-amber-700"></p>
+        <div class="card mt-3 overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs text-slate-500">
+                <th class="py-2 pr-3 font-medium">Artikel</th>
+                <th class="py-2 pr-3 font-medium">Leverantör</th>
+                <th class="py-2 pr-3 text-right font-medium">Antal</th>
+                <th class="py-2 pr-3 text-right font-medium">Värde</th>
+                <th class="py-2 pr-3 font-medium">Senast såld</th>
+                <th class="py-2 pr-3 font-medium">Senaste inleverans</th>
+                <th class="py-2 pr-3"></th>
+              </tr>
+            </thead>
+            <tbody id="obsolete-rows" class="divide-y divide-slate-100"></tbody>
+          </table>
+          <p id="obsolete-empty" class="hidden py-6 text-center text-sm text-slate-500">Inget inkurant i lagret.</p>
+        </div>
       </section>
     </main>
 
