@@ -14,7 +14,10 @@
 -- KÖR: phpMyAdmin → välj databasen → fliken SQL → klistra in hela filen → Kör.
 -- =============================================================================
 
-CREATE TEMPORARY TABLE launch_suppliers (name VARCHAR(255) NOT NULL, notes TEXT NULL);
+SET NAMES utf8mb4;
+
+-- Samma teckenuppsättning som övriga tabeller, så att namnen går att jämföra.
+CREATE TEMPORARY TABLE launch_suppliers (name VARCHAR(255) NOT NULL, notes TEXT NULL) DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO launch_suppliers (name, notes) VALUES
   ('Helly Hansen', NULL),
