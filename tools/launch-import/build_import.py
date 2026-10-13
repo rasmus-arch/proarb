@@ -4,8 +4,8 @@ Bygger EN SQL-fil med alla produkter från leverantörernas prisfiler (xlsx).
 
 Körs med:  /usr/bin/python3 tools/launch-import/build_import.py
 Resultat i launch-import/ (ligger i .gitignore, innehåller inköpspriser):
-  produkter-import.sql      -- importeras i phpMyAdmin (fliken SQL / Importera)
-  produkter-import.sql.gz   -- samma fil gzippad (phpMyAdmin läser den direkt)
+  produkter/NN_Leverantör.sql -- en fil per leverantör (stora delas), importeras en i taget
+  produkter-import.zip      -- alla filerna i ett paket
   import-rapport.csv        -- det som hoppats över, uppskattats eller ändrats
   import-sammanfattning.csv -- antal produkter/varianter per leverantör och varumärke
 
@@ -33,6 +33,7 @@ import os
 import re
 import statistics
 import sys
+import unicodedata
 from collections import Counter, OrderedDict, defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -448,17 +449,23 @@ def finish(records):
 # SQL
 # ---------------------------------------------------------------------------
 
+def clean_text(value):
+    t = unicodedata.normalize("NFKC", str(value)).replace("\u00ad", "").replace("\\", "/").replace(";", ",")
+    t = t.replace("\u2022", "-").replace("\u2248", "~")
+    t = "".join(ch for ch in t if not unicodedata.category(ch).startswith("M") or ch in "\u0308\u030a")  # inga lösa accenttecken
+    t = re.sub(r"[\x00-\x1f\x7f]", " ", t)
+    return re.sub(r" {2,}", " ", t).strip()
+
+
 def q(value):
+    """SQL-litteral. Inga semikolon, snedstreck eller styrtecken i texterna (säkrare för phpMyAdmin)."""
     if value is None:
         return "NULL"
     if isinstance(value, bool):
         return "1" if value else "0"
     if isinstance(value, (int, float)):
         return f"{value:.2f}" if isinstance(value, float) else str(value)
-    t = str(value).replace("\\", "/")
-    t = re.sub(r"[\x00-\x1f\x7f]", " ", t)
-    t = re.sub(r" {2,}", " ", t).strip()
-    return "'" + t.replace("'", "''") + "'"
+    return "'" + clean_text(value).replace("'", "''") + "'"
 
 
 def batches(items, n):
@@ -466,51 +473,47 @@ def batches(items, n):
         yield items[i:i + n]
 
 
-def build_sql(products):
-    suppliers = sorted({p["supplier"] for p in products.values()})
-    brands = sorted({p["brand"] for p in products.values() if p["brand"]}, key=str.lower)
-    cats = sorted({p["category"] for p in products.values() if p["category"]}, key=str.lower)
-    n_var = sum(len(p["variants"]) for p in products.values())
+MAX_FILE_BYTES = 600_000     # varje fil blir mindre än så (phpMyAdmin klarar inte alltid >1 MB)
+PRODUCT_BATCH = 80           # rader per INSERT (satserna hålls små, ca 10 KB)
+VARIANT_BATCH = 150
+
+ASCII = str.maketrans({"å": "a", "ä": "a", "ö": "o", "Å": "A", "Ä": "A", "Ö": "O", "&": "och"})
+
+
+def slug(name):
+    return re.sub(r"[^A-Za-z0-9]+", "-", name.translate(ASCII)).strip("-")
+
+
+def file_sql(part_products, supplier, part_no, part_total, grand):
+    """En helt fristående SQL-fil för en del av en leverantörs produkter."""
+    brands = sorted({p["brand"] for p in part_products if p["brand"]}, key=str.lower)
+    cats = sorted({p["category"] for p in part_products if p["category"]}, key=str.lower)
+    n_var = sum(len(p["variants"]) for p in part_products)
     L = []
     w = L.append
     w("-- =============================================================================")
-    w("-- PRODUKTIMPORT INFÖR LANSERING")
-    w("-- =============================================================================")
-    w(f"-- {len(products)} produkter och {n_var} varianter från {len(suppliers)} leverantörer.")
-    w("-- Leverantörer: " + ", ".join(suppliers))
-    w("--")
-    w("-- KÖR EFTER reset-for-launch.sql och suppliers-launch.sql.")
-    w("-- Importera i phpMyAdmin: välj databasen -> fliken Importera -> välj filen")
-    w("-- (.sql eller .sql.gz) -> Kör. Hela filen går att köra igen: produkter och")
-    w("-- varianter uppdateras i stället för att dubbleras.")
-    w("--")
-    w("-- Pris = leverantörens rekommenderade pris/listpris, exkl moms. Inköpspris =")
-    w("-- leverantörens nettopris där filen har ett, annars tomt (se längst ner för")
-    w("-- hur du sätter det med en rabatt per leverantör).")
+    w(f"-- PRODUKTIMPORT: {supplier}" + (f" (del {part_no} av {part_total})" if part_total > 1 else ""))
+    w(f"-- {len(part_products)} produkter och {n_var} varianter.")
+    w("-- Importera i phpMyAdmin: välj databasen -> Importera -> välj filen -> Kör.")
+    w("-- Filen är fristående och går att köra om (produkter uppdateras, dubbleras inte).")
+    w("-- Kör reset-for-launch.sql och suppliers-launch.sql först.")
+    w("-- Pris = leverantörens rek. pris/listpris exkl moms. Inköpspris = nettopris där filen har ett.")
     w("-- =============================================================================")
     w("")
     w("SET NAMES utf8mb4;")
-    w("")
-    w("-- 1. Leverantörer som saknas")
-    for name in suppliers:
-        w(f"INSERT INTO suppliers (name) SELECT {q(name)} FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE name = {q(name)});")
-    w("")
-    w("-- 2. Varumärken")
-    for b in batches(brands, 200):
+    w(f"INSERT INTO suppliers (name) SELECT {q(supplier)} FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE name = {q(supplier)});")
+    for b in batches(brands, 50):
         w("INSERT IGNORE INTO brands (name) VALUES " + ", ".join(f"({q(x)})" for x in b) + ";")
-    w("")
-    w("-- 3. Kategorier som saknas")
     for c in cats:
         w(f"INSERT INTO product_categories (name) SELECT {q(c)} FROM DUAL WHERE NOT EXISTS "
           f"(SELECT 1 FROM product_categories WHERE name = {q(c)} AND parent_id IS NULL);")
     w("")
-    w("-- 4. Mellanlager (tas bort sist i filen)")
     w("DROP TABLE IF EXISTS tmp_import_variants;")
     w("DROP TABLE IF EXISTS tmp_import_products;")
     w("""CREATE TABLE tmp_import_products (
-  article_number VARCHAR(100) NOT NULL PRIMARY KEY,
+  pid INT NOT NULL PRIMARY KEY,
+  article_number VARCHAR(100) NOT NULL,
   name VARCHAR(255) NOT NULL,
-  description TEXT NULL,
   category VARCHAR(255) NULL,
   brand VARCHAR(255) NULL,
   supplier VARCHAR(255) NOT NULL,
@@ -521,71 +524,81 @@ def build_sql(products):
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;""")
     w("""CREATE TABLE tmp_import_variants (
   sku VARCHAR(100) NOT NULL PRIMARY KEY,
-  article_number VARCHAR(100) NOT NULL,
+  pid INT NOT NULL,
   barcode VARCHAR(100) NULL,
   color VARCHAR(80) NULL,
   size VARCHAR(30) NULL,
   price_override DECIMAL(10,2) NULL,
-  INDEX idx_tiv_article (article_number)
+  INDEX idx_tiv_pid (pid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;""")
     w("")
-    w("-- 5. Produkter till mellanlagret")
-    plist = list(products.values())
-    for b in batches(plist, 150):
-        w("INSERT INTO tmp_import_products (article_number, name, description, category, brand, supplier, unit, base_price, cost_price, discontinued) VALUES")
-        w(",\n".join(f"({q(p['article'])},{q(p['name'])},{q(p['desc'])},{q(p['category'])},{q(p['brand'])},{q(p['supplier'])},{q(p['unit'])},"
-                     f"{q(p['base'])},{q(p['cost'])},{q(p['discontinued'])})" for p in b) + ";")
+    indexed = list(enumerate(part_products, start=1))
+    for chunk in batches(indexed, PRODUCT_BATCH):
+        w("INSERT INTO tmp_import_products (pid, article_number, name, category, brand, supplier, unit, base_price, cost_price, discontinued) VALUES")
+        w(",\n".join(f"({i},{q(p['article'])},{q(p['name'])},{q(p['category'])},{q(p['brand'])},{q(p['supplier'])},{q(p['unit'])},"
+                     f"{q(p['base'])},{q(p['cost'])},{q(p['discontinued'])})" for i, p in chunk) + ";")
+    vlist = [(i, v) for i, p in indexed for v in p["variants"]]
+    for chunk in batches(vlist, VARIANT_BATCH):
+        w("INSERT INTO tmp_import_variants (sku, pid, barcode, color, size, price_override) VALUES")
+        w(",\n".join(f"({q(v['sku'])},{i},{q(v['ean'])},{q(v['color'])},{q(v['size'])},{q(v['override'])})" for i, v in chunk) + ";")
     w("")
-    w("-- 6. Varianter till mellanlagret")
-    vlist = [(p["article"], v) for p in plist for v in p["variants"]]
-    for b in batches(vlist, 500):
-        w("INSERT INTO tmp_import_variants (sku, article_number, barcode, color, size, price_override) VALUES")
-        w(",\n".join(f"({q(v['sku'])},{q(a)},{q(v['ean'])},{q(v['color'])},{q(v['size'])},{q(v['override'])})" for a, v in b) + ";")
-    w("")
-    w("-- 7. Produkter in i systemet")
-    w("""INSERT INTO products (article_number, name, description, category_id, brand_id, supplier_id, unit, tax_rate_percent, base_price, cost_price, discontinued)
-SELECT t.article_number, t.name, t.description, c.id, b.id, s.id, t.unit, 25.00, t.base_price, t.cost_price, t.discontinued
+    w("""INSERT INTO products (article_number, name, category_id, brand_id, supplier_id, unit, tax_rate_percent, base_price, cost_price, discontinued)
+SELECT t.article_number, t.name, c.id, b.id, s.id, t.unit, 25.00, t.base_price, t.cost_price, t.discontinued
 FROM tmp_import_products t
 LEFT JOIN brands b ON b.name = t.brand
 LEFT JOIN (SELECT name, MIN(id) AS id FROM suppliers GROUP BY name) s ON s.name = t.supplier
 LEFT JOIN (SELECT name, MIN(id) AS id FROM product_categories WHERE parent_id IS NULL GROUP BY name) c ON c.name = t.category
 ON DUPLICATE KEY UPDATE
-  name = VALUES(name), description = VALUES(description), category_id = VALUES(category_id), brand_id = VALUES(brand_id),
-  supplier_id = VALUES(supplier_id), unit = VALUES(unit), base_price = VALUES(base_price), cost_price = VALUES(cost_price),
-  discontinued = VALUES(discontinued);""")
-    w("")
-    w("-- 8. Varianter in i systemet")
+  name = VALUES(name), category_id = VALUES(category_id), brand_id = VALUES(brand_id), supplier_id = VALUES(supplier_id),
+  unit = VALUES(unit), base_price = VALUES(base_price), cost_price = VALUES(cost_price), discontinued = VALUES(discontinued);""")
     w("""INSERT INTO product_variants (product_id, sku, barcode, color, size, price_override, active)
 SELECT p.id, v.sku, v.barcode, v.color, v.size, v.price_override, 1
 FROM tmp_import_variants v
-JOIN products p ON p.article_number = v.article_number
+JOIN tmp_import_products t ON t.pid = v.pid
+JOIN products p ON p.article_number = t.article_number
 ON DUPLICATE KEY UPDATE
   product_id = VALUES(product_id), barcode = VALUES(barcode), color = VALUES(color), size = VALUES(size),
   price_override = VALUES(price_override);""")
-    w("")
-    w("-- 9. Städa")
     w("DROP TABLE tmp_import_variants;")
     w("DROP TABLE tmp_import_products;")
     w("")
-    w("-- 10. Kontroll: antal per leverantör (ska stämma med siffrorna överst i filen)")
-    w("""SELECT s.name AS leverantor, COUNT(DISTINCT p.id) AS produkter, COUNT(v.id) AS varianter
-FROM products p
-LEFT JOIN suppliers s ON s.id = p.supplier_id
-LEFT JOIN product_variants v ON v.product_id = p.id
-GROUP BY s.name ORDER BY s.name;""")
-    w("")
-    w("-- =============================================================================")
-    w("-- VALFRITT EFTERÅT: inköpspris och pris där filen bara hade ett pris")
-    w("-- Helly Hansen, Båstadgruppen och Tee Jays: priset i filen är satt som pris och")
-    w("-- inköpspriset är tomt. Byt 0.40 mot er rabatt (0.40 = 40 %) och kör raden:")
-    w("--")
-    for sup in ("Helly Hansen", "Båstadgruppen"):
-        w(f"-- UPDATE products SET cost_price = ROUND(base_price * (1 - 0.40), 2) WHERE supplier_id = (SELECT MIN(id) FROM suppliers WHERE name = {q(sup)});")
-    w("-- Tee Jays: filens pris är troligen inköpspriset (återförsäljarpris). Så här blir det inköpspris")
-    w("-- och priset ett påslag (2.0 = dubbla inköpspriset):")
-    w("-- UPDATE products SET cost_price = base_price, base_price = ROUND(base_price * 2.0, 0) WHERE supplier_id = (SELECT MIN(id) FROM suppliers WHERE name = 'Tee Jays');")
-    w("-- =============================================================================")
+    w(f"-- Kontroll: ska visa minst {len(part_products)} produkter och {n_var} varianter för denna del.")
+    w(f"SELECT {q(supplier)} AS leverantor, COUNT(DISTINCT p.id) AS produkter_totalt, COUNT(v.id) AS varianter_totalt "
+      f"FROM products p JOIN (SELECT MIN(id) AS id FROM suppliers WHERE name = {q(supplier)}) s ON s.id = p.supplier_id "
+      f"LEFT JOIN product_variants v ON v.product_id = p.id;")
     return "\n".join(L) + "\n"
+
+
+# Ordning = checklistans ordning
+SUPPLIER_ORDER = ["Helly Hansen", "Jobman", "Projob", "Båstadgruppen", "Tegera Ejendals", "Jalas Ejendals", "Tee Jays", "Craft",
+                  "Cutter & Buck", "Clique", "Printer", "D&J", "New Wave", "Segereurope"]
+
+
+def build_files(products):
+    """Returnerar [(filnamn, sql, leverantör)] — en fil per leverantör, stora leverantörer delas."""
+    by_sup = defaultdict(list)
+    for p in products.values():
+        by_sup[p["supplier"]].append(p)
+    order = [x for x in SUPPLIER_ORDER if x in by_sup] + sorted(x for x in by_sup if x not in SUPPLIER_ORDER)
+    files = []
+    for sup in order:
+        plist = by_sup[sup]
+        # dela tills varje del ryms under gränsen (uppskattat med den färdiga filens storlek)
+        parts = 1
+        while True:
+            size = -(-len(plist) // parts)
+            chunks = [plist[i:i + size] for i in range(0, len(plist), size)]
+            sqls = [file_sql(c, sup, n, len(chunks), None) for n, c in enumerate(chunks, 1)]
+            if max(len(x.encode("utf-8")) for x in sqls) <= MAX_FILE_BYTES or size <= 1:
+                break
+            parts += 1
+        for n, sql in enumerate(sqls, 1):
+            files.append((sup, n, len(sqls), sql))
+    out = []
+    for idx, (sup, n, total, sql) in enumerate(files, 1):
+        name = f"{idx:02d}_{slug(sup)}" + (f"_del-{n}-av-{total}" if total > 1 else "") + ".sql"
+        out.append((name, sql, sup))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -600,12 +613,20 @@ def main():
     products = finish(records)
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    sql = build_sql(products)
-    sql_path = os.path.join(OUT_DIR, "produkter-import.sql")
-    with open(sql_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(sql)
-    with gzip.open(sql_path + ".gz", "wt", encoding="utf-8", compresslevel=9) as f:
-        f.write(sql)
+    parts_dir = os.path.join(OUT_DIR, "produkter")
+    os.makedirs(parts_dir, exist_ok=True)
+    for old in os.listdir(parts_dir):
+        os.remove(os.path.join(parts_dir, old))
+    files = build_files(products)
+    import zipfile
+    zip_path = os.path.join(OUT_DIR, "produkter-import.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, sql, _ in files:
+            with open(os.path.join(parts_dir, name), "w", encoding="utf-8", newline="\n") as f:
+                f.write(sql)
+            z.writestr(name, sql.encode("utf-8"))
+    for name, sql, _ in files:
+        print(f"  {name:48} {len(sql.encode('utf-8')) / 1024:7.0f} KB")
 
     with open(os.path.join(OUT_DIR, "import-rapport.csv"), "w", encoding="utf-8-sig", newline="") as f:
         wr = csv.writer(f, delimiter=";")
@@ -627,8 +648,7 @@ def main():
             wr.writerow([sup, br, *v])
 
     n_var = sum(len(p["variants"]) for p in products.values())
-    print(f"\n{len(products)} produkter, {n_var} varianter -> {sql_path} ({os.path.getsize(sql_path) / 1e6:.1f} MB, "
-          f"{os.path.getsize(sql_path + '.gz') / 1e6:.1f} MB gz)")
+    print(f"\n{len(products)} produkter, {n_var} varianter i {len(files)} filer -> {parts_dir}")
     print("Rapportrader:", Counter(r[0] for r in REPORT))
 
 
