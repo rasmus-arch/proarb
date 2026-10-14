@@ -348,8 +348,8 @@ export async function createOrder(data, userId) {
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
-                           customer_reference, cost_center, notify_email)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           customer_reference, cost_center, notify_email, send_emails)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         data.customerId,
@@ -362,6 +362,7 @@ export async function createOrder(data, userId) {
         cleanText(data.customerReference, 50) ?? null,
         cleanText(data.costCenter, 30) ?? null,
         notifyEmail,
+        data.sendEmails ? 1 : 0,
       ]
     );
     const orderId = result.insertId;
@@ -497,7 +498,7 @@ export async function updateOrderLines(id, lines, fields = {}) {
 // principle as the Fortnox sync in pos/service.js): { sent: true } once a
 // real provider exists, or { sent: false, reason } today while
 // email.js/fortnox.js are still stubs.
-export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {}) {
+export async function updateOrderStatus(id, newStatus) {
   const order = await getOrder(id);
   if (!order) throw new Error("ORDER_NOT_FOUND");
 
@@ -512,7 +513,7 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
   );
 
   let notification = null;
-  if (newStatus === "READY_FOR_PICKUP" && sendEmail) {
+  if (newStatus === "READY_FOR_PICKUP" && order.send_emails) {
     try {
       const settings = await getSettings();
       const result = await sendOrderReadyEmail({
@@ -693,6 +694,14 @@ async function finalizeInvoicing(orderId) {
   }
   await pool.query(`UPDATE orders SET status = 'INVOICED' WHERE id = ? AND status = 'DELIVERED'`, [orderId]);
   return sendOrderInvoiceFromFortnox(orderId);
+}
+
+// Reglaget "Skicka mail om ordern". Går att ändra tills ordern är avbruten.
+export async function setOrderSendEmails(id, enabled) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  await pool.query(`UPDATE orders SET send_emails = ? WHERE id = ?`, [enabled ? 1 : 0, id]);
+  return getOrder(id);
 }
 
 // "Skicka till Fortnox igen" för en faktura som inte kom fram (Fortnox ej

@@ -36,6 +36,11 @@ const el = {
   costCenter: document.getElementById("cost-center"),
   notifyEmail: document.getElementById("notify-email"),
   notifyEmailHint: document.getElementById("notify-email-hint"),
+  sendEmailsBox: document.getElementById("send-emails-box"),
+  sendEmailsSwitch: document.getElementById("send-emails-switch"),
+  sendEmailsLabel: document.getElementById("send-emails-label"),
+  sendEmailsKnob: document.getElementById("send-emails-knob"),
+  sendEmailsText: document.getElementById("send-emails-text"),
   useContactEmailBtn: document.getElementById("use-contact-email-btn"),
   newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
@@ -180,6 +185,44 @@ function renderTotals() {
 }
 
 const isNewOrder = () => !orderId;
+
+// --- Reglaget "Skicka mail om ordern" -----------------------------------------
+// Av som standard. Styr orderbekräftelse, "redo för utlämning" och
+// "utlämnad" till kunden. Fakturan från Fortnox skickas alltid.
+
+function renderSendEmails() {
+  const on = Boolean(state.sendEmails);
+  el.sendEmailsSwitch.setAttribute("aria-checked", String(on));
+  el.sendEmailsSwitch.className = `relative h-9 w-24 shrink-0 rounded-full text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${on ? "bg-green-600" : "bg-slate-400"}`;
+  el.sendEmailsLabel.textContent = on ? "JA" : "NEJ";
+  el.sendEmailsLabel.className = `absolute inset-y-0 flex items-center ${on ? "left-3" : "right-3"}`;
+  el.sendEmailsKnob.className = `absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ${on ? "left-[3.75rem]" : "left-1"}`;
+  el.sendEmailsBox.className = `col-span-2 rounded-lg border-2 p-3 ${on ? "border-green-600 bg-green-50" : "border-slate-200 bg-slate-50"}`;
+  el.sendEmailsText.className = `mt-0.5 text-sm ${on ? "font-medium text-green-800" : "text-slate-600"}`;
+  el.sendEmailsText.textContent = on
+    ? "JA – kunden mailas om ordern (bekräftelse, redo för utlämning, utlämnad) och får fakturan."
+    : "NEJ – inga ordermail skickas. Kunden får bara fakturan.";
+}
+
+el.sendEmailsSwitch.addEventListener("click", async () => {
+  const next = !state.sendEmails;
+  state.sendEmails = next;
+  renderSendEmails();
+  if (!orderId) return; // ny order: sparas tillsammans med ordern
+  el.sendEmailsSwitch.disabled = true;
+  try {
+    await api.patch(`/orders/${orderId}/send-emails`, { enabled: next });
+  } catch (err) {
+    state.sendEmails = !next;
+    renderSendEmails();
+    el.formError.textContent = err.message;
+    el.formError.classList.remove("hidden");
+  } finally {
+    el.sendEmailsSwitch.disabled = false;
+  }
+});
+
+renderSendEmails();
 
 // --- E-post till den som hämtar ------------------------------------------------
 // Valfri. Statusmejlen (redo, påminnelse, utlämnad) går hit, annars till
@@ -761,6 +804,7 @@ async function createOrder({ completeCash }) {
     customerReference: el.customerReference.value,
     costCenter: el.costCenter.value,
     notifyEmail: el.notifyEmail.value,
+    sendEmails: Boolean(state.sendEmails),
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
       description: l.productVariantId ? null : l.description ?? l.name,
@@ -845,8 +889,8 @@ el.historyList.addEventListener("click", async (event) => {
 
 // --- Status actions + pickup ----------------------------------------------
 
-async function changeStatus(orderId, status, sendEmail) {
-  const order = await api.patch(`/orders/${orderId}/status`, { status, sendEmail });
+async function changeStatus(orderId, status) {
+  const order = await api.patch(`/orders/${orderId}/status`, { status });
   if (order.notification) {
     sessionStorage.setItem("order-status-notification", JSON.stringify({ status, ...order.notification }));
   }
@@ -861,15 +905,7 @@ function notificationText({ status, sent, reason }) {
 }
 
 function renderActionButtons(order) {
-  const emailCheckbox = order.allowed_next_statuses.includes("READY_FOR_PICKUP")
-    ? `<label class="flex items-center gap-1.5 text-xs text-slate-600">
-        <input type="checkbox" id="send-ready-email" checked class="rounded border-slate-300" />
-        Skicka mail till kund
-      </label>`
-    : "";
-
   el.actionButtons.innerHTML =
-    emailCheckbox +
     order.allowed_next_statuses
       .map((s) => `<button type="button" class="btn-secondary" data-status="${s}">${ORDER_STATUS_LABELS[s]}</button>`)
       .join("") +
@@ -936,8 +972,7 @@ function renderActionButtons(order) {
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const sendEmail = btn.dataset.status === "READY_FOR_PICKUP" && document.getElementById("send-ready-email")?.checked;
-      changeStatus(order.id, btn.dataset.status, Boolean(sendEmail));
+      changeStatus(order.id, btn.dataset.status);
     });
   });
 
@@ -1126,6 +1161,9 @@ async function init() {
     el.customerReference.value = order.customer_reference ?? "";
     el.costCenter.value = order.cost_center ?? "";
     el.notifyEmail.value = order.notify_email ?? "";
+    state.sendEmails = Boolean(order.send_emails);
+    renderSendEmails();
+    el.sendEmailsSwitch.disabled = order.status === "CANCELLED";
 
     selectCustomer(order.customer_id, order.customer_name);
     await loadContacts(order.customer_id, order.reference_contact_id);

@@ -66,7 +66,7 @@ export async function notifyRequestReceived(requestId) {
 export async function notifyOrderConfirmed(order) {
   return run("bekräftad", async () => {
     const settings = await getSettings();
-    if (!settings?.notify_order_confirmed || order.is_cash_customer) return null;
+    if (!order.send_emails || !settings?.notify_order_confirmed || order.is_cash_customer) return null;
     return sendOrderConfirmedEmail({
       settings,
       to: order.notify_email || order.customer_email,
@@ -81,7 +81,7 @@ export async function notifyOrderConfirmed(order) {
 export async function notifyOrderDelivered(order, pickedUpBy) {
   return run("utlämnad", async () => {
     const settings = await getSettings();
-    if (!settings?.notify_order_delivered || order.is_cash_customer) return null;
+    if (!order.send_emails || !settings?.notify_order_delivered || order.is_cash_customer) return null;
     return sendOrderDeliveredEmail({
       settings,
       to: order.notify_email || order.customer_email,

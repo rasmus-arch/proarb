@@ -577,6 +577,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Mottagare för statusmejl när den skiljer sig från kundens e-post
   -- (t.ex. personen som beställde via Sortilog).
   notify_email         VARCHAR(255) NULL,
+  -- Reglaget "Skicka mail om ordern": av som standard. Styr orderbekräftelse,
+  -- "redo för utlämning" och "utlämnad" till kunden. Fakturan från Fortnox
+  -- skickas alltid, oavsett detta.
+  send_emails          TINYINT(1) NOT NULL DEFAULT 0,
   -- Kundens egen referens och kostnadsställe/beställningsnummer. Följer
   -- med till Fortnox-fakturan (YourReference / YourOrderNumber).
   customer_reference   VARCHAR(50) NULL,

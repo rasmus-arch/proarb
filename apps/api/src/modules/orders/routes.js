@@ -209,15 +209,22 @@ router.delete("/:id", async (req, res, next) => {
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });
-    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status, {
-      sendEmail: Boolean(req.body.sendEmail),
-    });
+    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status);
     res.json(order);
   } catch (err) {
     if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
     if (err.message === "INVALID_TRANSITION") {
       return res.status(409).json({ error: "Ogiltig statusövergång" });
     }
+    next(err);
+  }
+});
+
+router.patch("/:id/send-emails", async (req, res, next) => {
+  try {
+    res.json(await orders.setOrderSendEmails(Number(req.params.id), Boolean(req.body?.enabled)));
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
     next(err);
   }
 });

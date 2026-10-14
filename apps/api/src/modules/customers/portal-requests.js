@@ -248,6 +248,8 @@ export async function convertPortalOrderRequest(id, userId) {
       referenceContactId: request.reference_contact_id,
       customerReference: request.customer_reference,
       costCenter: request.cost_center,
+      // Kunden har beställt själv och väntar sig en bekräftelse.
+      sendEmails: true,
       notes: request.requested_by_name
         ? `Beställning via Sortilog (${request.requested_by_name}).`
         : "Beställning via Sortilog.",

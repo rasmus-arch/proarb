@@ -77,6 +77,19 @@
               <button type="button" id="use-contact-email-btn" class="link hidden text-xs"></button>
             </span>
           </label>
+          <div id="send-emails-box" class="col-span-2 rounded-lg border-2 border-slate-200 bg-slate-50 p-3">
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="text-sm font-semibold text-slate-900">Skicka mail om den här ordern</p>
+                <p id="send-emails-text" class="mt-0.5 text-sm"></p>
+              </div>
+              <button type="button" id="send-emails-switch" role="switch" aria-checked="false" aria-label="Skicka mail om den här ordern"
+                class="relative h-9 w-24 shrink-0 rounded-full bg-slate-400 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+                <span id="send-emails-label" class="absolute inset-y-0 flex items-center">NEJ</span>
+                <span id="send-emails-knob" class="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow transition-all"></span>
+              </button>
+            </div>
+          </div>
         </div>
         <p class="mt-1 text-xs text-slate-500">Er referens och kostnadsställe står på fakturan i Fortnox.</p>
         <label class="mt-4 flex items-start gap-2.5 text-sm">
