@@ -615,9 +615,8 @@ export async function completeCashInvoice({ settings, documentNumber } = {}) {
 }
 
 // Credits back a previously sent customer invoice on a full/partial
-// return (orders/returns.js). `originalExternalRef`, when known, links
-// the credit invoice back to the original one in Fortnox — purely
-// informational, Fortnox doesn't require it to accept the credit.
+// return (orders/returns.js). `originalExternalRef`, when known, is noted in the invoice's Remarks — purely informational,
+// Fortnox doesn't require it to accept the credit.
 export async function createCreditInvoice({ settings, customerId, lines, orderId, originalExternalRef } = {}) {
   if (!isFortnoxConfigured(settings)) return notConfigured();
   // En kreditering i Fortnox är en faktura med negativa antal.
@@ -634,7 +633,8 @@ export async function createCreditInvoice({ settings, customerId, lines, orderId
     body: {
       Invoice: {
         CustomerNumber: customerNumber,
-        CreditInvoiceReference: originalExternalRef || undefined,
+        // CreditInvoiceReference är skrivskyddat i Fortnox — hänvisa i texten.
+        Remarks: originalExternalRef ? `Kreditering av faktura ${originalExternalRef}` : undefined,
         YourOrderNumber: orderId != null ? String(orderId) : undefined,
         InvoiceRows: invoiceRows,
       },
