@@ -53,16 +53,6 @@ router.get("/status-summary", async (req, res, next) => {
   }
 });
 
-router.post("/bulk-invoice", async (req, res, next) => {
-  try {
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter((n) => n > 0) : [];
-    if (ids.length === 0) return res.status(400).json({ error: "Välj minst en order" });
-    res.json({ results: await orders.invoiceOrders(ids) });
-  } catch (err) {
-    next(err);
-  }
-});
-
 router.get("/unpicked", async (req, res, next) => {
   try {
     const settings = await getSettings();

@@ -75,11 +75,12 @@ function summarizeTotals(lines) {
 
 // Order (NEW) -> Redo för utlämning -> Utlämnad -> Fakturerad, plus
 // Avbruten. DELIVERED is reached only through recordPickup (below) so
-// "who picked it up" is always on record — never set manually.
+// "who picked it up" is always on record — never set manually. INVOICED
+// sätts automatiskt när fakturan skapats i Fortnox (finalizeInvoicing).
 const ALLOWED_TRANSITIONS = {
   NEW: ["READY_FOR_PICKUP", "CANCELLED"],
   READY_FOR_PICKUP: ["CANCELLED"],
-  DELIVERED: ["INVOICED"],
+  DELIVERED: [],
   INVOICED: [],
   CANCELLED: [],
 };
@@ -168,22 +169,6 @@ export async function getStatusSummary({ customerId = "" } = {}) {
       oldest_delivered_at: uninvoiced.oldest_delivered_at,
     },
   };
-}
-
-// "Fakturera markerade" — samma övergång som knappen på en enskild order,
-// en i taget så att ett Fortnox-fel på en order inte stoppar de andra.
-export async function invoiceOrders(ids) {
-  const results = [];
-  for (const id of ids) {
-    try {
-      const order = await updateOrderStatus(id, "INVOICED");
-      results.push({ id, order_number: order.order_number, ok: true, notification: order.notification });
-    } catch (err) {
-      const [[row]] = await pool.query(`SELECT order_number FROM orders WHERE id = ?`, [id]);
-      results.push({ id, order_number: row?.order_number ?? null, ok: false, error: err.message });
-    }
-  }
-  return results;
 }
 
 async function loadOrderLines(orderId) {
@@ -541,16 +526,13 @@ export async function updateOrderStatus(id, newStatus, { sendEmail = false } = {
     } catch (err) {
       notification = { sent: false, reason: err.message };
     }
-  } else if (newStatus === "INVOICED") {
-    notification = await sendOrderInvoiceFromFortnox(id);
   }
 
   return { ...(await getOrder(id)), notification };
 }
 
-// The invoice itself is created (in Fortnox) when the order becomes
-// DELIVERED — see recordPickup. Marking an order "Fakturerad" just tells
-// Fortnox to actually send that already-created invoice to the customer.
+// Fakturan skapas i Fortnox när ordern lämnas ut (recordPickup) och skickas
+// direkt därefter (finalizeInvoicing) — ordern blir då Fakturerad.
 async function sendOrderInvoiceFromFortnox(orderId) {
   const [[invoice]] = await pool.query(
     `SELECT * FROM invoices WHERE order_id = ? ORDER BY id DESC LIMIT 1`,
@@ -598,9 +580,8 @@ async function sendOrderInvoiceFromFortnox(orderId) {
 // Fortnox ("när en order blir utlämnad ska en faktura skickas till
 // fortnox") — best-effort, same PENDING-row-then-sync-after-commit
 // pattern pos/service.js uses so a slow/unconfigured Fortnox never blocks
-// the pickup itself. Actually emailing that invoice to the customer
-// happens later, when the order is marked "Fakturerad" — see
-// sendOrderInvoiceFromFortnox above.
+// the pickup itself. Så fort fakturan finns i Fortnox bokförs och mejlas
+// den automatiskt och ordern blir Fakturerad — se finalizeInvoicing.
 export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByName, verifiedByUserId }) {
   const order = await getOrder(orderId);
   if (!order) throw new Error("ORDER_NOT_FOUND");
@@ -656,9 +637,10 @@ export async function recordPickup(orderId, { pickedUpByContactId, pickedUpByNam
   }
 
   await syncInvoiceToFortnox(invoiceId, order, { cash });
+  const invoiceNotification = cash ? null : await finalizeInvoicing(orderId);
   const delivered = await getOrder(orderId);
   notifyOrderDelivered(delivered, delivered.pickups.at(-1)?.picked_up_by_contact_name || pickedUpByName?.trim());
-  return delivered;
+  return { ...delivered, invoice_notification: invoiceNotification };
 }
 
 // Skapar orderns faktura i Fortnox (kontantfaktura för kontantkunder).
@@ -696,10 +678,27 @@ async function syncInvoiceToFortnox(invoiceId, order, { cash }) {
   }
 }
 
+// Finns kundfakturan i Fortnox: markera ordern Fakturerad och skicka ut
+// fakturan. Finns den inte (Fortnox ej anslutet/fel) händer inget — ordern
+// står kvar som Utlämnad och "Skicka till Fortnox igen" försöker på nytt.
+async function finalizeInvoicing(orderId) {
+  const [[invoice]] = await pool.query(
+    `SELECT id FROM invoices WHERE order_id = ? AND type = 'CUSTOMER_INVOICE' AND invoice_number IS NOT NULL
+     ORDER BY id DESC LIMIT 1`,
+    [orderId]
+  );
+  if (!invoice) {
+    const [[pending]] = await pool.query(`SELECT status_note FROM invoices WHERE order_id = ? ORDER BY id DESC LIMIT 1`, [orderId]);
+    return { sent: false, reason: pending?.status_note ?? "Fakturan har inte skapats i Fortnox." };
+  }
+  await pool.query(`UPDATE orders SET status = 'INVOICED' WHERE id = ? AND status = 'DELIVERED'`, [orderId]);
+  return sendOrderInvoiceFromFortnox(orderId);
+}
+
 // "Skicka till Fortnox igen" för en faktura som inte kom fram (Fortnox ej
 // anslutet, fel inloggning m.m.). Skapar aldrig en faktura som redan finns
-// i Fortnox (external_ref satt). Var ordern redan markerad Fakturerad
-// skickas fakturan dessutom ut, precis som när den markerades.
+// i Fortnox (external_ref satt). Lyckas det skickas fakturan ut och ordern
+// blir Fakturerad, precis som vid utlämningen.
 export async function retryOrderInvoice(orderId) {
   const order = await getOrder(orderId);
   if (!order) throw new Error("ORDER_NOT_FOUND");
@@ -726,13 +725,12 @@ export async function retryOrderInvoice(orderId) {
       ]);
       return getOrder(orderId);
     }
-    // Fakturan finns i Fortnox men utskicket misslyckades när ordern
-    // markerades Fakturerad — skicka bara ut den igen.
+    // Fakturan finns i Fortnox men utskicket misslyckades — skicka bara ut den igen.
     const unsent = order.invoices.find(
       (inv) => inv.type === "CUSTOMER_INVOICE" && inv.invoice_number && !inv.sent_at
     );
-    if (unsent && order.status === "INVOICED") {
-      await sendOrderInvoiceFromFortnox(orderId);
+    if (unsent && ["DELIVERED", "INVOICED"].includes(order.status)) {
+      await finalizeInvoicing(orderId);
       return getOrder(orderId);
     }
     throw new Error("NOTHING_TO_RETRY");
@@ -740,8 +738,8 @@ export async function retryOrderInvoice(orderId) {
 
   await syncInvoiceToFortnox(invoice.id, order, { cash: invoice.type === "CASH_INVOICE" });
   const [[updated]] = await pool.query(`SELECT * FROM invoices WHERE id = ?`, [invoice.id]);
-  if (updated.status === "SYNCED" && order.status === "INVOICED" && updated.type === "CUSTOMER_INVOICE") {
-    await sendOrderInvoiceFromFortnox(orderId);
+  if (updated.type === "CUSTOMER_INVOICE" && updated.invoice_number) {
+    await finalizeInvoicing(orderId);
   }
   return getOrder(orderId);
 }

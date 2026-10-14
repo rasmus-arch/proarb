@@ -856,7 +856,7 @@ async function changeStatus(orderId, status, sendEmail) {
 function notificationText({ status, sent, reason }) {
   if (status === "CASH") return `Ordern skapades men kunde inte slutföras: ${reason ?? "okänt fel"}`;
   const subject = status === "INVOICED" ? "Fakturan" : "E-post till kund";
-  if (status === "INVOICED") return sent ? "Fakturan bokfördes och skickades från Fortnox." : `Fakturan: ${reason ?? "okänt fel"}`;
+  if (status === "INVOICED") return sent ? "Ordern är utlämnad. Fakturan bokfördes och skickades från Fortnox." : `Ordern är utlämnad, men fakturan skickades inte: ${reason ?? "okänt fel"}`;
   return sent ? `${subject} skickades.` : `${subject} skickades inte: ${reason ?? "okänt fel"}`;
 }
 
@@ -975,10 +975,13 @@ function renderActionButtons(order) {
 el.pickupBtn.addEventListener("click", async () => {
   el.pickupError.classList.add("hidden");
   try {
-    await api.post(`/orders/${orderId}/pickup`, {
+    const picked = await api.post(`/orders/${orderId}/pickup`, {
       pickedUpByContactId: el.pickupContactSelect.value || null,
       pickedUpByName: el.pickupNameInput.value || null,
     });
+    if (picked.invoice_notification) {
+      sessionStorage.setItem("order-status-notification", JSON.stringify({ status: "INVOICED", ...picked.invoice_notification }));
+    }
     location.reload();
   } catch (err) {
     el.pickupError.textContent = err.message;

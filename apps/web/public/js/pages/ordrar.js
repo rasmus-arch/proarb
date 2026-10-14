@@ -9,24 +9,17 @@ const pagerEl = document.getElementById("pager");
 const requestsSection = document.getElementById("portal-requests-section");
 const requestsList = document.getElementById("portal-requests-list");
 const statusTabs = document.getElementById("status-tabs");
-const bulkBar = document.getElementById("bulk-bar");
-const bulkCount = document.getElementById("bulk-count");
-const bulkInvoiceBtn = document.getElementById("bulk-invoice-btn");
-const bulkResult = document.getElementById("bulk-result");
-const selectAll = document.getElementById("select-all");
-const selectAllCell = document.getElementById("select-all-cell");
 
 const STATUS_TABS = [
   { key: "", label: "Alla" },
   { key: "NEW", label: "Order" },
   { key: "READY_FOR_PICKUP", label: "Redo för utlämning" },
-  { key: "DELIVERED", label: "Utlämnad, ej fakturerad" },
+  { key: "DELIVERED", label: "Utlämnad, faktura ej skickad" },
   { key: "INVOICED", label: "Fakturerad" },
   { key: "CANCELLED", label: "Avbruten" },
   { key: "UNPAID", label: "Obetalda" },
 ];
 let currentStatus = new URLSearchParams(location.search).get("status") || "";
-const selected = new Set();
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -39,14 +32,10 @@ function formatMoney(value) {
 }
 
 function renderRows(orders) {
-  const selectable = currentStatus === "DELIVERED";
-  selectAllCell.classList.toggle("hidden", !selectable);
-  bulkBar.classList.toggle("hidden", !selectable);
   rowsEl.innerHTML = orders
     .map(
       (o) => `
       <tr class="cursor-pointer hover:bg-slate-50" data-order-id="${o.id}">
-        ${selectable ? `<td class="w-8 py-2" data-select-cell><input type="checkbox" data-select="${o.id}" ${selected.has(o.id) ? "checked" : ""} /></td>` : ""}
         <td class="py-2 pr-4 font-medium text-slate-900">${escapeHtml(o.order_number)}</td>
         <td class="py-2 pr-4">${escapeHtml(o.customer_name)}</td>
         <td class="py-2 pr-4">
@@ -69,23 +58,7 @@ function renderRows(orders) {
   emptyStateEl.classList.toggle("hidden", orders.length > 0);
 }
 
-function updateBulkBar() {
-  bulkCount.textContent = selected.size ? `${selected.size} markerade` : "";
-  bulkInvoiceBtn.disabled = selected.size === 0;
-  const boxes = [...rowsEl.querySelectorAll("[data-select]")];
-  selectAll.checked = boxes.length > 0 && boxes.every((b) => b.checked);
-}
-
 rowsEl.addEventListener("click", async (event) => {
-  if (event.target.closest("[data-select-cell]")) {
-    const box = event.target.closest("[data-select-cell]").querySelector("[data-select]");
-    if (event.target !== box) box.checked = !box.checked;
-    const id = Number(box.dataset.select);
-    if (box.checked) selected.add(id);
-    else selected.delete(id);
-    updateBulkBar();
-    return;
-  }
   const deleteBtn = event.target.closest("button[data-delete]");
   if (deleteBtn) {
     if (!confirm(`Ta bort order ${deleteBtn.dataset.number}? Det går inte att ångra.`)) return;
@@ -128,7 +101,6 @@ async function loadOrders(page = currentPage) {
   const params = new URLSearchParams({ search: searchEl.value, status: currentStatus, customerId, page: currentPage, pageSize: PAGE_SIZE });
   const { rows, total } = await api.get(`/orders?${params}`);
   renderRows(rows);
-  updateBulkBar();
   renderPager(pagerEl, { page: currentPage, pageSize: PAGE_SIZE, total, onChange: loadOrders });
 }
 
@@ -147,8 +119,6 @@ statusTabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-status-tab]");
   if (!tab) return;
   currentStatus = tab.dataset.statusTab;
-  selected.clear();
-  bulkResult.classList.add("hidden");
   const url = new URL(location.href);
   if (currentStatus) url.searchParams.set("status", currentStatus);
   else url.searchParams.delete("status");
@@ -157,31 +127,7 @@ statusTabs.addEventListener("click", (event) => {
   loadOrders(1);
 });
 
-selectAll.addEventListener("change", () => {
-  rowsEl.querySelectorAll("[data-select]").forEach((box) => {
-    box.checked = selectAll.checked;
-    const id = Number(box.dataset.select);
-    if (box.checked) selected.add(id);
-    else selected.delete(id);
-  });
-  updateBulkBar();
-});
 
-bulkInvoiceBtn.addEventListener("click", async () => {
-  if (!confirm(`Markera ${selected.size} order som fakturerade? Fakturorna skickas via Fortnox om det är kopplat.`)) return;
-  bulkInvoiceBtn.disabled = true;
-  const { results } = await api.post("/orders/bulk-invoice", { ids: [...selected] });
-  const ok = results.filter((r) => r.ok);
-  const notSent = ok.filter((r) => r.notification && r.notification.sent === false);
-  const failed = results.filter((r) => !r.ok);
-  bulkResult.innerHTML = `
-    <p class="font-medium text-slate-900">${ok.length} ${ok.length === 1 ? "order" : "ordrar"} markerade som fakturerade.</p>
-    ${notSent.length ? `<p class="mt-1 text-amber-700">Fakturan kunde inte skickas via Fortnox för ${notSent.map((r) => `${escapeHtml(r.order_number)} (${escapeHtml(r.notification.reason ?? "okänt fel")})`).join(", ")}.</p>` : ""}
-    ${failed.length ? `<p class="mt-1 text-red-600">Misslyckades: ${failed.map((r) => `${escapeHtml(r.order_number ?? r.id)} (${escapeHtml(r.error)})`).join(", ")}.</p>` : ""}`;
-  bulkResult.classList.remove("hidden");
-  selected.clear();
-  await Promise.all([loadStatusTabs(), loadOrders(1)]);
-});
 
 searchEl.addEventListener("input", () => {
   clearTimeout(searchTimer);
