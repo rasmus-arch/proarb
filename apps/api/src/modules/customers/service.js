@@ -53,6 +53,19 @@ async function getCustomerStats(id) {
     [id]
   );
 
+  // Returer räknas av från köpen (samma radberäkning, frysta priser).
+  const [[returned]] = await pool.query(
+    `SELECT COALESCE(SUM(${sqlLineTotal("rl")}), 0) AS all_time,
+            COALESCE(SUM(CASE WHEN YEAR(r.created_at) = YEAR(CURDATE()) THEN ${sqlLineTotal("rl")} ELSE 0 END), 0) AS this_year
+     FROM order_returns r
+     JOIN orders o ON o.id = r.order_id
+     JOIN order_return_lines rl ON rl.return_id = r.id
+     WHERE o.customer_id = ? AND o.status <> 'CANCELLED'`,
+    [id]
+  );
+  totals.total_purchased_all_time = Number(totals.total_purchased_all_time) - Number(returned.all_time);
+  totals.total_purchased_this_year = Number(totals.total_purchased_this_year) - Number(returned.this_year);
+
   const [[{ pending_quotes }]] = await pool.query(
     `SELECT COUNT(*) AS pending_quotes FROM quotes WHERE customer_id = ? AND status IN ('DRAFT', 'SENT', 'VIEWED')`,
     [id]

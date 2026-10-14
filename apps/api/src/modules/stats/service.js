@@ -37,6 +37,17 @@ const SALE_SOURCE_CTE = `
     FROM orders o
     WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
   ),
+  -- Returer räknas av från omsättningen den dag returen registrerades.
+  returned_orders AS (
+    SELECT r.id, r.order_id, r.created_at, o.customer_id,
+           EXISTS (
+             SELECT 1 FROM order_lines fx
+             WHERE fx.order_id = o.id AND fx.product_variant_id IS NULL AND fx.cost_price IS NULL
+           ) AS margin_excluded
+    FROM order_returns r
+    JOIN orders o ON o.id = r.order_id
+    WHERE o.status <> 'CANCELLED' AND r.created_at >= ? AND r.created_at < ? + INTERVAL 1 DAY
+  ),
   sale_source AS (
     SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent, ol.discount_amount, 0 AS is_print,
            o.id AS order_id, o.created_at, o.customer_id, o.margin_excluded,
@@ -52,6 +63,22 @@ const SALE_SOURCE_CTE = `
     FROM order_lines ol
     JOIN sold_orders o ON o.id = ol.order_id
     WHERE ol.print_price IS NOT NULL AND ol.print_price <> 0
+    UNION ALL
+    SELECT ol.product_variant_id, -rl.quantity, rl.unit_price, rl.discount_percent, rl.discount_amount, 0,
+           r.order_id, r.created_at, r.customer_id, r.margin_excluded,
+           CASE WHEN ol.product_variant_id IS NULL THEN ol.cost_price ELSE sp.cost_price END
+    FROM order_return_lines rl
+    JOIN returned_orders r ON r.id = rl.return_id
+    JOIN order_lines ol ON ol.id = rl.order_line_id
+    LEFT JOIN product_variants sv ON sv.id = ol.product_variant_id
+    LEFT JOIN products sp ON sp.id = sv.product_id
+    UNION ALL
+    SELECT NULL, -rl.quantity, rl.print_price, rl.print_discount_percent, 0, 1,
+           r.order_id, r.created_at, r.customer_id, r.margin_excluded,
+           NULL
+    FROM order_return_lines rl
+    JOIN returned_orders r ON r.id = rl.return_id
+    WHERE rl.print_price IS NOT NULL AND rl.print_price <> 0
   )
 `;
 
@@ -77,7 +104,8 @@ const CATEGORY_ID = "CASE WHEN ss.is_print = 1 THEN -1 ELSE COALESCE(pc.id, 0) E
 const CATEGORY_NAME = `CASE WHEN ss.is_print = 1 THEN ${PRINT_NAME} ELSE COALESCE(pc.name, 'Okategoriserad') END`;
 
 function rangeParams(range) {
-  return [range.from, range.to];
+  // Datumparet används två gånger i SALE_SOURCE_CTE (ordrar och returer).
+  return [range.from, range.to, range.from, range.to];
 }
 
 export async function getSummary(rangeInput) {
@@ -131,7 +159,7 @@ export async function getDailySalesTrend(days = 90) {
             SUM(${LINE_REVENUE}) AS revenue_ex_vat
      FROM sale_source ss
      GROUP BY day`,
-    [fromStr, toStr]
+    [fromStr, toStr, fromStr, toStr]
   );
   const byDay = new Map(rows.map((r) => [r.day, round2(Number(r.revenue_ex_vat))]));
 
@@ -223,7 +251,7 @@ export async function getMonthlyCategoryTrend(months = 12) {
      LEFT JOIN product_categories pc ON pc.id = p.category_id
      GROUP BY 1, 2, 3
      ORDER BY month ASC`,
-    [from, to]
+    [from, to, from, to]
   );
 
   return {
