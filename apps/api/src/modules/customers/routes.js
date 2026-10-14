@@ -8,6 +8,7 @@ import { weakPasswordMessage } from "../../lib/security.js";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
 import { ensurePreviewFile, isPreviewable, removePreviewFile } from "../../lib/preview.js";
 import { requireRole } from "../../lib/auth-middleware.js";
+import { mergeCustomers, previewMerge } from "./merge.js";
 import { getCustomerCreditStatus, getOverduePaymentsOverview, refreshUnpaidInvoices } from "./payment-status.js";
 
 const router = Router();
@@ -123,6 +124,37 @@ router.patch("/:id", async (req, res, next) => {
     res.json({ ...(await customers.getCustomer(customer.id)), fortnox_sync: fortnox });
   } catch (err) {
     next(err);
+  }
+});
+
+function mergeError(res, err, next) {
+  const map = {
+    MERGE_SAME_CUSTOMER: [400, "Välj en annan kund att slå ihop med"],
+    CUSTOMER_NOT_FOUND: [404, "Kunden hittades inte"],
+    MERGE_CASH_CUSTOMER: [400, "Kontantkunden (Swish) kan inte slås ihop"],
+  };
+  const hit = map[err.message];
+  if (hit) return res.status(hit[0]).json({ error: hit[1] });
+  next(err);
+}
+
+router.get("/:id/merge-preview", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    res.json(await previewMerge(Number(req.params.id), Number(req.query.targetId)));
+  } catch (err) {
+    mergeError(res, err, next);
+  }
+});
+
+router.post("/:id/merge", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    res.json(
+      await mergeCustomers(Number(req.params.id), Number(req.body?.targetId), {
+        deactivateInFortnox: req.body?.deactivateInFortnox !== false,
+      })
+    );
+  } catch (err) {
+    mergeError(res, err, next);
   }
 });
 

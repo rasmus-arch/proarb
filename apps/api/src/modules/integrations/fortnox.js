@@ -264,6 +264,15 @@ async function writeCustomer(settings, method, path, fields, label) {
   }
 }
 
+// Inaktiverar en kund i Fortnox (efter en sammanslagning i Fokus). Fortnox
+// kan varken flytta fakturor mellan kunder eller ta bort en kund som har
+// fakturor, så den gamla kunden markeras bara som inaktiv.
+export async function deactivateFortnoxCustomer({ settings, customerNumber } = {}) {
+  if (!isFortnoxConfigured(settings)) return notConfigured();
+  await writeCustomer(settings, "PUT", `/customers/${encodeURIComponent(customerNumber)}`, { Active: false }, "Kunde inte inaktivera kunden i Fortnox");
+  return { ok: true };
+}
+
 // Alla kunder i Fortnox (listvyn: nummer, namn, org.nr, e-post, adress,
 // telefon). Hämtas 500 åt gången.
 export async function fetchAllFortnoxCustomers(settings) {

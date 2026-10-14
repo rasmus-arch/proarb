@@ -375,6 +375,110 @@ api
   .then(({ user }) => el.deleteBtn.classList.toggle("hidden", user?.role !== "ADMIN"))
   .catch(() => {});
 
+// --- Slå ihop kunder ------------------------------------------------------------
+const mergeEl = {
+  btn: document.getElementById("merge-customer-btn"),
+  dialog: document.getElementById("merge-dialog"),
+  search: document.getElementById("merge-search"),
+  results: document.getElementById("merge-results"),
+  preview: document.getElementById("merge-preview"),
+  fortnoxRow: document.getElementById("merge-fortnox-row"),
+  fortnox: document.getElementById("merge-fortnox"),
+  error: document.getElementById("merge-error"),
+  confirm: document.getElementById("merge-confirm"),
+  cancel: document.getElementById("merge-cancel"),
+};
+let mergeTarget = null;
+let mergeTimer;
+
+api
+  .get("/auth/me")
+  .then(({ user }) => mergeEl.btn.classList.toggle("hidden", user?.role !== "ADMIN"))
+  .catch(() => {});
+
+function resetMergeDialog() {
+  mergeTarget = null;
+  mergeEl.search.value = "";
+  mergeEl.results.innerHTML = "";
+  mergeEl.preview.classList.add("hidden");
+  mergeEl.fortnoxRow.classList.add("hidden");
+  mergeEl.error.classList.add("hidden");
+  mergeEl.confirm.disabled = true;
+}
+
+mergeEl.btn.addEventListener("click", () => {
+  resetMergeDialog();
+  document.getElementById("merge-source-name").textContent = el.name.value;
+  document.getElementById("merge-source-name-2").textContent = el.name.value;
+  mergeEl.dialog.showModal();
+});
+mergeEl.cancel.addEventListener("click", () => mergeEl.dialog.close());
+
+mergeEl.search.addEventListener("input", () => {
+  clearTimeout(mergeTimer);
+  mergeTimer = setTimeout(async () => {
+    const term = mergeEl.search.value.trim();
+    if (term.length < 2) {
+      mergeEl.results.innerHTML = "";
+      return;
+    }
+    const { rows } = await api.get(`/customers?search=${encodeURIComponent(term)}&pageSize=10`);
+    mergeEl.results.innerHTML =
+      rows
+        .filter((c) => String(c.id) !== String(customerId) && !c.is_cash_customer)
+        .map(
+          (c) => `<li><button type="button" class="block w-full px-3 py-2 text-left hover:bg-slate-50" data-merge-pick="${c.id}" data-name="${escapeHtml(c.name)}">
+            <span class="font-medium text-slate-900">${escapeHtml(c.name)}</span>
+            <span class="text-xs text-slate-500"> · ${escapeHtml(c.customer_number)}${c.city ? " · " + escapeHtml(c.city) : ""}</span></button></li>`
+        )
+        .join("") || `<li class="px-3 py-2 text-slate-500">Ingen träff</li>`;
+  }, 250);
+});
+
+mergeEl.results.addEventListener("click", async (event) => {
+  const pick = event.target.closest("[data-merge-pick]");
+  if (!pick) return;
+  mergeEl.error.classList.add("hidden");
+  try {
+    const preview = await api.get(`/customers/${customerId}/merge-preview?targetId=${pick.dataset.mergePick}`);
+    mergeTarget = preview.target;
+    mergeEl.results.innerHTML = "";
+    mergeEl.search.value = preview.target.name;
+    mergeEl.preview.innerHTML = `<p class="font-medium text-slate-900">${escapeHtml(preview.source.name)} → ${escapeHtml(preview.target.name)} (${escapeHtml(preview.target.customer_number)})</p>
+      <p class="mt-1">${preview.moves.length ? "Flyttas: " + preview.moves.map((m) => `${m.count} ${escapeHtml(m.label.toLowerCase())}`).join(", ") + "." : "Inget att flytta."}</p>`;
+    mergeEl.preview.classList.remove("hidden");
+    const bothInFortnox = preview.source.fortnox_customer_number && preview.target.fortnox_customer_number;
+    mergeEl.fortnoxRow.classList.toggle("hidden", !bothInFortnox);
+    mergeEl.fortnoxRow.classList.toggle("flex", Boolean(bothInFortnox));
+    mergeEl.confirm.disabled = false;
+  } catch (err) {
+    mergeEl.error.textContent = err.message;
+    mergeEl.error.classList.remove("hidden");
+  }
+});
+
+mergeEl.confirm.addEventListener("click", async () => {
+  if (!mergeTarget) return;
+  mergeEl.confirm.disabled = true;
+  try {
+    const result = await api.post(`/customers/${customerId}/merge`, {
+      targetId: mergeTarget.id,
+      deactivateInFortnox: mergeEl.fortnox.checked,
+    });
+    const notes = [];
+    if (result.fortnox?.source?.deactivated) notes.push(`Gamla kunden (${result.fortnox.source.customerNumber}) är inaktiverad i Fortnox.`);
+    if (result.fortnox?.source && !result.fortnox.source.deactivated && !result.fortnox.source.skipped)
+      notes.push(`Kunde inte inaktivera ${result.fortnox.source.customerNumber} i Fortnox: ${result.fortnox.source.reason}`);
+    if (result.fortnox?.target && result.fortnox.target.synced === false) notes.push(`Uppdateringen i Fortnox misslyckades: ${result.fortnox.target.reason}`);
+    if (notes.length) alert(`Kunderna är sammanslagna.\n\n${notes.join("\n")}`);
+    location.href = `/kund-editor.html?id=${result.targetId}`;
+  } catch (err) {
+    mergeEl.error.textContent = err.message;
+    mergeEl.error.classList.remove("hidden");
+    mergeEl.confirm.disabled = false;
+  }
+});
+
 el.deleteBtn.addEventListener("click", async () => {
   const ok = confirm(
     `Ta bort ${el.name.value || "kunden"}?\n\nKunden försvinner från kundlistan, sökningen och påminnelserna, och portallänken slutar fungera. Kundens ordrar, offerter och fakturor finns kvar.`
