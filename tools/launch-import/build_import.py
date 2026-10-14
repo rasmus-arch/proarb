@@ -314,6 +314,21 @@ def parse_f10_seger(path):
     return out
 
 
+def parse_solstickan(path):
+    """Solstickan (Tradingbox): en rad per artikel, kategori = rubrikraden ovanför."""
+    out = []
+    cat = None
+    for d, r, _ in table(path, header_row=2):
+        if s(r[0]) and not s(r[1]):
+            cat = s(r[0])
+            continue
+        if not s(r[1]) or not s(r[3]) or not isinstance(r[5], (int, float)):
+            continue
+        out.append(rec("Solstickan", "Solstickan", r[1], tidy(r[3]), r[1], None, None, r[2],
+                       num(r[6]), num(r[5]), None, tidy(cat.capitalize()) if cat else None, "st", source="Solstickan"))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Filer (ordning = prioritet vid dubbletter)
 # ---------------------------------------------------------------------------
@@ -332,6 +347,7 @@ FILES = [
     ("5a801476-2025-11-28_08_10_34_246_ZzRDeeh8U6S6JbTIzZ2w.xlsx",
      lambda p: parse_nwg_export(p, BRAND_MAP_F9, "Rek.utpris", "Netto pris", source="Clique/Cutter & Buck")),
     ("89082f3c-Artikelfil_2026.xlsx", parse_f10_seger),
+    ("ceefa508-Prislista_PROFIL_2025_AW_Solstickan.xlsx", parse_solstickan),
 ]
 
 
