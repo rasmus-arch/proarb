@@ -16,6 +16,10 @@ const el = {
   statAllTime: document.getElementById("stat-all-time"),
   statLastOrder: document.getElementById("stat-last-order"),
   statPendingQuotes: document.getElementById("stat-pending-quotes"),
+  statOrderCount: document.getElementById("stat-order-count"),
+  statAvgOrder: document.getElementById("stat-avg-order"),
+  statMargin: document.getElementById("stat-margin"),
+  statMarginNote: document.getElementById("stat-margin-note"),
   historySection: document.getElementById("history-section"),
   quotesList: document.getElementById("quotes-list"),
   quotesEmpty: document.getElementById("quotes-empty"),
@@ -182,6 +186,14 @@ async function loadCustomer() {
     ? new Date(customer.stats.last_order_at).toLocaleDateString("sv-SE")
     : "–";
   el.statPendingQuotes.textContent = String(customer.stats.pending_quotes);
+  const st = customer.stats;
+  el.statOrderCount.textContent = String(st.order_count ?? 0);
+  el.statAvgOrder.textContent = st.average_order_value === null || st.average_order_value === undefined ? "–" : money(st.average_order_value);
+  el.statMargin.textContent =
+    st.margin_percent === null || st.margin_percent === undefined ? "–" : `${money(st.margin_amount)} (${String(st.margin_percent).replace(".", ",")} %)`;
+  el.statMarginNote.textContent = st.margin_incomplete
+    ? "Ofullständig: rader utan inköpspris ingår inte i marginalen."
+    : "Efter rabatt och returer, exkl. moms.";
 
   const { rows: suppliers } = await api.get("/suppliers");
   el.discountSupplierOptions.innerHTML = suppliers.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");

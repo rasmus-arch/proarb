@@ -581,6 +581,13 @@ CREATE TABLE IF NOT EXISTS orders (
   -- "redo för utlämning" och "utlämnad" till kunden. Fakturan från Fortnox
   -- skickas alltid, oavsett detta.
   send_emails          TINYINT(1) NOT NULL DEFAULT 0,
+  -- Räknas inte med i statistiken (omsättning, marginal, topplistor,
+  -- kundens köpsiffror) — t.ex. interna ordrar eller testköp.
+  exclude_from_stats   TINYINT(1) NOT NULL DEFAULT 0,
+  -- Restorder: skapad när en order delvis gjordes redo för utlämning, pekar
+  -- på ordern den delades från (utan fysisk FK — en order tas aldrig bort
+  -- förrän den är avbruten och saknar historik).
+  backorder_of         INT NULL,
   -- Kundens egen referens och kostnadsställe/beställningsnummer. Följer
   -- med till Fortnox-fakturan (YourReference / YourOrderNumber).
   customer_reference   VARCHAR(50) NULL,

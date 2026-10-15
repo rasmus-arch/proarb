@@ -235,9 +235,21 @@ export async function getOrder(id) {
     [id]
   );
 
+  const [backorders] = await pool.query(
+    `SELECT id, order_number, status FROM orders WHERE backorder_of = ? ORDER BY id ASC`,
+    [id]
+  );
+  let backorderOf = null;
+  if (order.backorder_of) {
+    const [[parent]] = await pool.query(`SELECT id, order_number FROM orders WHERE id = ?`, [order.backorder_of]);
+    backorderOf = parent ?? null;
+  }
+
   return {
     ...order,
     lines,
+    backorders,
+    backorder_of_order: backorderOf,
     pickups,
     invoices,
     has_returns: has_returns > 0,
@@ -348,8 +360,8 @@ export async function createOrder(data, userId) {
     const orderNumber = await nextOrderNumber(connection);
     const [result] = await connection.query(
       `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
-                           customer_reference, cost_center, notify_email, send_emails)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           customer_reference, cost_center, notify_email, send_emails, exclude_from_stats)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderNumber,
         data.customerId,
@@ -363,6 +375,7 @@ export async function createOrder(data, userId) {
         cleanText(data.costCenter, 30) ?? null,
         notifyEmail,
         data.sendEmails ? 1 : 0,
+        data.excludeFromStats ? 1 : 0,
       ]
     );
     const orderId = result.insertId;
@@ -498,13 +511,20 @@ export async function updateOrderLines(id, lines, fields = {}) {
 // principle as the Fortnox sync in pos/service.js): { sent: true } once a
 // real provider exists, or { sent: false, reason } today while
 // email.js/fortnox.js are still stubs.
-export async function updateOrderStatus(id, newStatus) {
-  const order = await getOrder(id);
+export async function updateOrderStatus(id, newStatus, { readyQuantities } = {}) {
+  let order = await getOrder(id);
   if (!order) throw new Error("ORDER_NOT_FOUND");
 
   const allowed = ALLOWED_TRANSITIONS[order.status] ?? [];
   if (!allowed.includes(newStatus)) {
     throw new Error("INVALID_TRANSITION");
+  }
+
+  // Delvis redo för utlämning: det som inte är redo flyttas till en restorder.
+  let backorder = null;
+  if (newStatus === "READY_FOR_PICKUP" && readyQuantities && typeof readyQuantities === "object") {
+    backorder = await splitBackorder(order, readyQuantities);
+    if (backorder) order = await getOrder(id);
   }
 
   await pool.query(
@@ -529,7 +549,96 @@ export async function updateOrderStatus(id, newStatus) {
     }
   }
 
-  return { ...(await getOrder(id)), notification };
+  return { ...(await getOrder(id)), notification, backorder };
+}
+
+// Delar ordern när bara en del av raderna (eller mängderna) är redo. Raderna
+// i den här ordern får det som är redo; resten hamnar på en ny order (Ny) som
+// pekar tillbaka hit (backorder_of) och behåller allt övrigt (pris, rabatt,
+// tryck, referenser, mailval). Returnerar den nya ordern eller null om allt
+// är redo.
+async function splitBackorder(order, readyQuantities) {
+  const plan = order.lines.map((line) => {
+    const raw = readyQuantities[line.id] ?? readyQuantities[String(line.id)];
+    const ordered = Number(line.quantity);
+    const ready = raw === undefined || raw === null || raw === "" ? ordered : Number(raw);
+    if (!Number.isFinite(ready) || ready < 0 || ready > ordered) throw new Error("INVALID_READY_QUANTITY");
+    return { line, ordered, ready };
+  });
+  if (plan.every((p) => p.ready === 0)) throw new Error("NOTHING_READY");
+  if (plan.every((p) => p.ready === p.ordered)) return null;
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const orderNumber = await nextOrderNumber(connection);
+    const [result] = await connection.query(
+      `INSERT INTO orders (order_number, customer_id, reference_contact_id, delivery_method, notes, created_by, pickup_qr_token, skip_inventory,
+                           customer_reference, cost_center, notify_email, send_emails, exclude_from_stats, backorder_of)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        orderNumber,
+        order.customer_id,
+        order.reference_contact_id,
+        order.delivery_method,
+        `Restorder till ${order.order_number} (restnoterat).`,
+        order.created_by,
+        generateQrToken(),
+        order.skip_inventory ? 1 : 0,
+        order.customer_reference,
+        order.cost_center,
+        order.notify_email,
+        order.send_emails ? 1 : 0,
+        order.exclude_from_stats ? 1 : 0,
+        order.id,
+      ]
+    );
+    const backorderId = result.insertId;
+    const COPY = `product_variant_id, description, unit_price, discount_percent, discount_amount, tax_rate_percent,
+                  print_method_id, print_description, print_price, print_discount_percent, cost_price, sort_order, sourcing`;
+    for (const { line, ordered, ready } of plan) {
+      if (ready === ordered) continue;
+      await connection.query(
+        `INSERT INTO order_lines (order_id, quantity, ${COPY})
+         SELECT ?, ?, ${COPY} FROM order_lines WHERE id = ?`,
+        [backorderId, ordered - ready, line.id]
+      );
+      if (ready === 0) await connection.query(`DELETE FROM order_lines WHERE id = ?`, [line.id]);
+      else await connection.query(`UPDATE order_lines SET quantity = ? WHERE id = ?`, [ready, line.id]);
+    }
+    await connection.query(
+      `UPDATE orders SET notes = CONCAT_WS('\n', NULLIF(notes, ''), ?) WHERE id = ?`,
+      [`Delleverans — resten är restnoterad på ${orderNumber}.`, order.id]
+    );
+    await connection.commit();
+    return { id: backorderId, order_number: orderNumber };
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+// Alternativ som går att ändra direkt på en order: "Undanta från
+// lagerhantering" (före utlämning, då lagret dras) och "Exkludera från
+// statistiken" (när som helst).
+export async function setOrderOptions(id, { skipInventory, excludeFromStats }) {
+  const order = await getOrder(id);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  const sets = [];
+  const params = [];
+  if (skipInventory !== undefined) {
+    if (PICKUP_BLOCKED_STATUSES.includes(order.status)) throw new Error("ORDER_LINES_LOCKED");
+    sets.push("skip_inventory = ?");
+    params.push(skipInventory ? 1 : 0);
+  }
+  if (excludeFromStats !== undefined) {
+    sets.push("exclude_from_stats = ?");
+    params.push(excludeFromStats ? 1 : 0);
+  }
+  if (sets.length) await pool.query(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`, [...params, id]);
+  return getOrder(id);
 }
 
 // Fakturan skapas i Fortnox när ordern lämnas ut (recordPickup) och skickas

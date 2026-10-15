@@ -36,11 +36,15 @@ const el = {
   costCenter: document.getElementById("cost-center"),
   notifyEmail: document.getElementById("notify-email"),
   notifyEmailHint: document.getElementById("notify-email-hint"),
-  sendEmailsBox: document.getElementById("send-emails-box"),
-  sendEmailsSwitch: document.getElementById("send-emails-switch"),
-  sendEmailsLabel: document.getElementById("send-emails-label"),
-  sendEmailsKnob: document.getElementById("send-emails-knob"),
-  sendEmailsText: document.getElementById("send-emails-text"),
+  switches: document.getElementById("switches"),
+  excludeFromStats: document.getElementById("exclude-from-stats"),
+  backorderInfo: document.getElementById("backorder-info"),
+  readyDialog: document.getElementById("ready-dialog"),
+  readyRows: document.getElementById("ready-rows"),
+  readySummary: document.getElementById("ready-summary"),
+  readyError: document.getElementById("ready-error"),
+  readyConfirm: document.getElementById("ready-confirm"),
+  readyCancel: document.getElementById("ready-cancel"),
   useContactEmailBtn: document.getElementById("use-contact-email-btn"),
   newCustomerQuickBtn: document.getElementById("new-customer-quick-btn"),
   newContactQuickBtn: document.getElementById("new-contact-quick-btn"),
@@ -186,43 +190,104 @@ function renderTotals() {
 
 const isNewOrder = () => !orderId;
 
-// --- Reglaget "Skicka mail om ordern" -----------------------------------------
-// Av som standard. Styr orderbekräftelse, "redo för utlämning" och
-// "utlämnad" till kunden. Fakturan från Fortnox skickas alltid.
+// --- Reglagen på ordern ------------------------------------------------------------
+// Tydliga NEJ/JA-reglage. Sparas direkt på en befintlig order (en ny order
+// sparas tillsammans med ordern).
+//  - Skicka mail om ordern: av som standard. Fakturan från Fortnox skickas alltid.
+//  - Undanta från lagerhantering: ordern dras inte från lagret, räknas inte som
+//    reserverad och inte i inköpsförslag.
 
-function renderSendEmails() {
-  const on = Boolean(state.sendEmails);
-  el.sendEmailsSwitch.setAttribute("aria-checked", String(on));
-  el.sendEmailsSwitch.className = `relative h-9 w-24 shrink-0 rounded-full text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${on ? "bg-green-600" : "bg-slate-400"}`;
-  el.sendEmailsLabel.textContent = on ? "JA" : "NEJ";
-  el.sendEmailsLabel.className = `absolute inset-y-0 flex items-center ${on ? "left-3" : "right-3"}`;
-  el.sendEmailsKnob.className = `absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ${on ? "left-[3.75rem]" : "left-1"}`;
-  el.sendEmailsBox.className = `col-span-2 rounded-lg border-2 p-3 ${on ? "border-green-600 bg-green-50" : "border-slate-200 bg-slate-50"}`;
-  el.sendEmailsText.className = `mt-0.5 text-sm ${on ? "font-medium text-green-800" : "text-slate-600"}`;
-  el.sendEmailsText.textContent = on
-    ? "JA – kunden mailas om ordern (bekräftelse, redo för utlämning, utlämnad) och får fakturan."
-    : "NEJ – inga ordermail skickas. Kunden får bara fakturan.";
+const SWITCHES = [
+  {
+    key: "sendEmails",
+    title: "Skicka mail om den här ordern",
+    on: "JA – kunden mailas om ordern (bekräftelse, redo för utlämning, utlämnad) och får fakturan.",
+    off: "NEJ – inga ordermail skickas. Kunden får bara fakturan.",
+    get: () => Boolean(state.sendEmails),
+    set: (v) => (state.sendEmails = v),
+    save: (v) => api.patch(`/orders/${orderId}/send-emails`, { enabled: v }),
+  },
+  {
+    key: "skipInventory",
+    title: "Undanta från lagerhantering",
+    on: "JA – ordern dras inte från lagersaldot, räknas inte som reserverad och inte i inköpsförslag.",
+    off: "NEJ – ordern hanteras i lagret som vanligt.",
+    get: () => el.skipInventory.checked,
+    set: (v) => (el.skipInventory.checked = v),
+    save: (v) => api.patch(`/orders/${orderId}/options`, { skipInventory: v }),
+    lockable: true,
+  },
+];
+
+function switchHtml(s) {
+  return `<div data-switch-box="${s.key}" class="rounded-lg border-2 p-3">
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold text-slate-900">${s.title}</p>
+        <p data-switch-text="${s.key}" class="mt-0.5 text-sm"></p>
+      </div>
+      <button type="button" data-switch="${s.key}" role="switch" aria-checked="false" aria-label="${s.title}"
+        class="relative h-9 w-24 shrink-0 rounded-full text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60">
+        <span data-switch-label="${s.key}" class="absolute inset-y-0 flex items-center"></span>
+        <span data-switch-knob="${s.key}" class="absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all"></span>
+      </button>
+    </div>
+  </div>`;
 }
 
-el.sendEmailsSwitch.addEventListener("click", async () => {
-  const next = !state.sendEmails;
-  state.sendEmails = next;
-  renderSendEmails();
+function renderSwitches() {
+  for (const s of SWITCHES) {
+    const on = s.get();
+    const q = (name) => el.switches.querySelector(`[data-switch-${name}="${s.key}"]`);
+    const btn = el.switches.querySelector(`[data-switch="${s.key}"]`);
+    btn.setAttribute("aria-checked", String(on));
+    btn.className = `relative h-9 w-24 shrink-0 rounded-full text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${on ? "bg-green-600" : "bg-slate-400"}`;
+    q("label").textContent = on ? "JA" : "NEJ";
+    q("label").className = `absolute inset-y-0 flex items-center ${on ? "left-3" : "right-3"}`;
+    q("knob").className = `absolute top-1 h-7 w-7 rounded-full bg-white shadow transition-all ${on ? "left-[3.75rem]" : "left-1"}`;
+    el.switches.querySelector(`[data-switch-box="${s.key}"]`).className = `rounded-lg border-2 p-3 ${on ? "border-green-600 bg-green-50" : "border-slate-200 bg-slate-50"}`;
+    q("text").className = `mt-0.5 text-sm ${on ? "font-medium text-green-800" : "text-slate-600"}`;
+    q("text").textContent = on ? s.on : s.off;
+  }
+}
+
+el.switches.innerHTML = SWITCHES.map(switchHtml).join("");
+el.switches.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-switch]");
+  if (!btn) return;
+  const s = SWITCHES.find((x) => x.key === btn.dataset.switch);
+  const next = !s.get();
+  s.set(next);
+  renderSwitches();
+  renderLines();
   if (!orderId) return; // ny order: sparas tillsammans med ordern
-  el.sendEmailsSwitch.disabled = true;
+  btn.disabled = true;
   try {
-    await api.patch(`/orders/${orderId}/send-emails`, { enabled: next });
+    await s.save(next);
   } catch (err) {
-    state.sendEmails = !next;
-    renderSendEmails();
+    s.set(!next);
+    renderSwitches();
+    renderLines();
     el.formError.textContent = err.message;
     el.formError.classList.remove("hidden");
   } finally {
-    el.sendEmailsSwitch.disabled = false;
+    btn.disabled = false;
   }
 });
 
-renderSendEmails();
+el.excludeFromStats.addEventListener("change", async () => {
+  if (!orderId) return;
+  const value = el.excludeFromStats.checked;
+  try {
+    await api.patch(`/orders/${orderId}/options`, { excludeFromStats: value });
+  } catch (err) {
+    el.excludeFromStats.checked = !value;
+    el.formError.textContent = err.message;
+    el.formError.classList.remove("hidden");
+  }
+});
+
+renderSwitches();
 
 // --- E-post till den som hämtar ------------------------------------------------
 // Valfri. Statusmejlen (redo, påminnelse, utlämnad) går hit, annars till
@@ -805,6 +870,7 @@ async function createOrder({ completeCash }) {
     costCenter: el.costCenter.value,
     notifyEmail: el.notifyEmail.value,
     sendEmails: Boolean(state.sendEmails),
+    excludeFromStats: el.excludeFromStats.checked,
     lines: state.lines.map((l) => ({
       productVariantId: l.productVariantId,
       description: l.productVariantId ? null : l.description ?? l.name,
@@ -889,15 +955,88 @@ el.historyList.addEventListener("click", async (event) => {
 
 // --- Status actions + pickup ----------------------------------------------
 
-async function changeStatus(orderId, status) {
-  const order = await api.patch(`/orders/${orderId}/status`, { status });
-  if (order.notification) {
-    sessionStorage.setItem("order-status-notification", JSON.stringify({ status, ...order.notification }));
+async function changeStatus(orderId, status, readyQuantities) {
+  const order = await api.patch(`/orders/${orderId}/status`, { status, readyQuantities });
+  if (order.notification || order.backorder) {
+    sessionStorage.setItem(
+      "order-status-notification",
+      JSON.stringify({ status, ...(order.notification ?? {}), backorder: order.backorder?.order_number ?? null })
+    );
   }
   location.reload();
 }
 
-function notificationText({ status, sent, reason }) {
+// --- Redo för utlämning: välj antal --------------------------------------------
+
+function openReadyDialog(order) {
+  el.readyError.classList.add("hidden");
+  el.readyRows.innerHTML = order.lines
+    .map((l) => {
+      const name = [l.product_name, [l.color, l.size].filter(Boolean).join(" / ")].filter(Boolean).join(" – ");
+      return `<tr>
+        <td class="py-1 pr-3 text-slate-900">${escapeHtml(name || l.description || "Rad")}</td>
+        <td class="py-1 pr-3 text-right">${Number(l.quantity)}</td>
+        <td class="py-1 pr-3"><input type="number" min="0" max="${Number(l.quantity)}" step="any" class="input w-24 py-1" data-ready-line="${l.id}" data-ordered="${Number(l.quantity)}" value="${Number(l.quantity)}" /></td>
+        <td class="py-1 text-right font-medium" data-rest-for="${l.id}">0</td>
+      </tr>`;
+    })
+    .join("");
+  updateReadySummary();
+  el.readyDialog.showModal();
+}
+
+function readyInputs() {
+  return [...el.readyRows.querySelectorAll("[data-ready-line]")];
+}
+
+function updateReadySummary() {
+  let rest = 0;
+  for (const input of readyInputs()) {
+    const ordered = Number(input.dataset.ordered);
+    const value = Math.min(Math.max(Number(input.value) || 0, 0), ordered);
+    const left = Math.round((ordered - value) * 100) / 100;
+    rest += left;
+    const cell = el.readyRows.querySelector(`[data-rest-for="${input.dataset.readyLine}"]`);
+    cell.textContent = String(left);
+    cell.className = `py-1 text-right font-medium ${left > 0 ? "text-amber-700" : "text-slate-400"}`;
+  }
+  el.readySummary.textContent = rest > 0 ? "Resten restnoteras och läggs på en ny order." : "Allt är redo — ingen restnotering.";
+}
+
+el.readyRows.addEventListener("input", updateReadySummary);
+el.readyCancel.addEventListener("click", () => el.readyDialog.close());
+el.readyConfirm.addEventListener("click", async () => {
+  const quantities = {};
+  for (const input of readyInputs()) {
+    const ordered = Number(input.dataset.ordered);
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value < 0 || value > ordered) {
+      el.readyError.textContent = "Antalet kan inte vara negativt eller fler än beställt.";
+      el.readyError.classList.remove("hidden");
+      return;
+    }
+    quantities[input.dataset.readyLine] = value;
+  }
+  if (Object.values(quantities).every((v) => v === 0)) {
+    el.readyError.textContent = "Minst en artikel måste vara redo för utlämning.";
+    el.readyError.classList.remove("hidden");
+    return;
+  }
+  el.readyConfirm.disabled = true;
+  try {
+    await changeStatus(orderId, "READY_FOR_PICKUP", quantities);
+  } catch (err) {
+    el.readyError.textContent = err.message;
+    el.readyError.classList.remove("hidden");
+    el.readyConfirm.disabled = false;
+  }
+});
+
+function notificationText({ status, sent, reason, backorder }) {
+  if (backorder) {
+    const mail = sent === true ? " Mail skickades." : sent === false ? ` Mail skickades inte: ${reason ?? "okänt fel"}` : "";
+    return `Delleverans: det som är redo är markerat. Resten är restnoterat på ${backorder}.${mail}`;
+  }
   if (status === "CASH") return `Ordern skapades men kunde inte slutföras: ${reason ?? "okänt fel"}`;
   const subject = status === "INVOICED" ? "Fakturan" : "E-post till kund";
   if (status === "INVOICED") return sent ? "Ordern är utlämnad. Fakturan bokfördes och skickades från Fortnox." : `Ordern är utlämnad, men fakturan skickades inte: ${reason ?? "okänt fel"}`;
@@ -972,7 +1111,8 @@ function renderActionButtons(order) {
 
   el.actionButtons.querySelectorAll("button[data-status]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      changeStatus(order.id, btn.dataset.status);
+      if (btn.dataset.status === "READY_FOR_PICKUP" && order.lines.length > 0) openReadyDialog(order);
+      else changeStatus(order.id, btn.dataset.status);
     });
   });
 
@@ -1162,8 +1302,15 @@ async function init() {
     el.costCenter.value = order.cost_center ?? "";
     el.notifyEmail.value = order.notify_email ?? "";
     state.sendEmails = Boolean(order.send_emails);
-    renderSendEmails();
-    el.sendEmailsSwitch.disabled = order.status === "CANCELLED";
+    el.excludeFromStats.checked = Boolean(order.exclude_from_stats);
+    renderSwitches();
+    el.switches.querySelector('[data-switch="sendEmails"]').disabled = order.status === "CANCELLED";
+    el.switches.querySelector('[data-switch="skipInventory"]').disabled = !order.can_pickup;
+    const infoParts = [];
+    if (order.backorder_of_order) infoParts.push(`Restorder till <a class="link" href="/order-editor.html?id=${order.backorder_of_order.id}">${escapeHtml(order.backorder_of_order.order_number)}</a> — det som restnoterades där.`);
+    if (order.backorders?.length) infoParts.push(`Delleverans: resten är restnoterad på ${order.backorders.map((b) => `<a class="link" href="/order-editor.html?id=${b.id}">${escapeHtml(b.order_number)}</a>`).join(", ")}.`);
+    el.backorderInfo.innerHTML = infoParts.join(" ");
+    el.backorderInfo.classList.toggle("hidden", infoParts.length === 0);
 
     selectCustomer(order.customer_id, order.customer_name);
     await loadContacts(order.customer_id, order.reference_contact_id);

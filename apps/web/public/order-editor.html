@@ -77,28 +77,18 @@
               <button type="button" id="use-contact-email-btn" class="link hidden text-xs"></button>
             </span>
           </label>
-          <div id="send-emails-box" class="col-span-2 rounded-lg border-2 border-slate-200 bg-slate-50 p-3">
-            <div class="flex items-center justify-between gap-4">
-              <div>
-                <p class="text-sm font-semibold text-slate-900">Skicka mail om den här ordern</p>
-                <p id="send-emails-text" class="mt-0.5 text-sm"></p>
-              </div>
-              <button type="button" id="send-emails-switch" role="switch" aria-checked="false" aria-label="Skicka mail om den här ordern"
-                class="relative h-9 w-24 shrink-0 rounded-full bg-slate-400 text-sm font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60">
-                <span id="send-emails-label" class="absolute inset-y-0 flex items-center">NEJ</span>
-                <span id="send-emails-knob" class="absolute left-1 top-1 h-7 w-7 rounded-full bg-white shadow transition-all"></span>
-              </button>
-            </div>
-          </div>
+          <div id="switches" class="col-span-2 space-y-3"></div>
         </div>
         <p class="mt-1 text-xs text-slate-500">Er referens och kostnadsställe står på fakturan i Fortnox.</p>
-        <label class="mt-4 flex items-start gap-2.5 text-sm">
-          <input id="skip-inventory" type="checkbox" class="mt-0.5" />
+        <input id="skip-inventory" type="checkbox" class="hidden" />
+        <label class="mt-4 flex items-start gap-2.5 rounded-lg border-2 border-slate-200 p-3 text-sm">
+          <input id="exclude-from-stats" type="checkbox" class="mt-0.5 h-5 w-5" />
           <span>
-            <span class="font-medium text-slate-900">Undanta från lagerhantering</span>
-            <span class="block text-slate-500">Ordern dras inte från lagersaldot och räknas inte med i inköpsförslag.</span>
+            <span class="font-medium text-slate-900">Exkludera ordern från statistiken</span>
+            <span class="block text-slate-500">Ordern räknas inte med i omsättning, marginal, topplistor eller kundens köpsiffror.</span>
           </span>
         </label>
+        <p id="backorder-info" class="mt-3 hidden rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"></p>
       </section>
 
       <!-- Lines -->
@@ -201,6 +191,33 @@
         <ul id="returns-list" class="mt-2 space-y-2 text-sm text-slate-600"></ul>
       </section>
     </main>
+
+    <!-- Redo för utlämning: välj antal -->
+    <dialog id="ready-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">
+      <div class="card m-0">
+        <h2 class="text-lg font-semibold tracking-tight text-slate-900">Redo för utlämning</h2>
+        <p class="mt-1 text-sm text-slate-600">
+          Ange hur många av varje artikel som är redo att lämnas ut nu. Resten restnoteras och flyttas till en ny order.
+        </p>
+        <table class="mt-3 w-full text-sm">
+          <thead>
+            <tr class="text-left text-slate-500">
+              <th class="py-1 pr-3 font-medium">Artikel</th>
+              <th class="py-1 pr-3 font-medium text-right">Beställt</th>
+              <th class="py-1 pr-3 font-medium w-24">Lämnas ut</th>
+              <th class="py-1 font-medium text-right">Restnoteras</th>
+            </tr>
+          </thead>
+          <tbody id="ready-rows"></tbody>
+        </table>
+        <p id="ready-summary" class="mt-3 text-sm text-slate-600"></p>
+        <p id="ready-error" class="mt-2 hidden text-sm text-red-600"></p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button" id="ready-cancel" class="btn-secondary">Avbryt</button>
+          <button type="button" id="ready-confirm" class="btn">Markera redo</button>
+        </div>
+      </div>
+    </dialog>
 
     <!-- Retur-dialog -->
     <dialog id="return-dialog" class="w-full max-w-lg rounded-lg p-0 backdrop:bg-slate-900/40">

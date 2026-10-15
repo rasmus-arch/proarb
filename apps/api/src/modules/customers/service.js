@@ -4,6 +4,7 @@ import { DEFAULT_WAREHOUSE_ID, reservedQtySql } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
 import { sendInactiveCustomerReminderEmail } from "../integrations/email.js";
 import { sqlLineTotal } from "../../lib/lines.js";
+import { getCustomerSummary } from "../stats/service.js";
 import { customerDiscountSelect } from "../../lib/customer-pricing.js";
 
 function nextCustomerNumber() {
@@ -40,10 +41,10 @@ export async function listCustomers({ search = "", page = 1, pageSize = 25 }) {
 async function getCustomerStats(id) {
   const [[totals]] = await pool.query(
     `SELECT
-       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' THEN
+       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' AND o.exclude_from_stats = 0 THEN
          ${sqlLineTotal("ol")}
        ELSE 0 END), 0) AS total_purchased_all_time,
-       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' AND YEAR(o.created_at) = YEAR(CURDATE()) THEN
+       COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' AND o.exclude_from_stats = 0 AND YEAR(o.created_at) = YEAR(CURDATE()) THEN
          ${sqlLineTotal("ol")}
        ELSE 0 END), 0) AS total_purchased_this_year,
        MAX(CASE WHEN o.status <> 'CANCELLED' THEN o.created_at ELSE NULL END) AS last_order_at
@@ -60,7 +61,7 @@ async function getCustomerStats(id) {
      FROM order_returns r
      JOIN orders o ON o.id = r.order_id
      JOIN order_return_lines rl ON rl.return_id = r.id
-     WHERE o.customer_id = ? AND o.status <> 'CANCELLED'`,
+     WHERE o.customer_id = ? AND o.status <> 'CANCELLED' AND o.exclude_from_stats = 0`,
     [id]
   );
   totals.total_purchased_all_time = Number(totals.total_purchased_all_time) - Number(returned.all_time);
@@ -71,7 +72,7 @@ async function getCustomerStats(id) {
     [id]
   );
 
-  return { ...totals, pending_quotes };
+  return { ...totals, pending_quotes, ...(await getCustomerSummary(id)) };
 }
 
 // Customers who HAVE ordered before but have gone quiet — a cold-lead

@@ -175,6 +175,8 @@ export async function run() {
     "ALTER TABLE portal_order_requests ADD COLUMN requester_email VARCHAR(255) NULL",
     "ALTER TABLE orders ADD COLUMN notify_email VARCHAR(255) NULL",
     "ALTER TABLE orders ADD COLUMN send_emails TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN exclude_from_stats TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN backorder_of INT NULL",
     "ALTER TABLE orders ADD COLUMN customer_reference VARCHAR(50) NULL",
     "ALTER TABLE orders ADD COLUMN cost_center VARCHAR(30) NULL",
     "ALTER TABLE portal_order_requests ADD COLUMN customer_reference VARCHAR(50) NULL",

@@ -35,7 +35,7 @@ const SALE_SOURCE_CTE = `
              WHERE fx.order_id = o.id AND fx.product_variant_id IS NULL AND fx.cost_price IS NULL
            ) AS margin_excluded
     FROM orders o
-    WHERE o.status <> 'CANCELLED' AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
+    WHERE o.status <> 'CANCELLED' AND o.exclude_from_stats = 0 AND o.created_at >= ? AND o.created_at < ? + INTERVAL 1 DAY
   ),
   -- Returer räknas av från omsättningen den dag returen registrerades.
   returned_orders AS (
@@ -46,7 +46,7 @@ const SALE_SOURCE_CTE = `
            ) AS margin_excluded
     FROM order_returns r
     JOIN orders o ON o.id = r.order_id
-    WHERE o.status <> 'CANCELLED' AND r.created_at >= ? AND r.created_at < ? + INTERVAL 1 DAY
+    WHERE o.status <> 'CANCELLED' AND o.exclude_from_stats = 0 AND r.created_at >= ? AND r.created_at < ? + INTERVAL 1 DAY
   ),
   sale_source AS (
     SELECT ol.product_variant_id, ol.quantity, ol.unit_price, ol.discount_percent, ol.discount_amount, 0 AS is_print,
@@ -139,6 +139,45 @@ export async function getSummary(rangeInput) {
     discount_amount: round2(Number(row.discount_amount)),
     print_revenue: round2(Number(row.print_revenue)),
     excluded_orders: Number(row.excluded_orders),
+  };
+}
+
+// Kundkortet: historisk omsättning, marginal, antal ordrar och snittköp för
+// en kund (all tid). Samma underlag som statistiksidorna, så returer och
+// undantagna ordrar räknas likadant. En restorder räknas inte som en egen
+// order i antalet.
+export async function getCustomerSummary(customerId) {
+  const to = new Date().toISOString().slice(0, 10);
+  const [[row]] = await pool.query(
+    `${SALE_SOURCE_CTE}
+     SELECT
+       COALESCE(SUM(${LINE_REVENUE}), 0) AS revenue_ex_vat,
+       COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} - ss.quantity * ss.cost_price ELSE 0 END), 0) AS margin_amount,
+       COALESCE(SUM(CASE WHEN ${MARGIN_LINE} THEN ${LINE_REVENUE} ELSE 0 END), 0) AS margin_revenue,
+       SUM(CASE WHEN ss.margin_excluded = 0 AND ss.is_print = 0 AND ss.cost_price IS NULL THEN 1 ELSE 0 END) AS lines_missing_cost,
+       COUNT(DISTINCT CASE WHEN ss.margin_excluded = 1 THEN ss.order_id END) AS excluded_orders
+     FROM sale_source ss
+     WHERE ss.customer_id = ?`,
+    ["2000-01-01", to, "2000-01-01", to, customerId]
+  );
+  const [[orders]] = await pool.query(
+    `SELECT COUNT(*) AS n FROM orders
+     WHERE customer_id = ? AND status <> 'CANCELLED' AND exclude_from_stats = 0
+       AND (backorder_of IS NULL
+            OR backorder_of NOT IN (SELECT id FROM (SELECT id FROM orders WHERE status <> 'CANCELLED' AND exclude_from_stats = 0) counted))`,
+    [customerId]
+  );
+  const revenue = Number(row.revenue_ex_vat);
+  const margin = Number(row.margin_amount);
+  const marginRevenue = Number(row.margin_revenue);
+  const orderCount = Number(orders.n);
+  return {
+    order_count: orderCount,
+    revenue_ex_vat: round2(revenue),
+    average_order_value: orderCount > 0 ? round2(revenue / orderCount) : null,
+    margin_amount: round2(margin),
+    margin_percent: marginRevenue > 0 ? round2((margin / marginRevenue) * 100) : null,
+    margin_incomplete: Number(row.lines_missing_cost) > 0 || Number(row.excluded_orders) > 0,
   };
 }
 

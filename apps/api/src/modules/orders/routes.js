@@ -209,13 +209,33 @@ router.delete("/:id", async (req, res, next) => {
 router.patch("/:id/status", async (req, res, next) => {
   try {
     if (!req.body?.status) return res.status(400).json({ error: "status krävs" });
-    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status);
+    const order = await orders.updateOrderStatus(Number(req.params.id), req.body.status, {
+      readyQuantities: req.body.readyQuantities,
+    });
     res.json(order);
   } catch (err) {
     if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
     if (err.message === "INVALID_TRANSITION") {
       return res.status(409).json({ error: "Ogiltig statusövergång" });
     }
+    if (err.message === "INVALID_READY_QUANTITY") return res.status(400).json({ error: "Ogiltigt antal — det kan inte vara fler än beställt" });
+    if (err.message === "NOTHING_READY") return res.status(400).json({ error: "Minst en artikel måste vara redo för utlämning" });
+    next(err);
+  }
+});
+
+router.patch("/:id/options", async (req, res, next) => {
+  try {
+    const { skipInventory, excludeFromStats } = req.body ?? {};
+    res.json(
+      await orders.setOrderOptions(Number(req.params.id), {
+        skipInventory: skipInventory === undefined ? undefined : Boolean(skipInventory),
+        excludeFromStats: excludeFromStats === undefined ? undefined : Boolean(excludeFromStats),
+      })
+    );
+  } catch (err) {
+    if (err.message === "ORDER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    if (err.message === "ORDER_LINES_LOCKED") return res.status(409).json({ error: "Lagerval kan inte ändras efter utlämning" });
     next(err);
   }
 });
