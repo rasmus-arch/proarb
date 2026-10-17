@@ -113,7 +113,7 @@ function renderLogos(logos) {
       (l) => `
       <li class="flex items-center justify-between gap-3 py-2 text-sm">
         <div class="flex min-w-0 items-center gap-3">
-          <a href="/uploads/${l.file_path}" target="_blank" class="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 bg-white p-1">
+          <a href="/uploads/${l.file_path}" target="_blank" data-logo-open="${l.id}" data-logo-name="${escapeHtml(l.name)}" title="Klicka för att förstora" class="flex h-12 w-16 shrink-0 cursor-zoom-in items-center justify-center overflow-hidden rounded border border-slate-200 bg-white p-1">
             <img src="/api/customers/${customerId}/logos/${l.id}/preview" alt="" loading="lazy" class="max-h-full max-w-full object-contain" data-logo-thumb data-ext="${escapeHtml(fileExtension(l.original_filename))}" />
           </a>
           <div class="min-w-0">
@@ -139,6 +139,22 @@ function renderLogos(logos) {
     }, { once: true });
   }
 }
+
+// Klick på miniatyren visar den större förhandsbilden (för EPS/PDF är det den
+// renderade PNG:en) i stället för att ladda ner filen.
+const logoLightbox = document.getElementById("logo-lightbox");
+document.getElementById("logo-lightbox-close").addEventListener("click", () => logoLightbox.close());
+logoLightbox.addEventListener("click", (event) => {
+  if (event.target === logoLightbox) logoLightbox.close();
+});
+el.logoList.addEventListener("click", (event) => {
+  const link = event.target.closest("[data-logo-open]");
+  if (!link || !link.querySelector("img")) return; // trasig förhandsbild: öppna filen som förut
+  event.preventDefault();
+  document.getElementById("logo-lightbox-title").textContent = link.dataset.logoName;
+  document.getElementById("logo-lightbox-img").src = `/api/customers/${customerId}/logos/${link.dataset.logoOpen}/preview`;
+  logoLightbox.showModal();
+});
 
 function fileExtension(name) {
   const dot = name.lastIndexOf(".");

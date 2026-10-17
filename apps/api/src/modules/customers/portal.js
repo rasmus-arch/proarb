@@ -219,7 +219,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
           <div style="height:96px;display:flex;align-items:center;justify-content:center;background:#f8fafc;border-radius:6px;padding:8px;">
             ${
               l.display_url
-                ? `<img src="${escapeHtml(l.display_url)}" alt="${escapeHtml(l.name)}" style="max-height:100%;max-width:100%;object-fit:contain;" />`
+                ? `<img src="${escapeHtml(l.display_url)}" alt="${escapeHtml(l.name)}" data-lightbox title="Klicka för att förstora" style="max-height:100%;max-width:100%;object-fit:contain;cursor:zoom-in;" />`
                 : `<span style="color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;">${escapeHtml(path.extname(l.original_filename).slice(1) || "fil")}</span>`
             }
           </div>
@@ -246,7 +246,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
             </div>
             <div style="display:flex;align-items:center;gap:12px;">
               ${priceHtml(p.variants[0]?.price ?? p.base_price, p)}
-              ${variantId ? `<input type="number" min="0" step="1" placeholder="Antal" class="qty-input" data-variant-id="${variantId}" ${qtyDataAttrs(p, p.variants[0])} style="width:64px;" />` : ""}
+              ${variantId ? `<input type="number" min="0" step="1" placeholder="Antal" class="qty-input" data-variant-id="${variantId}" ${qtyDataAttrs(p, p.variants[0])} style="width:64px;" /><span class="line-sum" style="min-width:84px;text-align:right;font-size:12px;font-weight:600;color:#0f172a;"></span>` : ""}
             </div>
           </div>
         </div>`;
@@ -270,7 +270,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
                 <td style="padding:4px 8px;color:#94a3b8;">${escapeHtml(v.sku)}</td>
                 ${v.discontinued ? `<td style="padding:4px 8px;">${discontinuedBadgeHtml(v.quantity_on_hand)}</td>` : showStock ? `<td style="padding:4px 8px;">${stockBadgeHtml(v.quantity_on_hand)}</td>` : ""}
                 ${samePrice ? "" : `<td style="padding:4px 8px;">${priceHtml(v.price, p)}</td>`}
-                <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" ${qtyDataAttrs(p, v)} style="width:56px;" /></td>
+                <td style="padding:4px 8px;text-align:right;"><input type="number" min="0" step="1" placeholder="0" class="qty-input" data-variant-id="${v.variant_id}" ${qtyDataAttrs(p, v)} style="width:56px;" /><div class="line-sum" style="font-size:11px;font-weight:600;color:#0f172a;min-height:14px;"></div></td>
               </tr>`
               )
               .join("")}
@@ -366,7 +366,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     body {
       font-family: system-ui, sans-serif;
       background: linear-gradient(180deg, ${hexToRgba(brandColor, 0.08)} 0%, #f8fafc 260px);
-      color:#0f172a; margin:0; padding:24px 16px;
+      color:#0f172a; margin:0; padding:24px 16px 80px;
     }
     .card { max-width: 720px; margin: 0 auto 16px; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:24px; box-shadow: 0 1px 2px rgba(15,23,42,0.03), 0 4px 16px rgba(15,23,42,0.04); }
     .empty { color:#64748b; font-size:14px; margin-top:12px; }
@@ -379,7 +379,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     .name-input { border:1px solid #cbd5e1; border-radius:6px; padding:8px 10px; font-size:14px; width:100%; max-width:280px; box-sizing:border-box; }
     .lightbox-overlay { display:none; position:fixed; inset:0; background:rgba(15,23,42,0.85); z-index:50; align-items:center; justify-content:center; padding:24px; cursor:zoom-out; }
     .lightbox-overlay.open { display:flex; }
-    .lightbox-overlay img { max-width:100%; max-height:100%; border-radius:8px; box-shadow:0 20px 50px rgba(0,0,0,0.4); }
+    .lightbox-overlay img { max-width:100%; max-height:100%; border-radius:8px; background:#fff; box-shadow:0 20px 50px rgba(0,0,0,0.4); }
     .section-heading { margin:0; font-size:15px; border-left:3px solid ${brandColor}; padding-left:10px; }
   </style>
 </head>
@@ -389,7 +389,7 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
     <p style="color:#94a3b8;margin:10px 0 0;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;font-weight:600;">Sortilog</p>
     ${
       mainLogo
-        ? `<img src="${escapeHtml(mainLogo.display_url)}" alt="${escapeHtml(customer.name)}" style="display:block;margin:14px auto 6px;max-height:72px;max-width:260px;object-fit:contain;" />`
+        ? `<img src="${escapeHtml(mainLogo.display_url)}" alt="${escapeHtml(customer.name)}" data-lightbox title="Klicka för att förstora" style="display:block;margin:14px auto 6px;max-height:72px;max-width:260px;object-fit:contain;cursor:zoom-in;" />`
         : ""
     }
     <h1 style="margin:2px 0 0;font-size:22px;">${escapeHtml(customer.name)}</h1>
@@ -516,6 +516,13 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
       : ""
   }
 
+  <div id="sticky-total" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:40;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;background:#0f172a;color:#fff;padding:10px 16px;font-size:14px;">
+    <span id="sticky-count"></span>
+    <span>Ex moms: <strong id="sticky-ex"></strong></span>
+    <span>Att betala inkl moms: <strong id="sticky-inc"></strong></span>
+    <a href="#order-summary" style="color:#fff;text-decoration:underline;">Gå till beställningen</a>
+  </div>
+
   <div id="lightbox-overlay" class="lightbox-overlay">
     <img id="lightbox-img" src="" alt="" />
   </div>
@@ -536,10 +543,14 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
         var rows = [], products = 0, print = 0, vat = 0;
         document.querySelectorAll(".qty-input").forEach(function (input) {
           var qty = Number(input.value);
+          var sumEl0 = input.parentNode.querySelector(".line-sum");
+          if (sumEl0) sumEl0.textContent = "";
           if (!(qty > 0)) return;
           var unit = Number(input.dataset.unit) || 0;
           var printUnit = Number(input.dataset.printUnit) || 0;
           var lineTotal = qty * (unit + printUnit);
+          var sumEl = input.parentNode.querySelector(".line-sum");
+          if (sumEl) sumEl.textContent = kr(lineTotal) + " ex moms";
           products += qty * unit;
           print += qty * printUnit;
           vat += lineTotal * (Number(input.dataset.tax) || 0) / 100;
@@ -558,6 +569,13 @@ export async function renderPortal(req, res, token, { account = null } = {}) {
         document.getElementById("sum-ex").textContent = kr(products + print);
         document.getElementById("sum-vat").textContent = kr(vat);
         document.getElementById("sum-total").textContent = kr(products + print + vat);
+        var bar = document.getElementById("sticky-total");
+        if (bar) {
+          bar.style.display = rows.length ? "flex" : "none";
+          document.getElementById("sticky-count").textContent = rows.length + (rows.length === 1 ? " rad" : " rader");
+          document.getElementById("sticky-ex").textContent = kr(products + print);
+          document.getElementById("sticky-inc").textContent = kr(products + print + vat);
+        }
       }
       document.addEventListener("input", function (e) {
         if (e.target.classList && e.target.classList.contains("qty-input")) update();

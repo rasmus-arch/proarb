@@ -301,6 +301,14 @@
     </main>
 
     <!-- New contact dialog -->
+    <dialog id="logo-lightbox" class="max-h-[92vh] w-auto max-w-[92vw] rounded-lg bg-white p-3 backdrop:bg-slate-900/70">
+      <div class="flex items-center justify-between gap-4 pb-2">
+        <p id="logo-lightbox-title" class="text-sm font-medium text-slate-900"></p>
+        <button type="button" id="logo-lightbox-close" class="btn-secondary">Stäng</button>
+      </div>
+      <img id="logo-lightbox-img" src="" alt="" class="max-h-[78vh] max-w-full object-contain" />
+    </dialog>
+
     <dialog id="new-contact-dialog" class="w-full max-w-md rounded-lg p-0 backdrop:bg-slate-900/40">
       <form id="new-contact-form" method="dialog" class="card m-0">
         <h2 class="text-lg font-semibold tracking-tight text-slate-900">Ny kontakt</h2>

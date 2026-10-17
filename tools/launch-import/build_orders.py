@@ -188,18 +188,18 @@ for i in range(0, len(o_rows), 100):
     out.append("INSERT INTO tmp_wc_orders VALUES\n" + ",\n".join(o_rows[i:i + 100]) + ";\n")
 for i in range(0, len(l_rows), 100):
     out.append("INSERT INTO tmp_wc_lines VALUES\n" + ",\n".join(l_rows[i:i + 100]) + ";\n")
-out.append("""INSERT INTO orders (order_number, customer_id, status, delivery_method, created_by, notes, skip_inventory, created_at)
-SELECT t.order_number, c.id, 'INVOICED', 'PICKUP', (SELECT MIN(id) FROM users WHERE role = 'ADMIN'), t.notes, 1, t.created_at
+out.append("""INSERT INTO orders (order_number, customer_id, status, delivery_method, created_by, notes, created_at)
+SELECT t.order_number, c.id, 'INVOICED', 'PICKUP', (SELECT MIN(id) FROM users WHERE role = 'ADMIN'), t.notes, t.created_at
 FROM tmp_wc_orders t
 JOIN customers c ON c.customer_number = t.customer_number
 WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.order_number = t.order_number);
 
 INSERT INTO order_lines (order_id, product_variant_id, description, quantity, delivered_qty, unit_price, discount_percent, tax_rate_percent, sort_order,
-                         print_description, print_price, print_discount_percent, cost_price)
+                         print_description, print_price, print_discount_percent, cost_price, skip_inventory)
 SELECT o.id, v.id, l.description, l.qty, l.qty,
        IF(l.is_print = 1, 0, l.unit_price), IF(l.is_print = 1, 0, l.disc), l.tax, l.n,
        IF(l.is_print = 1, l.description, NULL), IF(l.is_print = 1, l.unit_price, NULL), IF(l.is_print = 1, l.disc, 0),
-       IF(l.is_print = 1, 0, NULL)
+       IF(l.is_print = 1, 0, NULL), 1
 FROM tmp_wc_lines l
 JOIN orders o ON o.order_number = l.order_number
 LEFT JOIN (SELECT sku, MIN(id) AS id FROM product_variants GROUP BY sku) v ON l.sku <> '' AND v.sku = l.sku

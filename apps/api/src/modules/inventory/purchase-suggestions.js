@@ -20,7 +20,7 @@ export async function getPurchaseSuggestions({ warehouseId = DEFAULT_WAREHOUSE_I
      JOIN orders o ON o.id = ol.order_id
      JOIN customers c ON c.id = o.customer_id
      WHERE o.status NOT IN ('DELIVERED', 'CANCELLED', 'INVOICED')
-       AND o.skip_inventory = 0
+       AND ol.skip_inventory = 0
        AND ol.product_variant_id IS NOT NULL
      ORDER BY o.created_at ASC`
   );

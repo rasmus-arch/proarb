@@ -31,7 +31,6 @@ const el = {
   customerNotesText: document.getElementById("customer-notes-text"),
   referenceSelect: document.getElementById("reference-select"),
   deliveryMethod: document.getElementById("delivery-method"),
-  skipInventory: document.getElementById("skip-inventory"),
   customerReference: document.getElementById("customer-reference"),
   costCenter: document.getElementById("cost-center"),
   notifyEmail: document.getElementById("notify-email"),
@@ -194,8 +193,7 @@ const isNewOrder = () => !orderId;
 // Tydliga NEJ/JA-reglage. Sparas direkt på en befintlig order (en ny order
 // sparas tillsammans med ordern).
 //  - Skicka mail om ordern: av som standard. Fakturan från Fortnox skickas alltid.
-//  - Undanta från lagerhantering: ordern dras inte från lagret, räknas inte som
-//    reserverad och inte i inköpsförslag.
+//  (Undanta från lagerhantering gäller per rad — se kryssrutan på varje rad.)
 
 const SWITCHES = [
   {
@@ -206,16 +204,6 @@ const SWITCHES = [
     get: () => Boolean(state.sendEmails),
     set: (v) => (state.sendEmails = v),
     save: (v) => api.patch(`/orders/${orderId}/send-emails`, { enabled: v }),
-  },
-  {
-    key: "skipInventory",
-    title: "Undanta från lagerhantering",
-    on: "JA – ordern dras inte från lagersaldot, räknas inte som reserverad och inte i inköpsförslag.",
-    off: "NEJ – ordern hanteras i lagret som vanligt.",
-    get: () => el.skipInventory.checked,
-    set: (v) => (el.skipInventory.checked = v),
-    save: (v) => api.patch(`/orders/${orderId}/options`, { skipInventory: v }),
-    lockable: true,
   },
 ];
 
@@ -397,10 +385,15 @@ function renderLines() {
           ? `<label class="mt-1 flex items-center gap-1.5 text-xs text-slate-500">Inköpspris <input type="number" min="0" step="0.01" class="input w-24 py-1 text-xs" placeholder="saknas" data-field="costPrice" data-index="${index}" value="${line.costPrice ?? ""}" /></label>`
           : "";
       const short =
-        line.available !== null && line.available !== undefined && !el.skipInventory.checked && Number(line.quantity) > line.available
+        line.available !== null && line.available !== undefined && !line.skipInventory && Number(line.quantity) > line.available
           ? `<div class="text-xs text-amber-700">${line.available > 0 ? `Bara ${line.available} tillgängliga` : "Inget tillgängligt"} i lager — resten behöver beställas</div>`
           : "";
-      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>${short}${costInput}`;
+      const skipToggle = line.productVariantId
+        ? `<label class="mt-1 inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs ${line.skipInventory ? "bg-amber-100 font-semibold text-amber-900" : "text-slate-500"}">
+            <input type="checkbox" data-skip-line="${index}" ${line.skipInventory ? "checked" : ""} ${canEditLines() ? "" : "disabled"} /> Undanta från lagerhantering
+          </label>`
+        : "";
+      const productCell = `<div class="font-medium text-slate-900">${escapeHtml(line.name)}</div><div class="text-xs text-slate-500">${escapeHtml(line.colorSize)}</div>${short}${costInput}${skipToggle}`;
 
       if (!canEditLines()) {
         const printSummary = line.printDescription
@@ -495,6 +488,13 @@ el.lineRows.addEventListener("input", (event) => {
   }
 });
 
+el.lineRows.addEventListener("change", (event) => {
+  const index = event.target.dataset.skipLine;
+  if (index === undefined) return;
+  state.lines[Number(index)].skipInventory = event.target.checked;
+  renderLines();
+});
+
 el.lineRows.addEventListener("click", (event) => {
   const index = event.target.dataset.remove;
   if (index === undefined) return;
@@ -525,6 +525,7 @@ function variantToLine(v) {
     printDiscountPercent: Number(v.assortment_print_discount_percent ?? 0),
     taxRatePercent: Number(v.tax_rate_percent),
     costPrice: v.cost_price === null || v.cost_price === undefined ? null : Number(v.cost_price),
+    skipInventory: false,
     // Tillgängligt i lager just nu (saldo minus reserverat på andra öppna
     // ordrar) — bara för en varning på raden, aldrig ett stopp.
     available: v.quantity_on_hand === undefined ? null : Number(v.quantity_on_hand) - Number(v.reserved_qty ?? 0),
@@ -668,6 +669,7 @@ el.newProductForm.addEventListener("submit", async (event) => {
       printDiscountPercent: 0,
       taxRatePercent: Number(product.tax_rate_percent),
       costPrice: product.cost_price === null || product.cost_price === undefined ? null : Number(product.cost_price),
+      skipInventory: false,
     });
     el.newProductDialog.close();
     renderLines();
@@ -865,7 +867,6 @@ async function createOrder({ completeCash }) {
     customerId: state.customerId,
     referenceContactId: el.referenceSelect.value || null,
     deliveryMethod: el.deliveryMethod.value,
-    skipInventory: el.skipInventory.checked,
     customerReference: el.customerReference.value,
     costCenter: el.costCenter.value,
     notifyEmail: el.notifyEmail.value,
@@ -883,6 +884,7 @@ async function createOrder({ completeCash }) {
       printPrice: l.printPrice ?? null,
       printDiscountPercent: l.printDiscountPercent || 0,
       costPrice: l.productVariantId ? null : l.costPrice ?? null,
+      skipInventory: Boolean(l.productVariantId && l.skipInventory),
     })),
   };
 
@@ -1083,8 +1085,7 @@ function renderActionButtons(order) {
       await api.patch(`/orders/${order.id}/lines`, {
         referenceContactId: el.referenceSelect.value || null,
         deliveryMethod: el.deliveryMethod.value,
-        skipInventory: el.skipInventory.checked,
-        customerReference: el.customerReference.value,
+            customerReference: el.customerReference.value,
         costCenter: el.costCenter.value,
         notifyEmail: el.notifyEmail.value,
         lines: state.lines.map((l) => ({
@@ -1100,6 +1101,7 @@ function renderActionButtons(order) {
           printPrice: l.printPrice ?? null,
           printDiscountPercent: l.printDiscountPercent || 0,
       costPrice: l.productVariantId ? null : l.costPrice ?? null,
+      skipInventory: Boolean(l.productVariantId && l.skipInventory),
         })),
       });
       location.reload();
@@ -1249,7 +1251,6 @@ function applyReadOnlyState() {
   el.lineSearchWrap.classList.toggle("hidden", !linesEditable);
   el.referenceSelect.disabled = !linesEditable;
   el.deliveryMethod.disabled = !linesEditable;
-  el.skipInventory.disabled = !linesEditable;
   el.customerReference.disabled = !linesEditable;
   el.costCenter.disabled = !linesEditable;
   el.notifyEmail.disabled = !linesEditable;
@@ -1285,6 +1286,7 @@ async function init() {
       discountAmount: Number(l.discount_amount ?? 0),
       taxRatePercent: Number(l.tax_rate_percent),
       costPrice: l.cost_price === null || l.cost_price === undefined ? null : Number(l.cost_price),
+      skipInventory: Boolean(l.skip_inventory),
       printDescription: l.print_description ?? "",
       printPrice: l.print_price === null || l.print_price === undefined ? null : Number(l.print_price),
       printDiscountPercent: Number(l.print_discount_percent ?? 0),
@@ -1297,7 +1299,6 @@ async function init() {
     const billed = (order.invoices ?? []).filter((i) => i.type !== "CREDIT_INVOICE");
     if (billed.length > 0 && billed.every((i) => i.paid_at)) el.statusBadge.textContent += " · Betald";
     el.deliveryMethod.value = order.delivery_method;
-    el.skipInventory.checked = Boolean(order.skip_inventory);
     el.customerReference.value = order.customer_reference ?? "";
     el.costCenter.value = order.cost_center ?? "";
     el.notifyEmail.value = order.notify_email ?? "";
@@ -1305,7 +1306,6 @@ async function init() {
     el.excludeFromStats.checked = Boolean(order.exclude_from_stats);
     renderSwitches();
     el.switches.querySelector('[data-switch="sendEmails"]').disabled = order.status === "CANCELLED";
-    el.switches.querySelector('[data-switch="skipInventory"]').disabled = !order.can_pickup;
     const infoParts = [];
     if (order.backorder_of_order) infoParts.push(`Restorder till <a class="link" href="/order-editor.html?id=${order.backorder_of_order.id}">${escapeHtml(order.backorder_of_order.order_number)}</a> — det som restnoterades där.`);
     if (order.backorders?.length) infoParts.push(`Delleverans: resten är restnoterad på ${order.backorders.map((b) => `<a class="link" href="/order-editor.html?id=${b.id}">${escapeHtml(b.order_number)}</a>`).join(", ")}.`);

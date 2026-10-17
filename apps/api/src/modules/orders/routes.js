@@ -155,11 +155,10 @@ router.patch("/:id/lines", async (req, res, next) => {
     if (!Array.isArray(req.body?.lines) || req.body.lines.length === 0) {
       return res.status(400).json({ error: "Minst en rad krävs" });
     }
-    const { referenceContactId, deliveryMethod, skipInventory, customerReference, costCenter, notifyEmail } = req.body;
+    const { referenceContactId, deliveryMethod, customerReference, costCenter, notifyEmail } = req.body;
     const order = await orders.updateOrderLines(Number(req.params.id), req.body.lines, {
       referenceContactId,
       deliveryMethod: ["PICKUP", "SHIPPING"].includes(deliveryMethod) ? deliveryMethod : undefined,
-      skipInventory,
       customerReference,
       costCenter,
       notifyEmail,
@@ -226,10 +225,9 @@ router.patch("/:id/status", async (req, res, next) => {
 
 router.patch("/:id/options", async (req, res, next) => {
   try {
-    const { skipInventory, excludeFromStats } = req.body ?? {};
+    const { excludeFromStats } = req.body ?? {};
     res.json(
       await orders.setOrderOptions(Number(req.params.id), {
-        skipInventory: skipInventory === undefined ? undefined : Boolean(skipInventory),
         excludeFromStats: excludeFromStats === undefined ? undefined : Boolean(excludeFromStats),
       })
     );

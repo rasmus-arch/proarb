@@ -688,9 +688,11 @@ countManualSearch.addEventListener("input", () => {
 countManualResults.addEventListener("click", async (event) => {
   const btn = event.target.closest("button[data-variant-id]");
   if (!btn) return;
+  const answer = prompt("Hur många har du räknat?", "1");
+  if (answer === null || answer.trim() === "" || !(Number(answer) > 0)) return;
   await api.post(`/inventory/stock-counts/${currentCountId}/lines`, {
     productVariantId: Number(btn.dataset.variantId),
-    quantity: 1,
+    quantity: Number(answer),
   });
   countManualSearch.value = "";
   countManualResults.innerHTML = "";

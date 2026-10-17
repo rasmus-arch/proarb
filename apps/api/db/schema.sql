@@ -540,6 +540,10 @@ CREATE TABLE IF NOT EXISTS quote_lines (
   -- Inköpspris på en fritextrad (katalograder använder produktens).
   -- NULL på en fritextrad = ordern räknas inte med i marginalen.
   cost_price             DECIMAL(10,2) NULL,
+  -- Undantagen från lagerhantering: raden dras aldrig från lagersaldot,
+  -- räknas inte som reserverad och inte i inköpsförslag; returer lägger
+  -- inget tillbaka.
+  skip_inventory     TINYINT(1) NOT NULL DEFAULT 0,
   sort_order         INT NOT NULL DEFAULT 0,
   CONSTRAINT fk_ql_quote FOREIGN KEY (quote_id) REFERENCES quotes(id),
   CONSTRAINT fk_ql_variant FOREIGN KEY (product_variant_id) REFERENCES product_variants(id),
@@ -650,7 +654,7 @@ CREATE TABLE IF NOT EXISTS order_lines (
   -- STOCK (default): fine to fulfil from current lagersaldo. PURCHASE:
   -- always order this in specifically for this order, even if there's
   -- stock on hand — always shows up in inköpsförslag (Fas 5).
-  -- Oanvänd sedan "beställ ändå" ersattes av orders.skip_inventory; kvar
+  -- Oanvänd sedan "beställ ändå" ersattes av order_lines.skip_inventory; kvar
   -- för äldre rader.
   sourcing           ENUM('STOCK', 'PURCHASE') NOT NULL DEFAULT 'STOCK',
   print_status       ENUM('WAITING', 'IN_PRODUCTION', 'READY') NOT NULL DEFAULT 'WAITING',

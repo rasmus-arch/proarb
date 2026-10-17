@@ -222,6 +222,95 @@ document.getElementById("shelf-items").addEventListener("click", async (event) =
   }
 });
 
+// --- Lägg till produkt manuellt ---------------------------------------------------
+// Sök en befintlig produkt (som kanske inte syns på hyllan) eller skapa en ny.
+// Raden hamnar i inventeringen och visas under produktens egen hylla.
+
+const manualSearch = document.getElementById("manual-search");
+const manualResults = document.getElementById("manual-results");
+const manualForm = document.getElementById("manual-new-form");
+let manualTimer;
+
+manualSearch.addEventListener("input", () => {
+  clearTimeout(manualTimer);
+  const q = manualSearch.value.trim();
+  if (q.length < 2) {
+    manualResults.innerHTML = "";
+    return;
+  }
+  manualTimer = setTimeout(async () => {
+    try {
+      const { rows } = await api.get(`/products/search?q=${encodeURIComponent(q)}&limit=10`);
+      manualResults.innerHTML = rows.length
+        ? rows
+            .map(
+              (v) => `<li><button type="button" class="block w-full px-3 py-3 text-left" data-manual-variant="${v.variant_id}" data-name="${escapeHtml(v.name)} ${escapeHtml([v.color, v.size].filter(Boolean).join(" "))}">
+                <span class="font-medium text-slate-900">${escapeHtml(v.name)}</span>
+                <span class="block text-xs text-slate-500">${escapeHtml([v.color, v.size, v.sku].filter(Boolean).join(" · "))}</span></button></li>`
+            )
+            .join("")
+        : `<li class="px-3 py-3 text-slate-500">Ingen träff</li>`;
+    } catch (err) {
+      message(err.message, false);
+    }
+  }, 250);
+});
+
+manualResults.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-manual-variant]");
+  if (!btn) return;
+  const answer = prompt(`Hur många ${btn.dataset.name.trim()} har du räknat?`, "1");
+  if (answer === null || answer.trim() === "" || !(Number(answer) >= 0)) return;
+  try {
+    await api.put(`/inventory/stock-counts/${countId}/variants/${btn.dataset.manualVariant}`, { countedQty: Number(answer) });
+    manualSearch.value = "";
+    manualResults.innerHTML = "";
+    await loadShelf(currentShelf, { quiet: true });
+    message(`${btn.dataset.name.trim()}: ${Number(answer)} st räknade — ingår i inventeringen (visas på produktens egen hylla om den inte är den här).`, true);
+  } catch (err) {
+    message(err.message, false);
+  }
+});
+
+document.getElementById("manual-new-toggle").addEventListener("click", async () => {
+  manualForm.classList.toggle("hidden");
+  const list = document.getElementById("manual-suppliers");
+  if (!list.children.length) {
+    try {
+      const { rows } = await api.get("/suppliers");
+      list.innerHTML = rows.map((s) => `<option value="${escapeHtml(s.name)}">`).join("");
+    } catch {
+      /* leverantör går att skriva för hand */
+    }
+  }
+});
+
+manualForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const errorEl = document.getElementById("manual-new-error");
+  errorEl.classList.add("hidden");
+  const f = Object.fromEntries(new FormData(manualForm).entries());
+  try {
+    const product = await api.post("/products", {
+      name: f.name.trim(),
+      articleNumber: f.articleNumber.trim() || undefined,
+      supplier: f.supplier.trim(),
+      basePrice: Number(f.basePrice),
+      costPrice: f.costPrice ? Number(f.costPrice) : undefined,
+      shelfLocation: currentShelf || undefined,
+      variants: f.color || f.size ? [{ color: f.color || null, size: f.size || null }] : undefined,
+    });
+    await api.put(`/inventory/stock-counts/${countId}/variants/${product.variants[0].id}`, { countedQty: Number(f.quantity) });
+    manualForm.reset();
+    manualForm.classList.add("hidden");
+    await loadShelf(currentShelf, { quiet: true });
+    message(`${product.name}: skapad och ${Number(f.quantity)} st räknade.`, true);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove("hidden");
+  }
+});
+
 async function markShelf(done) {
   try {
     await api.post(`/inventory/stock-counts/${countId}/shelf-done`, { shelf: currentShelf, done });

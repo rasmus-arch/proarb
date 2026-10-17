@@ -176,6 +176,11 @@ export async function run() {
     "ALTER TABLE orders ADD COLUMN notify_email VARCHAR(255) NULL",
     "ALTER TABLE orders ADD COLUMN send_emails TINYINT(1) NOT NULL DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN exclude_from_stats TINYINT(1) NOT NULL DEFAULT 0",
+    // "Undanta från lagerhantering" gäller per orderrad (inte per order).
+    "ALTER TABLE order_lines ADD COLUMN skip_inventory TINYINT(1) NOT NULL DEFAULT 0",
+    // Engångsflytt av äldre ordrar som var undantagna på ordernivå.
+    "UPDATE order_lines ol JOIN orders o ON o.id = ol.order_id SET ol.skip_inventory = 1 WHERE o.skip_inventory = 1",
+    "UPDATE orders SET skip_inventory = 0 WHERE skip_inventory = 1",
     "ALTER TABLE orders ADD COLUMN backorder_of INT NULL",
     "ALTER TABLE orders ADD COLUMN customer_reference VARCHAR(50) NULL",
     "ALTER TABLE orders ADD COLUMN cost_center VARCHAR(30) NULL",

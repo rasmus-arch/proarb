@@ -14,7 +14,7 @@ export function reservedQtySql(variantExpr, { excludeOrderId = null } = {}) {
   const exclude = excludeOrderId ? ` AND o.id <> ${Number(excludeOrderId)}` : "";
   return `COALESCE((SELECT SUM(rol.quantity) FROM order_lines rol JOIN orders o ON o.id = rol.order_id
      WHERE rol.product_variant_id = ${variantExpr} AND o.status IN ('NEW', 'READY_FOR_PICKUP')
-       AND o.skip_inventory = 0${exclude}), 0)`;
+       AND rol.skip_inventory = 0${exclude}), 0)`;
 }
 
 // ---------------------------------------------------------------------------

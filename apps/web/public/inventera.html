@@ -48,6 +48,29 @@
         <ul id="shelf-items" class="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white"></ul>
         <p id="shelf-empty" class="mt-4 hidden text-sm text-slate-500">Inget förväntas på den här hyllan. Skanna det som står där.</p>
 
+        <details id="manual-add" class="mt-5 rounded-lg border border-slate-200 bg-white p-3">
+          <summary class="cursor-pointer text-base font-medium text-slate-900">Lägg till produkt manuellt</summary>
+          <p class="mt-2 text-sm text-slate-600">Sök en produkt som inte syns på hyllan och ange hur många du räknat. Den ingår sedan i inventeringen.</p>
+          <input id="manual-search" type="search" autocomplete="off" class="input mt-2 text-base" placeholder="Sök namn, artikelnr eller streckkod…" />
+          <ul id="manual-results" class="mt-2 divide-y divide-slate-100 rounded-md border border-slate-200 text-sm empty:hidden"></ul>
+          <button type="button" id="manual-new-toggle" class="link mt-3 text-sm">Finns den inte i systemet? Skapa ny produkt</button>
+          <form id="manual-new-form" class="mt-3 hidden space-y-2">
+            <input name="name" required class="input" placeholder="Produktnamn" />
+            <input name="articleNumber" class="input" placeholder="Artikelnummer (valfritt)" />
+            <input name="supplier" required list="manual-suppliers" class="input" placeholder="Leverantör" />
+            <datalist id="manual-suppliers"></datalist>
+            <div class="grid grid-cols-2 gap-2">
+              <input name="color" class="input" placeholder="Färg (valfritt)" />
+              <input name="size" class="input" placeholder="Storlek (valfritt)" />
+              <input name="basePrice" type="number" min="0" step="0.01" required class="input" placeholder="Pris ex moms" />
+              <input name="costPrice" type="number" min="0" step="0.01" class="input" placeholder="Inköpspris (valfritt)" />
+            </div>
+            <input name="quantity" type="number" min="0" step="1" required class="input" placeholder="Antal räknat" />
+            <p id="manual-new-error" class="hidden text-sm text-red-600"></p>
+            <button type="submit" class="btn w-full justify-center py-3 text-base">Skapa och räkna in</button>
+          </form>
+        </details>
+
         <button type="button" id="shelf-done-btn" class="btn mt-5 w-full justify-center py-3 text-base">Klar med hyllan</button>
         <button type="button" id="shelf-reopen-btn" class="mt-3 hidden w-full rounded-md border border-slate-200 py-3 text-sm text-slate-600">Räkna om hyllan</button>
       </section>
