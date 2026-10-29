@@ -1,7 +1,7 @@
 # ProArb – affärssystem för profil-/arbetskläderbutik
 
 Byggplan och kravspec för ett affärssystem liknande det som tidigare byggts
-för Profil & Arbetskläder i Eskilstuna AB. Målgrupp: butik som säljer
+för Profil och Arbetskläder AB. Målgrupp: butik som säljer
 arbetskläder och profilprodukter, ofta med tryck/brodyr, både i fysisk
 butik och till företagskunder via offert/order.
 

@@ -20,5 +20,8 @@ VALUES (1, 'Admin', 'admin@example.com', '$2b$10$0rrZunXcEcKdRpeMYWwd/OC2xRNLrju
 -- för platshållartexten "Mitt företag". Guardat på den exakta
 -- platshållaren så en redan ifylld/ändrad rad (via Inställningar) aldrig
 -- skrivs över av en omkörning av migrate.js.
-UPDATE app_settings SET seller_name = 'Profil & Arbetskläder i Eskilstuna AB'
+UPDATE app_settings SET seller_name = 'Profil och Arbetskläder AB'
   WHERE id = 1 AND seller_name = 'Mitt företag';
+-- Namnbyte: en rad som fortfarande har det gamla namnet får det nya.
+UPDATE app_settings SET seller_name = 'Profil och Arbetskläder AB'
+  WHERE id = 1 AND seller_name = 'Profil & Arbetskläder i Eskilstuna AB';
