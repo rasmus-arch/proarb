@@ -416,8 +416,8 @@ reminderEl.send.addEventListener("click", async () => {
       message: reminderEl.message.value,
     });
     if (result.sent) {
-      reminderTarget.button.textContent = "Skickad!";
       reminderDialog.close();
+      await loadInactiveCustomers(); // kunden försvinner ur listan tills tiden gått igen
     } else {
       reminderEl.error.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
       reminderEl.error.classList.remove("hidden");

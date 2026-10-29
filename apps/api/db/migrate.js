@@ -178,6 +178,7 @@ export async function run() {
     "ALTER TABLE app_settings ADD COLUMN email_show_logo TINYINT(1) NOT NULL DEFAULT 1",
     "ALTER TABLE app_settings ADD COLUMN email_header_text VARCHAR(255) NULL",
     "ALTER TABLE app_settings ADD COLUMN email_footer_text VARCHAR(1000) NULL",
+    "ALTER TABLE customers ADD COLUMN last_reminder_at DATETIME NULL",
     "ALTER TABLE orders ADD COLUMN exclude_from_stats TINYINT(1) NOT NULL DEFAULT 0",
     // "Undanta från lagerhantering" gäller per orderrad (inte per order).
     "ALTER TABLE order_lines ADD COLUMN skip_inventory TINYINT(1) NOT NULL DEFAULT 0",

@@ -80,13 +80,13 @@ async function getCustomerStats(id) {
 // (a brand-new lead with zero orders isn't a churn risk).
 export async function listInactiveCustomers(months) {
   const [rows] = await pool.query(
-    `SELECT c.id, c.name, MAX(o.created_at) AS last_order_at
+    `SELECT c.id, c.name, MAX(o.created_at) AS last_order_at, c.last_reminder_at
      FROM customers c
      JOIN orders o ON o.customer_id = c.id AND o.status <> 'CANCELLED'
      WHERE c.active = 1
      GROUP BY c.id
-     HAVING last_order_at < DATE_SUB(NOW(), INTERVAL ? MONTH)
-     ORDER BY last_order_at ASC`,
+     HAVING GREATEST(MAX(o.created_at), COALESCE(c.last_reminder_at, MAX(o.created_at))) < DATE_SUB(NOW(), INTERVAL ? MONTH)
+     ORDER BY GREATEST(MAX(o.created_at), COALESCE(c.last_reminder_at, MAX(o.created_at))) ASC`,
     [months]
   );
   return rows;
@@ -127,6 +127,9 @@ export async function sendInactiveCustomerReminder(customerId, months, { subject
   } catch (err) {
     result = { ok: false, reason: err.message };
   }
+  // Lyckat utskick nollställer timern: kunden försvinner ur listan och kommer
+  // tillbaka när inaktivitetstiden (Inställningar) gått från nu.
+  if (result.ok) await pool.query(`UPDATE customers SET last_reminder_at = NOW() WHERE id = ?`, [customerId]);
   return { sent: result.ok, reason: result.note ?? result.reason };
 }
 

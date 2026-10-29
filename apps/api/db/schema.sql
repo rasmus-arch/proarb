@@ -208,6 +208,10 @@ CREATE TABLE IF NOT EXISTS customers (
   price_list_id      INT NULL,
   payment_terms_days INT NOT NULL DEFAULT 30,
   notes              TEXT NULL,
+  -- När senaste "dags att fylla på?"-påminnelsen skickades. Nollställer
+  -- inaktivitetstimern: kunden visas i listan igen först när tiden i
+  -- inställningarna gått från den här tidpunkten (eller senaste ordern).
+  last_reminder_at   DATETIME NULL,
   active             TINYINT(1) NOT NULL DEFAULT 1,
   -- Fas 7 kundportal: unguessable token for a no-login, read-only page
   -- (/portal/:token) listing the customer's own offerter/ordrar. Generated
