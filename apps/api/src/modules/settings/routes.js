@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as settings from "./service.js";
 import * as fortnox from "../integrations/fortnox.js";
+import { sampleEmailHtml, sendTestEmail } from "../integrations/email.js";
 import fs from "node:fs";
 import path from "node:path";
 import { createLogoUpload, uploadsRoot } from "../../lib/uploads.js";
@@ -35,6 +36,36 @@ router.get("/", requireRole("ADMIN"), async (req, res, next) => {
 router.patch("/", requireRole("ADMIN"), async (req, res, next) => {
   try {
     res.json(settings.maskSecrets(await settings.updateSettings(req.body ?? {})));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/email-preview", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    // Förhandsvisning med det som står i formuläret (inte sparat än).
+    const saved = await settings.getSettings();
+    const b = req.body ?? {};
+    const merged = {
+      ...saved,
+      seller_name: b.sellerName ?? saved.seller_name,
+      brand_color: b.brandColor ?? saved.brand_color,
+      email_show_logo: b.emailShowLogo === undefined ? saved.email_show_logo : b.emailShowLogo ? 1 : 0,
+      email_header_text: b.emailHeaderText ?? saved.email_header_text,
+      email_footer_text: b.emailFooterText ?? saved.email_footer_text,
+    };
+    res.json({ html: sampleEmailHtml(merged, { preview: true }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/email-test", requireRole("ADMIN"), async (req, res, next) => {
+  try {
+    const to = String(req.body?.to ?? "").trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: "Ange en giltig e-postadress" });
+    const result = await sendTestEmail({ settings: await settings.getSettings(), to });
+    res.json({ sent: result.ok, reason: result.note ?? result.reason });
   } catch (err) {
     next(err);
   }

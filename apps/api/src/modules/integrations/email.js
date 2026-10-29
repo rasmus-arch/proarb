@@ -3,7 +3,10 @@
 // Inställningar rather than env vars, so staff can set this up themselves
 // without a redeploy. Every caller already fetches `settings` (getSettings())
 // for other reasons and just passes it through.
+import fs from "node:fs";
+import path from "node:path";
 import nodemailer from "nodemailer";
+import { uploadsRoot } from "../../lib/uploads.js";
 
 export function isEmailConfigured(settings) {
   return Boolean(settings?.smtp_host);
@@ -13,7 +16,76 @@ function notConfigured() {
   return { ok: false, reason: "NOT_CONFIGURED", note: "E-post är inte konfigurerat ännu." };
 }
 
+// --- Mailens utseende (Inställningar → Påminnelser & e-post) ---------------------
+// emailShell lämnar två markörer som fylls i här: sidhuvud (färgad list, logga,
+// text) och sidfot. Loggan skickas med som inbäddad bild (cid) så att den syns
+// även när mailprogrammet blockerar bilder från webben. Bara PNG/JPG/GIF funkar
+// i mail — annars visas företagsnamnet i text.
+const HEADER_MARKER = "<!--EMAIL_HEADER-->";
+const FOOTER_MARKER = "<!--EMAIL_FOOTER-->";
+const MAIL_IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif"]);
+
+function logoFile(settings) {
+  const rel = settings?.seller_logo_path;
+  if (!rel || settings.email_show_logo === 0 || settings.email_show_logo === false) return null;
+  if (!MAIL_IMAGE_EXT.has(path.extname(rel).toLowerCase())) return null;
+  const full = path.join(uploadsRoot, rel);
+  return fs.existsSync(full) ? { rel, full } : null;
+}
+
+export function applyEmailBranding(html, settings, { preview = false } = {}) {
+  const color = /^#[0-9a-f]{6}$/i.test(settings?.brand_color ?? "") ? settings.brand_color : "#0f172a";
+  const name = settings?.seller_name ?? "";
+  const logo = logoFile(settings);
+  const logoSrc = logo ? (preview ? `/uploads/${logo.rel}` : "cid:email-logo") : null;
+  const headerText = String(settings?.email_header_text ?? "").trim();
+  const header = `<tr><td style="height:5px;line-height:5px;font-size:0;background:${color};border-radius:8px 8px 0 0;">&nbsp;</td></tr>
+          <tr><td style="padding:22px 28px 0;font-family:system-ui,sans-serif;">${
+            logoSrc
+              ? `<img src="${logoSrc}" alt="${escapeHtml(name)}" style="display:block;max-height:48px;max-width:220px;" />`
+              : `<div style="font-size:18px;font-weight:700;color:${color};">${escapeHtml(name)}</div>`
+          }${headerText ? `<div style="margin-top:6px;font-size:12px;color:#64748b;">${escapeHtml(headerText)}</div>` : ""}</td></tr>`;
+
+  const custom = String(settings?.email_footer_text ?? "").trim();
+  const contact = [settings?.seller_address, [settings?.seller_postal_code, settings?.seller_city].filter(Boolean).join(" "), settings?.seller_phone, settings?.seller_email]
+    .filter(Boolean)
+    .join(" · ");
+  const footer = custom
+    ? `<p style="margin:16px 0 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,sans-serif;white-space:pre-line;">${escapeHtml(custom)}</p>`
+    : `<p style="margin:16px 0 0;color:#64748b;font-size:12px;line-height:1.6;font-family:system-ui,sans-serif;"><strong>${escapeHtml(name)}</strong>${contact ? `<br />${escapeHtml(contact)}` : ""}</p>`;
+  return html.replace(HEADER_MARKER, header).replace(FOOTER_MARKER, footer);
+}
+
+// Exempelmail för förhandsvisningen i Inställningar och testmailet.
+export function sampleEmailHtml(settings, { preview = false } = {}) {
+  const name = settings?.seller_name ?? "";
+  const draft = defaultInactiveReminderDraft({ customerName: "Exempelkund AB", sellerName: name });
+  const html = buildSimpleEmailHtml({
+    heading: draft.subject,
+    body: `<p style="white-space:pre-line;">${escapeHtml(draft.message)}</p>`,
+  });
+  return applyEmailBranding(html, settings, { preview });
+}
+
+export async function sendTestEmail({ settings, to }) {
+  const logo = logoFile(settings);
+  return sendRaw({
+    settings,
+    to,
+    subject: "Testmail — så här ser era mail ut",
+    html: sampleEmailHtml(settings),
+    attachments: logo ? [{ filename: path.basename(logo.rel), path: logo.full, cid: "email-logo" }] : undefined,
+  });
+}
+
 async function dispatch({ settings, to, subject, html, attachments } = {}) {
+  const logo = html.includes(HEADER_MARKER) ? logoFile(settings) : null;
+  html = applyEmailBranding(html, settings);
+  if (logo) attachments = [...(attachments ?? []), { filename: path.basename(logo.rel), path: logo.full, cid: "email-logo" }];
+  return sendRaw({ settings, to, subject, html, attachments });
+}
+
+async function sendRaw({ settings, to, subject, html, attachments } = {}) {
   if (!isEmailConfigured(settings)) return notConfigured();
   if (!to) return { ok: false, reason: "NO_RECIPIENT", note: "Mottagarens e-postadress saknas." };
 
@@ -242,12 +314,11 @@ function emailShell({ preheader, bodyHtml }) {
     <tr>
       <td align="center">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;">
-          <tr><td style="padding:28px 28px 8px;">${bodyHtml}</td></tr>
+          ${HEADER_MARKER}
+          <tr><td style="padding:20px 28px 8px;">${bodyHtml}</td></tr>
           <tr>
-            <td style="padding:16px 28px 24px;border-top:1px solid #f1f5f9;margin-top:16px;">
-              <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;font-family:system-ui,sans-serif;">
-                Det här mejlet skickades automatiskt från ProArb.
-              </p>
+            <td style="padding:8px 28px 24px;border-top:1px solid #f1f5f9;">
+              ${FOOTER_MARKER}
             </td>
           </tr>
         </table>
@@ -283,7 +354,6 @@ function buildQuoteEmailHtml({
     : null;
 
   const bodyHtml = `
-    ${sellerLogoUrl ? `<img src="${escapeHtml(sellerLogoUrl)}" alt="${escapeHtml(sellerName ?? "")}" style="max-height:36px;margin-bottom:16px;" />` : ""}
     <p style="margin:0 0 4px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:${color};">${escapeHtml(sellerName ?? "")}</p>
     <h1 style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:20px;color:#0f172a;">Offert ${escapeHtml(quoteNumber)}</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:14px;color:#334155;line-height:1.6;">
@@ -322,7 +392,6 @@ function buildQuoteReminderEmailHtml({ customerName, quoteNumber, publicUrl, tot
     ? new Date(validUntil).toLocaleDateString("sv-SE", { year: "numeric", month: "long", day: "numeric" })
     : null;
   const bodyHtml = `
-    ${sellerLogoUrl ? `<img src="${escapeHtml(sellerLogoUrl)}" alt="${escapeHtml(sellerName ?? "")}" style="max-height:36px;margin-bottom:16px;" />` : ""}
     <p style="margin:0 0 4px;font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:${color};">${escapeHtml(sellerName ?? "")}</p>
     <h1 style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:20px;color:#0f172a;">Påminnelse: Offert ${escapeHtml(quoteNumber)}</h1>
     <p style="margin:0 0 16px;font-family:system-ui,sans-serif;font-size:14px;color:#334155;line-height:1.6;">

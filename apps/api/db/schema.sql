@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS app_settings (
   seller_logo_path      VARCHAR(500) NULL,
   brand_color           VARCHAR(7) NOT NULL DEFAULT '#0f172a',
   quote_footer_note     VARCHAR(1000) NULL,
+  -- Mailens utseende (se integrations/email.js): logga i toppen, text under
+  -- loggan och sidfot. Färgen är brand_color.
+  email_show_logo       TINYINT(1) NOT NULL DEFAULT 1,
+  email_header_text     VARCHAR(255) NULL,
+  email_footer_text     VARCHAR(1000) NULL,
   reminder_enabled      TINYINT(1) NOT NULL DEFAULT 0,
   reminder_days_after   INT NOT NULL DEFAULT 5,
   -- Av som standard: lagersaldot är bara pålitligt att visa för kunder

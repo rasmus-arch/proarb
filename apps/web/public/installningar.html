@@ -216,6 +216,38 @@
         </label>
       </section>
       <section class="card">
+        <h2 class="section-title">Mailens utseende</h2>
+        <p class="mt-1 text-sm text-slate-600">Gäller alla mail till kunder och leverantörer. Färgen väljs under Företag (varumärkesfärg), loggan laddas upp där också.</p>
+        <div class="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div>
+            <label class="flex items-center gap-2 text-sm">
+              <input id="s-email-show-logo" type="checkbox" class="rounded border-slate-300" />
+              <span class="text-slate-700">Visa loggan i toppen av mailet (annars företagsnamnet i text)</span>
+            </label>
+            <label class="mt-3 block text-sm">
+              <span class="text-slate-700">Text under loggan (valfritt)</span>
+              <input id="s-email-header-text" maxlength="255" class="input mt-1" placeholder="Profilkläder & arbetskläder i Eskilstuna" />
+            </label>
+            <label class="mt-3 block text-sm">
+              <span class="text-slate-700">Sidfot</span>
+              <textarea id="s-email-footer-text" rows="4" maxlength="1000" class="input mt-1" placeholder="Tomt = företagsnamn och kontaktuppgifter från Företag."></textarea>
+            </label>
+            <div class="mt-4 flex flex-wrap items-end gap-2">
+              <label class="block text-sm">
+                <span class="text-slate-700">Skicka testmail till</span>
+                <input id="s-email-test-to" type="email" class="input mt-1" placeholder="din@adress.se" />
+              </label>
+              <button type="button" id="s-email-test-btn" class="btn-secondary">Skicka testmail</button>
+            </div>
+            <p id="s-email-test-msg" class="mt-2 hidden text-sm"></p>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500">Förhandsvisning (ändringar syns direkt, men sparas först med Spara)</div>
+            <iframe id="s-email-preview" title="Förhandsvisning av mail" class="mt-1 h-[28rem] w-full rounded-md border border-slate-200 bg-slate-50"></iframe>
+          </div>
+        </div>
+      </section>
+      <section class="card">
         <h2 class="section-title">Egna texter i mejl</h2>
         <label class="mt-3 block text-sm">
           <span class="text-slate-700">Till kund när ordern är redo eller inte hämtats (t.ex. öppettider)</span>

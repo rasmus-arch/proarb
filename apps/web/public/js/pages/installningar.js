@@ -57,6 +57,13 @@ const el = {
   defaultTerms: document.getElementById("s-default-terms"),
   defaultVat: document.getElementById("s-default-vat"),
   pickupReminderDays: document.getElementById("s-pickup-reminder-days"),
+  emailShowLogo: document.getElementById("s-email-show-logo"),
+  emailHeaderText: document.getElementById("s-email-header-text"),
+  emailFooterText: document.getElementById("s-email-footer-text"),
+  emailTestTo: document.getElementById("s-email-test-to"),
+  emailTestBtn: document.getElementById("s-email-test-btn"),
+  emailTestMsg: document.getElementById("s-email-test-msg"),
+  emailPreview: document.getElementById("s-email-preview"),
   orderReadyNote: document.getElementById("s-order-ready-note"),
   poNote: document.getElementById("s-po-note"),
   backupKeepDays: document.getElementById("s-backup-keep-days"),
@@ -87,6 +94,43 @@ function activateTab(key) {
 
 tabButtons.forEach((b) => b.addEventListener("click", () => activateTab(b.dataset.settingsTab)));
 
+// --- Mailens utseende: förhandsvisning och testmail --------------------------------
+let previewTimer;
+function refreshEmailPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    try {
+      const { html } = await api.post("/settings/email-preview", {
+        sellerName: el.name.value,
+        brandColor: el.color.value,
+        emailShowLogo: el.emailShowLogo.checked,
+        emailHeaderText: el.emailHeaderText.value,
+        emailFooterText: el.emailFooterText.value,
+      });
+      el.emailPreview.srcdoc = html;
+    } catch {
+      /* förhandsvisningen är bara en hjälp */
+    }
+  }, 300);
+}
+for (const input of [el.emailShowLogo, el.emailHeaderText, el.emailFooterText, el.color, el.name]) {
+  input.addEventListener("input", refreshEmailPreview);
+  input.addEventListener("change", refreshEmailPreview);
+}
+
+el.emailTestBtn.addEventListener("click", async () => {
+  el.emailTestMsg.className = "mt-2 text-sm text-slate-600";
+  el.emailTestMsg.textContent = "Skickar…";
+  try {
+    const result = await api.post("/settings/email-test", { to: el.emailTestTo.value });
+    el.emailTestMsg.className = `mt-2 text-sm ${result.sent ? "text-green-700" : "text-red-600"}`;
+    el.emailTestMsg.textContent = result.sent ? "Testmail skickat (sparade inställningar används)." : `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+  } catch (err) {
+    el.emailTestMsg.className = "mt-2 text-sm text-red-600";
+    el.emailTestMsg.textContent = err.message;
+  }
+});
+
 function applySettings(settings) {
   el.name.value = settings.seller_name ?? "";
   el.org.value = settings.seller_org_number ?? "";
@@ -97,6 +141,10 @@ function applySettings(settings) {
   el.city.value = settings.seller_city ?? "";
   el.color.value = settings.brand_color ?? "#1c1b19";
   el.footer.value = settings.quote_footer_note ?? "";
+  el.emailShowLogo.checked = settings.email_show_logo === undefined ? true : Boolean(settings.email_show_logo);
+  el.emailHeaderText.value = settings.email_header_text ?? "";
+  el.emailFooterText.value = settings.email_footer_text ?? "";
+  refreshEmailPreview();
   el.reminderEnabled.checked = Boolean(settings.reminder_enabled);
   el.reminderDays.value = settings.reminder_days_after ?? 5;
   el.portalShowStock.checked = Boolean(settings.portal_show_stock);
@@ -163,6 +211,9 @@ el.saveBtn.addEventListener("click", async () => {
       sellerCity: el.city.value || null,
       brandColor: el.color.value,
       quoteFooterNote: el.footer.value || null,
+      emailShowLogo: el.emailShowLogo.checked,
+      emailHeaderText: el.emailHeaderText.value,
+      emailFooterText: el.emailFooterText.value,
       reminderEnabled: el.reminderEnabled.checked,
       reminderDaysAfter: Number(el.reminderDays.value) || 5,
       portalShowStock: el.portalShowStock.checked,
