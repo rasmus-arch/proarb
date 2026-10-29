@@ -366,26 +366,67 @@ async function loadInactiveCustomers() {
 // det lyckas"-mönster som offert-påminnelserna ovan (skillnaden är att en
 // inaktiv kund inte har något event-baserat "redan påmind"-tillstånd att
 // försvinna ur, så knappen går att klicka igen om man vill).
+const reminderDialog = document.getElementById("inactive-reminder-dialog");
+const reminderEl = {
+  to: document.getElementById("inactive-reminder-to"),
+  subject: document.getElementById("inactive-reminder-subject"),
+  message: document.getElementById("inactive-reminder-message"),
+  error: document.getElementById("inactive-reminder-error"),
+  send: document.getElementById("inactive-reminder-send"),
+};
+let reminderTarget = null; // { id, button, rowError }
+
+document.getElementById("inactive-reminder-cancel").addEventListener("click", () => reminderDialog.close());
+
+// Knappen öppnar en ruta med standardtexten som går att ändra; mailet skickas
+// först när man trycker "Skicka" i rutan.
 inactiveList.addEventListener("click", async (event) => {
   const id = event.target.dataset.sendInactiveReminder;
   if (id === undefined) return;
   const li = event.target.closest("li");
-  const errorEl = li.querySelector("[data-inactive-reminder-error]");
-  event.target.disabled = true;
-  errorEl.classList.add("hidden");
+  const rowError = li.querySelector("[data-inactive-reminder-error]");
+  rowError.classList.add("hidden");
   try {
-    const result = await api.post(`/customers/${id}/send-inactive-reminder?months=${inactiveMonths}`, {});
+    const draft = await api.get(`/customers/${id}/inactive-reminder-draft?months=${inactiveMonths}`);
+    if (!draft.to) {
+      rowError.textContent = "Kunden saknar e-postadress";
+      rowError.classList.remove("hidden");
+      return;
+    }
+    reminderTarget = { id, button: event.target, rowError };
+    reminderEl.to.textContent = draft.to;
+    reminderEl.subject.value = draft.subject;
+    reminderEl.message.value = draft.message;
+    reminderEl.error.classList.add("hidden");
+    reminderEl.send.disabled = false;
+    reminderDialog.showModal();
+  } catch (err) {
+    rowError.textContent = err.message;
+    rowError.classList.remove("hidden");
+  }
+});
+
+reminderEl.send.addEventListener("click", async () => {
+  if (!reminderTarget) return;
+  reminderEl.send.disabled = true;
+  reminderEl.error.classList.add("hidden");
+  try {
+    const result = await api.post(`/customers/${reminderTarget.id}/send-inactive-reminder?months=${inactiveMonths}`, {
+      subject: reminderEl.subject.value,
+      message: reminderEl.message.value,
+    });
     if (result.sent) {
-      event.target.textContent = "Skickad!";
+      reminderTarget.button.textContent = "Skickad!";
+      reminderDialog.close();
     } else {
-      errorEl.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
-      errorEl.classList.remove("hidden");
-      event.target.disabled = false;
+      reminderEl.error.textContent = `Kunde inte skicka: ${result.reason ?? "okänt fel"}`;
+      reminderEl.error.classList.remove("hidden");
+      reminderEl.send.disabled = false;
     }
   } catch (err) {
-    errorEl.textContent = err.message;
-    errorEl.classList.remove("hidden");
-    event.target.disabled = false;
+    reminderEl.error.textContent = err.message;
+    reminderEl.error.classList.remove("hidden");
+    reminderEl.send.disabled = false;
   }
 });
 

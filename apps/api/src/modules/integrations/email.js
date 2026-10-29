@@ -129,14 +129,26 @@ export async function sendPickupReminderEmail({ settings, to, customerName, orde
 // proaktiv "dags att fylla på?"-hälsning istället för att bara lista
 // kunden passivt, samma tanke som quote-reminders men riktad mot en
 // kund som inte alls hört av sig på länge snarare än en obesvarad offert.
-export async function sendInactiveCustomerReminderEmail({ settings, to, customerName, months, sellerName }) {
+// Standardtexten (ren text) som visas i rutan innan utskicket och kan ändras.
+export function defaultInactiveReminderDraft({ customerName, months, sellerName }) {
+  return {
+    subject: "Dags att fylla på?",
+    message: `Hej ${customerName},
+
+Det var ett tag sedan er senaste beställning hos oss${sellerName ? ` på ${sellerName}` : ""} — närmare bestämt ${months} månader. Behöver ni fylla på med arbetskläder eller profilkläder inför säsongen? Hör gärna av er så hjälper vi till.`,
+  };
+}
+
+// `subject`/`message` = texten användaren redigerat i rutan (ren text,
+// radbrytningar bevaras); utan dem används standardtexten.
+export async function sendInactiveCustomerReminderEmail({ settings, to, customerName, months, sellerName, subject, message }) {
+  const draft = defaultInactiveReminderDraft({ customerName, months, sellerName });
+  const text = String(message ?? "").trim() || draft.message;
   const html = buildSimpleEmailHtml({
-    heading: "Dags att fylla på?",
-    body: `<p>Hej ${escapeHtml(customerName)},</p>
-      <p>Det var ett tag sedan er senaste beställning hos oss${sellerName ? ` på ${escapeHtml(sellerName)}` : ""} — närmare bestämt ${months} månader.
-      Behöver ni fylla på med arbetskläder eller profilkläder inför säsongen? Hör gärna av er så hjälper vi till.</p>`,
+    heading: String(subject ?? "").trim() || draft.subject,
+    body: `<p style="white-space:pre-line;">${escapeHtml(text)}</p>`,
   });
-  return dispatch({ settings, to, subject: "Dags att fylla på?", html });
+  return dispatch({ settings, to, subject: String(subject ?? "").trim() || draft.subject, html });
 }
 
 // Called from "Maila offert till kund" in offert-editor.html — sends the

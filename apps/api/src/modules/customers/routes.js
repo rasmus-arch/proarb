@@ -92,10 +92,22 @@ router.get("/inactive", async (req, res, next) => {
   }
 });
 
+router.get("/:id/inactive-reminder-draft", async (req, res, next) => {
+  try {
+    res.json(await customers.getInactiveReminderDraft(Number(req.params.id), Number(req.query.months) || 6));
+  } catch (err) {
+    if (err.message === "CUSTOMER_NOT_FOUND") return res.status(404).json({ error: "Not found" });
+    next(err);
+  }
+});
+
 router.post("/:id/send-inactive-reminder", async (req, res, next) => {
   try {
     const months = Number(req.query.months) || 6;
-    const result = await customers.sendInactiveCustomerReminder(Number(req.params.id), months);
+    const result = await customers.sendInactiveCustomerReminder(Number(req.params.id), months, {
+      subject: String(req.body?.subject ?? "").slice(0, 200),
+      message: String(req.body?.message ?? "").slice(0, 5000),
+    });
     res.json(result);
   } catch (err) {
     if (err.message === "CUSTOMER_NOT_FOUND") return res.status(404).json({ error: "Not found" });

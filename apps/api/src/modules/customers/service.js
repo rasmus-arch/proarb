@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { pool } from "../../lib/db.js";
 import { DEFAULT_WAREHOUSE_ID, reservedQtySql } from "../inventory/service.js";
 import { getSettings } from "../settings/service.js";
-import { sendInactiveCustomerReminderEmail } from "../integrations/email.js";
+import { defaultInactiveReminderDraft, sendInactiveCustomerReminderEmail } from "../integrations/email.js";
 import { sqlLineTotal } from "../../lib/lines.js";
 import { getCustomerSummary } from "../stats/service.js";
 import { customerDiscountSelect } from "../../lib/customer-pricing.js";
@@ -97,7 +97,17 @@ export async function listInactiveCustomers(months) {
 // flagga"-princip som quotes.sendQuoteReminder. Ett misslyckat försök
 // (t.ex. e-post inte konfigurerat) kastas vidare till anroparen istället
 // för att tystas ner, så knappen kan visa varför det inte gick.
-export async function sendInactiveCustomerReminder(customerId, months) {
+export async function getInactiveReminderDraft(customerId, months) {
+  const [[customer]] = await pool.query(`SELECT id, name, email FROM customers WHERE id = ?`, [customerId]);
+  if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
+  const settings = await getSettings();
+  return {
+    to: customer.email,
+    ...defaultInactiveReminderDraft({ customerName: customer.name, months, sellerName: settings?.seller_name }),
+  };
+}
+
+export async function sendInactiveCustomerReminder(customerId, months, { subject, message } = {}) {
   const [[customer]] = await pool.query(`SELECT id, name, email FROM customers WHERE id = ?`, [customerId]);
   if (!customer) throw new Error("CUSTOMER_NOT_FOUND");
   if (!customer.email) throw new Error("NO_CUSTOMER_EMAIL");
@@ -111,6 +121,8 @@ export async function sendInactiveCustomerReminder(customerId, months) {
       customerName: customer.name,
       months,
       sellerName: settings?.seller_name,
+      subject,
+      message,
     });
   } catch (err) {
     result = { ok: false, reason: err.message };
