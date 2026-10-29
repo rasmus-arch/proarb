@@ -35,7 +35,7 @@ for r in cust:
 
 
 def mysql(sql):
-    out = subprocess.run(["mysql", "--default-character-set=utf8mb4", "-N", "-B", "-r", "wp", "-e", sql],
+    out = subprocess.run(["mysql", "--default-character-set=utf8mb4", "-N", "-B", "-r", os.environ.get("WPDB", "wp"), "-e", sql],
                          capture_output=True, text=True, check=True).stdout
     return [[None if v == "NULL" else v for v in l.split("\t")] for l in out.splitlines()]
 
@@ -50,7 +50,7 @@ orders = mysql("""select o.id, o.status, o.total_amount, o.date_created_gmt, o.p
   a.first_name, a.company, a.email,
   (select meta_value from 7w9zlUE_wc_orders_meta m where m.order_id=o.id and m.meta_key='fortnox_invoice_number' limit 1)
   from 7w9zlUE_wc_orders o join 7w9zlUE_wc_order_addresses a on a.order_id=o.id and a.address_type='billing'
-  where o.type='shop_order' order by o.id""")
+  where o.type='shop_order' and o.status not in ('wc-pos-open', 'auto-draft', 'trash') order by o.id""")
 items = mysql("""select i.order_id, i.order_item_id, i.order_item_name,
   max(case when m.meta_key='_qty' then m.meta_value end), max(case when m.meta_key='_line_subtotal' then m.meta_value end),
   max(case when m.meta_key='_line_total' then m.meta_value end), max(case when m.meta_key='_line_tax' then m.meta_value end),
@@ -204,6 +204,11 @@ FROM tmp_wc_lines l
 JOIN orders o ON o.order_number = l.order_number
 LEFT JOIN (SELECT sku, MIN(id) AS id FROM product_variants GROUP BY sku) v ON l.sku <> '' AND v.sku = l.sku
 WHERE NOT EXISTS (SELECT 1 FROM order_lines x WHERE x.order_id = o.id);
+
+-- Ordrar som importerades som "ej fakturerad" men sedan fakturerades i WooCommerce/Fortnox får ny anteckning.
+UPDATE orders o JOIN tmp_wc_orders t ON t.order_number = o.order_number
+SET o.notes = t.notes
+WHERE o.notes LIKE '%ej fakturerad i Fortnox%' AND t.notes NOT LIKE '%ej fakturerad i Fortnox%';
 
 DROP TABLE tmp_wc_orders;
 DROP TABLE tmp_wc_lines;
