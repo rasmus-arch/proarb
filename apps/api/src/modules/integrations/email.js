@@ -135,7 +135,7 @@ export function defaultInactiveReminderDraft({ customerName, months, sellerName 
     subject: "Dags att fylla på?",
     message: `Hej ${customerName},
 
-Det var ett tag sedan er senaste beställning hos oss${sellerName ? ` på ${sellerName}` : ""} — närmare bestämt ${months} månader. Behöver ni fylla på med arbetskläder eller profilkläder inför säsongen? Hör gärna av er så hjälper vi till.`,
+Det var ett tag sedan er senaste beställning hos oss${sellerName ? ` på ${sellerName}` : ""}. Behöver ni fylla på med arbetskläder eller profilkläder inför säsongen? Hör gärna av er så hjälper vi till.`,
   };
 }
 
